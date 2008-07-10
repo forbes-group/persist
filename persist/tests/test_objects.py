@@ -7,7 +7,7 @@ import mmf.objects
 class A(mmf.objects.Archivable):
     def __init__(self,x):
         self.x = x
-    def _get_args(self):
+    def items(self):
         return self.__dict__.items()
     
 class TestArchivable(object):
@@ -23,16 +23,16 @@ class TestStateVars(object):
     def test_ordering(self):
         """Test the inherited order of _state_vars."""
         class A(mmf.objects.StateVars):
-            _state_vars = [('e',5),
-                           ('f',6)]
+            _state_vars = [('a',1),
+                           ('b',2)]
             mmf.objects.process_vars()
         class B(A):
             _state_vars = [('c',3),
                            ('d',4)]
             mmf.objects.process_vars()
         class C(B):
-            _state_vars = [('a',1),
-                           ('b',2)]
+            _state_vars = [('e',5),
+                           ('f',6)]
             mmf.objects.process_vars()
     
         nose.tools.assert_equal(C.class_keys(),['a','b','c','d','e','f'])
@@ -51,7 +51,7 @@ class TestStateVars(object):
         """Test copy=False"""
         c = [1]
         class A(mmf.objects.StateVars):
-            _state_vars = [('a',c),('b',c)]
+            _state_vars = [('c',c)]
             mmf.objects.process_vars(copy=False)
         a = A()
         b = A()
@@ -65,7 +65,7 @@ class TestStateVars(object):
         """Test copy=copy"""
         c = [[1]]
         class A(mmf.objects.StateVars):
-            _state_vars = [('a',c),('b',c)]
+            _state_vars = [('c',c)]
             mmf.objects.process_vars(copy=copy)
         a = A()
         b = A()
@@ -82,7 +82,7 @@ class TestStateVars(object):
         """Test copy=deepcopy"""
         c = [[1]]
         class A(mmf.objects.StateVars):
-            _state_vars = [('a',c),('b',c)]
+            _state_vars = [('c',c)]
             mmf.objects.process_vars(copy=deepcopy)
         a = A()
         b = A()
