@@ -96,9 +96,7 @@ class TestStateVars(object):
     def test_Required(self):
         """Test required keys"""
         class A(mmf.objects.StateVars):
-            _state_vars = mmf.objects.state_var(
-                copy=False,
-                c=(mmf.objects.Required,'Required'))
+            _state_vars = [('c',mmf.objects.Required,'Required')]
             mmf.objects.process_vars()
         a = A()
 
@@ -106,9 +104,7 @@ class TestStateVars(object):
     def test_NotImplemented(self):
         """Test NotImplemented keys"""
         class A(mmf.objects.StateVars):
-            _state_vars = mmf.objects.state_var(
-                copy=False,
-                c=(NotImplemented,'Required'))
+            _state_vars = [('c',NotImplemented,'NotImplemented')]
             mmf.objects.process_vars()
         a = A()
         c = a.c
