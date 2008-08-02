@@ -45,6 +45,22 @@ class TestStateVars1(object):
         a = StateVars2()
         nose.tools.assert_equal(a.a,1)
 
+    @mmf.utils.mmf_test.dec.skipknownfailure
+    def test3(self):
+        """Test StateVars multiple inheritance without process_vars call."""
+        class StateVars1(StateVars):
+            _state_vars = [('a',1)]
+            process_vars()
+        class StateVars2(StateVars):
+            _state_vars = [('b',2)]
+            process_vars()
+        class StateVars3(StateVars1,StateVars2):
+            pass
+
+        a = StateVars3()
+        nose.tools.assert_equal(a.a,1)
+        nose.tools.assert_equal(a.b,2)
+
 class TestStateVars(object):
     def test_ordering(self):
         """Test the inherited order of _state_vars."""
@@ -173,7 +189,6 @@ class TestStateVars(object):
         a = A()
         a.a = 1
 
-
     @nose.tools.raises(ValueError)
     def test_invalid_varargin1(self):
         """Test default __init__ for invalid varargins."""
@@ -216,3 +231,4 @@ class TestStateVars(object):
             process_vars()
         C.b = 5
         nose.tools.assert_equals(C.b, 5)
+
