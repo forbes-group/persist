@@ -6,7 +6,7 @@ import nose
 import numpy as np
 
 import mmf.objects
-from mmf.objects import StateVars, process_vars
+from mmf.objects import StateVars, Container, process_vars
 
 class A(mmf.objects.Archivable):
     def __init__(self,x):
@@ -29,7 +29,7 @@ class TestStateVars1(object):
     def test1(self):
         """Test StateVars without process_vars call."""
         class StateVars1(StateVars):
-            pass
+            _dynamic = True
         a = StateVars1(a=1,b=2)
         nose.tools.assert_equal(a.a,1)
         nose.tools.assert_equal(a.b,2)
@@ -210,7 +210,7 @@ class TestStateVars(object):
     def test_copy(self):
         """Test StateVars.__copy__"""
         l = [1]
-        a = StateVars(l=l)
+        a = Container(l=l)
         b = copy(a)
         a.l[0] = 2
         nose.tools.assert_equal(b.l[0],a.l[0])
@@ -218,7 +218,7 @@ class TestStateVars(object):
     def test_deepcopy(self):
         """Test StateVars.__deepcopy__"""
         l = [1]
-        a = StateVars(l=l)
+        a = Container(l=l)
         b = deepcopy(a)
         a.l[0] = 2
         nose.tools.assert_not_equal(b.l[0],a.l[0])
@@ -227,7 +227,7 @@ class TestStateVars(object):
         """Tests a bug with _gather_vars."""
         class C(StateVars):
             _state_vars = ['a']
-            _exclude_vars = ['_b']
+            _excluded_vars = ['_b']
             process_vars()
         C.b = 5
         nose.tools.assert_equals(C.b, 5)
