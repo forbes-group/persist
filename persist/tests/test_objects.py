@@ -6,7 +6,8 @@ import nose
 import numpy as np
 
 import mmf.objects
-from mmf.objects import StateVars, Container, process_vars
+from mmf.objects import StateVars, Container
+from mmf.objects import ClassVar, Required, process_vars
 
 class A(mmf.objects.Archivable):
     def __init__(self,x):
@@ -232,3 +233,13 @@ class TestStateVars(object):
         C.b = 5
         nose.tools.assert_equals(C.b, 5)
 
+    def test_class_vars(self):
+        """Test ClassVars attribute bug with __new__ overwriting with
+        default values."""
+        class F(StateVars):
+            _state_vars = [('A',ClassVar(Required))]
+            process_vars()
+        class G(F):
+            A = 1
+        g = G()
+        nose.tools.assert_equal(g.A,1)
