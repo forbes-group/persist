@@ -243,3 +243,20 @@ class TestStateVars(object):
             A = 1
         g = G()
         nose.tools.assert_equal(g.A,1)
+
+    def test_changing_defaults(self):
+        """Test StateVars to see if changing default values preserves
+        the documentation."""
+        class A(StateVars):
+            _state_vars = [('a',1,"Documentation for A")]
+            process_vars()
+
+        class B(A):
+            _state_vars = [('a',2)]
+            process_vars()
+
+        doc_A = [doc for (name,default,doc) in A._state_vars]
+        doc_B = [doc for (name,default,doc) in B._state_vars]
+        nose.tools.assert_equals(doc_A,doc_B)
+        nose.tools.assert_not_equals(A().a,B().a)
+        
