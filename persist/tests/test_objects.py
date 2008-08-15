@@ -6,8 +6,8 @@ import nose
 import numpy as np
 
 import mmf.objects
-from mmf.objects import StateVars, Container
-from mmf.objects import ClassVar, Required, process_vars
+from mmf.objects import StateVars, Container, process_vars
+from mmf.objects import ClassVar, Required, Computed
 
 class A(mmf.objects.Archivable):
     def __init__(self,x):
@@ -259,4 +259,46 @@ class TestStateVars(object):
         doc_B = [doc for (name,default,doc) in B._state_vars]
         nose.tools.assert_equals(doc_A,doc_B)
         nose.tools.assert_not_equals(A().a,B().a)
+
+    @mmf.utils.mmf_test.dec.skipknownfailure
+    def test_get(self):
+        """Test for uneeded getattr calls."""
+        okay = True
+        class E(StateVars):
+            _state_vars = ['x','y']
+            process_vars()
+            def get_x(self):
+                okay = False
+                return self.__dict__['x']
+            x = property(get_x)
+        
+        e = E(y=1)
+        nose.tools.ok_(okay)
+
+
+
+class Doctests(object):
+    """Test the constructor semantics.
+    
+    >>> class A(StateVars):
+    ...     _state_vars = [('a', 1),
+    ...                    ('b', NotImplemented),
+    ...                    ('c', Computed)]
+    ...     process_vars()
+    ...     def __init__(self,*varargin,**kwargs):
+    ...         if 'a' in kwargs:
+    ...             print "'a' changed"
+    ...         if 'b' in kwargs:
+    ...             print "'b' changed"
+    ...         if 'c' in kwargs:
+    ...             print "'c' changed"
+    >>> a = A()
+    'a' changed
+    >>> a.b = 2
+    'b' changed
+    >>> a = A(b=2)
+    'a' changed
+    'b' changed
+    """
+        
         
