@@ -7,7 +7,7 @@ import numpy as np
 
 import mmf.objects
 from mmf.objects import StateVars, Container, process_vars
-from mmf.objects import ClassVar, Required, Computed
+from mmf.objects import ClassVar, Required, Computed, NoCopy
 
 class A(mmf.objects.Archivable):
     def __init__(self,x):
@@ -98,6 +98,35 @@ class TestStateVars(object):
             process_vars(copy=False)
         a = A()
         b = A()
+        nose.tools.assert_equal(a.c[0],1)
+        nose.tools.assert_equal(b.c[0],1)
+        a.c[0] = 2
+        nose.tools.assert_equal(a.c[0],2)
+        nose.tools.assert_equal(b.c[0],2)
+
+    def test_copy1a(self):
+        """Test NoCopy"""
+        c = [1]
+        class A(StateVars):
+            _state_vars = [('c',NoCopy(c))]
+            process_vars()
+        a = A()
+        b = A()
+        nose.tools.assert_equal(a.c[0],1)
+        nose.tools.assert_equal(b.c[0],1)
+        a.c[0] = 2
+        nose.tools.assert_equal(a.c[0],2)
+        nose.tools.assert_equal(b.c[0],2)
+
+    def test_copy1b(self):
+        """Test NoCopy(Required)"""
+        c = [1]
+        class A(StateVars):
+            _state_vars = [('c',NoCopy(Required))]
+            process_vars()
+        nose.tools.assert_raises(ValueError,A)
+        a = A(c=c)
+        b = A(c=c)
         nose.tools.assert_equal(a.c[0],1)
         nose.tools.assert_equal(b.c[0],1)
         a.c[0] = 2
