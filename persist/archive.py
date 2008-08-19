@@ -21,10 +21,9 @@ Objects can aid this by implementing an archive method, for example:
 
 The idea is to save state in a file that looks like the following:
 
-import numpy
-
-
-We maintain a dictionary of 
+import numpy as _numpy
+a = _numpy.array([1,2,3])
+del _numpy
 
 BUGS:
 - Graph reduction occurs for nodes that have more than one parent.
@@ -45,6 +44,8 @@ BUGS:
   to restore the object such as restore().)
 
 """
+__all__  = ['Archive', 'restore', 'ArchiveError', 'DuplicateError']
+
 import sys
 import parser
 import compiler
@@ -64,6 +65,15 @@ import contrib.RADLogic.topsort as topsort
 import mmf.utils
 import interfaces as interfaces
 
+class ArchiveError(Exception):
+    """Archiving error."""
+
+class DuplicateError(ArchiveError):
+    """Object already exists."""
+    def __init__(self,name):
+        msg = "Object with name %r already exists in archive."%name
+        ArchiveError.__init__(self,msg)
+
 def restore(archive,env={}):
     """Return dictionary obtained by evaluating the string arch.
     
@@ -81,7 +91,408 @@ def restore(archive,env={}):
     ld.update(env)
     exec(archive,ld)
     return ld
+
+class Archive(object):
+    """Archival tool.
+    
+    Maintains a list of symbols to import in order to reconstruct the
+    states of objects and contains methods to convert objects to
+    strings for archival.
+
+    Members:
+        arch : List of (uname,obj,env) where obj is
+               the the object, which can be rescontructed from the
+               string rep evaluated in the contect of args, imports,
+               and env.
+
+        check_on_import : If True, then try generating the rep.
+
+    Invariants:
+        unames are unique
+    """
+    def __init__(self,flat=True):
+        self.flat = flat
+        self.imports = []
+        self.arch = []
+        self._section_sep = ""  # string to separate the sections
+        self._numpy_printoptions = {'infstr': 'Inf',
+                                    'threshold': np.inf,
+                                    'suppress': False,
+                                    'linewidth': 200,
+                                    'edgeitems': 3,
+                                    'precision': 16,
+                                    'nanstr': 'NaN'}
+        self.check_on_insert = False
+
+    def archive_1(self,obj,env):
+        """Return (rep,args,imports) where obj can be reconstructed
+        from the string rep evaluated in the context of args with the
+        specified imports = list of (module,iname,uiname) where one
+        has either "import module as uiname", "from module import
+        iname" or "from module import iname as uiname".
         
+        """
+        if isinstance(obj,interfaces.IArchivable):
+            return obj.archive_1(env)
+
+        for class_ in self._dispatch:
+            if isinstance(obj,class_):
+                return self._dispatch[class_](self,obj,env=env)
+
+        if inspect.isclass(obj):
+            return archive_1_class(obj,env)
+
+        if hasattr(obj,'archive_1'):
+            try:
+                return obj.archive_1(env)
+            except TypeError:   # pragma: no cover
+                1+1             # Needed to deal with coverage bug
+        
+        return archive_1_repr(obj,env)
+
+    def _archive_ndarray(self,obj,env):
+        popts = np.get_printoptions()
+        np.set_printoptions(**(self._numpy_printoptions))
+        rep = repr(obj)
+        np.set_printoptions(**popts)
+
+        module = inspect.getmodule(obj.__class__)
+
+        mname = module.__name__
+        
+        constructor = rep.partition("(")[0]
+        if not constructor.startswith(mname):
+            rep = ".".join([mname,rep])
+        
+        imports = [(mname,None,mname),
+                   ('numpy','inf','inf'),
+                   ('numpy','inf','Infinity'),
+                   ('numpy','inf','Inf'),
+                   ('numpy','inf','infty'),
+                   ('numpy','nan','nan'),
+                   ('numpy','nan','NaN'),
+                   ('numpy','nan','NAN')]
+        return (rep,{},imports)
+
+    def _archive_list(self,obj,env):
+        return archive_1_list(obj,env)
+
+    def _archive_tuple(self,obj,env):
+        return archive_1_tuple(obj,env)
+
+    def _archive_dict(self,obj,env):
+        return archive_1_dict(obj,env)
+
+    def _archive_float(self,obj,env):
+        return archive_1_float(obj,env)
+
+    _dispatch = {
+        np.ndarray:_archive_ndarray,
+        list:_archive_list,
+        tuple:_archive_tuple,
+        dict:_archive_dict,
+        float:_archive_float,
+        complex:_archive_float}
+        
+    def unique_name(self,name):
+        """Return a unique name not contained in the archive."""
+        names = _unzip(self.arch)[0]
+        return _get_unique(name,names)
+
+    def insert(self,env=None,**kwargs):
+        """insert(name=obj): Add the obj to archive with name.
+
+        If self.check_on_insert, then try generating rep (may raise an
+        exception).
+
+        If name already exists in the archive, then a DuplicateError
+        exception is thrown.
+
+        Parameters:
+            name=obj : Insert the obj with name into the ar
+            obj     : Object to be archived
+            name    : Desired name of object in the archive.  If name is
+                      None, then obj must be a dictionary of name:obj.
+
+                      Names must not start with an underscore (these
+                      are used for private variables.)
+
+            env     : Dictionary used to resolve names found in repr
+                      strings (using repr is the last resort option).
+            
+        Returns (uname,obj) where uname is the unique name.
+
+        Throws DuplicateError if unique is False and name is already
+        in the archive.
+
+        Throws ArchiveError if there is a problem.
+
+        >>> a = Archive()
+        >>> a.insert(x=2)
+        'x'
+        >>> a.insert(x=2)       # Duplicates are okay.
+        'x'
+        >>> a.insert(x=3)       # Changes are not...
+        Traceback (most recent call last):
+           ...
+        DuplicateError: Object with name 'x' already exists in archive.
+        >>> a.insert(**{a.unique_name('x'):3}) # ...but can make unique label
+        'x_1'
+        >>> a.insert(a=4,b=5)   # Can insert multiple items
+        ['a', 'b']
+        >>> a.insert(A=np.array([1,2,3]))
+        'A'
+        >>> print a
+        import numpy as _numpy
+        from numpy import inf as _inf
+        from numpy import nan as _nan
+        x = 2
+        x_1 = 3
+        a = 4
+        b = 5
+        A = _numpy.array([1, 2, 3])
+        del _numpy
+        del _inf
+        del _nan
+        try: del __builtins__
+        except NameError: pass
+        >>> a = Archive()
+        >>> a.insert(x=2)
+        'x'
+        >>> a.insert(A=np.array([1,2,3]))
+        'A'
+        >>> c = np.array([1,2.0+3j,3])
+        >>> a.insert(c=c)
+        'c'
+        >>> a.insert(cc=[c,c,[3]])
+        'cc'
+        >>> a.make_persistent() # doctest: +NORMALIZE_WHITESPACE
+        ([('numpy', None, '_numpy'),
+          ('numpy', 'inf', '_inf'),
+          ('numpy', 'nan', '_nan')],
+         [('c', '_numpy.array([ 1.+0.j,  2.+3.j,  3.+0.j])'),
+          ('cc', '[c,c,[3]]'),
+          ('x', '2'),
+          ('A', '_numpy.array([1, 2, 3])')])
+        """
+        if env is None:
+            env = {}
+
+        names = []
+        for name in kwargs:
+            obj = kwargs[name]
+            if name.startswith('_'):
+                raise ValueError("name must not start with '_'")
+
+            # First check to see if object is already in archive:
+            unames,objs,envs = _unzip(self.arch)
+            try:
+                ind_obj = objs.index(obj)
+            except ValueError:
+                ind_obj = None
+
+            try:
+                ind_name = unames.index(name)
+            except ValueError:
+                ind_name = None
+
+            ind = None
+            if ind_name is not None:
+                # Name already in archive
+                if ind_name == ind_obj:
+                    ind = ind_name
+                else:
+                    raise DuplicateError(name)
+            else:
+                uname = name
+            
+            if ind is not None:
+                # Object already in archive.  We are done
+                pass
+            else:
+                if self.check_on_insert:
+                    (rep,args,imports) = self.archive_1(obj,env)
+
+                self.arch.append((uname,obj,env))
+                ind = len(self.arch) - 1
+                
+            assert(ind is not None)
+            uname,obj,env = self.arch[ind]
+            names.append(uname)
+
+        if 1 < len(names):
+            return names
+        elif 1 == len(names):
+            return names[0]
+        else:                   # pragma: no cover
+            return None
+
+    def make_persistent(self):
+        """Return (imports, defs) representing the persistent version
+        of the archive.
+
+        imports : a list of (module,iname,uiname) where one of the
+                  following:
+
+                  from module import iname as uiname
+                  from module import iname
+                  import module as uiname
+
+                  The second form is used if iname is uiname, and the
+                  last form is used if iname is None.  uiname must not
+                  be None.
+        defs : a list of (uname,rep) where rep is an expression
+               depending on the imports and the previously defined
+               unames.
+
+        Algorithm:
+            The core of the algorithm is a transformation that takes
+            an object obj and replaces that by a tuple
+            (rep,args,imports) where rep is a string representation of
+            the object that can be evaluated using eval() in the
+            context provided by args and imports.
+
+            The archive_1() method provides this functionality,
+            effectively defining a suite describing the dependencies
+            of the object.
+
+            Typically, rep will be a call to the objects constructor
+            with the arguments in args.  The constructor is typically
+            defined by the imports.
+
+            Objects are hierarchical in that one object will depend on
+            others.  Consider for example the following suite:
+            
+            a = [1,2,3]
+            b = [4,5,6]
+            c = dict(a=a,b=b)
+
+            The dictionary c could be represeted as this suite, or in
+            a single expression:
+
+            c = dict(a=[1,2,3],b=[4,5,6])
+            
+            In some cases, one must use a suite: for example
+
+            a = [1,2,3]
+            b = [a,a]
+            c = dict(a=a,b=b)
+
+            Since everything refers to a single list, one must
+            preserve this structure and we cannot expand anything.
+
+            These concepts can all be couched in the language of graph
+            theory.  The dependency structure forms a "directed graph"
+            (DG) and we are looking for an "evaluation order" or
+            "topological order", which is found using a "topological
+            sorting" algorithm.  We do not presently support cyclic
+            dependencies, so we will only archive directed acyclic
+            graphs (DAG), but the algorithm must determine if there is
+            a cycle and raise an exception in this case.
+
+            We use the topsort library to do this.
+
+            We would also like to (optionally) perform reductions of
+            the graph in the sense that we remove a node from the
+            list of computed quantities, and include it directly in
+            the evaluation of another node.  This can only be done if
+            the node has less than two parents.
+
+            flat: The flat algorithm recursively processes the archive
+                  in a depth first manner, adding each object with a
+                  temporary name.
+            tree: The recursive algorithm leaves objects within their
+                  recursive structures
+          
+       Example:
+                                A
+                               / \
+                              B   C
+                              |  /| \
+                              | / D  E
+                               F   \ /
+                                    G            
+G = 'G'
+F = 'F'
+D = [G]
+E = [G]
+C = [F, D, E]
+B = [F]
+A = [B,C]
+a = Archive()
+a.insert(A=A)
+        
+        """
+
+        # First we build the dependency tree using the nodes and a
+        # depth first search.  The nodes dictionary maps each id to
+        # the tuples (obj,(rep,args,imports),parents) where the
+        # children are specified by the "args" and parents is a set of
+        # the parent ids.  The nodes dictionary also acts as the
+        # "visited" list to prevent cycles.
+
+        names = _unzip(self.arch)[0]
+        
+        # Generate dependency graph
+        try:
+            graph = Graph(objects=self.arch,
+                          archive_1=self.archive_1)
+        except topsort.CycleError, err:
+            new_err = ArchiveError(
+                "Archive contains cyclic dependencies.")
+            new_err.cycle_err = err
+            raise new_err
+
+        # Optionally: at this stage perform a graph reduction.
+        graph.reduce()
+
+        names_reps = [(node.name,node.rep)
+                      for id_ in graph.order
+                      for node in [graph.nodes[id_]]]
+
+        return (graph.imports,names_reps)
+
+    def __repr__(self):
+        return str(self)
+
+    def __str__(self):
+        """Return a string representing the archive.
+
+        This string can be saved to a file, and that file imported to
+        define the required symbols.
+        """
+        imports, defs = self.make_persistent()
+        import_lines = []
+        del_lines = []
+        for (module,iname,uiname) in imports:
+            assert(iname is not None or uiname is not None)
+            if iname is None:
+                import_lines.append(
+                    "import %s as %s"%(module,uiname))
+                del_lines.append("del %s"%uiname)
+            elif iname == uiname or uiname is None: # pragma: no cover
+                # Probably never happens because uinames start with _
+                import_lines.append(
+                    "from %s import %s"%(module,uiname))
+                del_lines.append("del %s"%uiname)
+            else:
+                import_lines.append(
+                    "from %s import %s as %s"%(module,iname,uiname))
+                del_lines.append("del %s"%uiname)
+
+        del_lines.extend([
+                "try: del __builtins__",
+                "except NameError: pass"])
+
+        lines = "\n".join(["%s = %s"%(uname,rep) 
+                           for (uname,rep) in defs])
+        imports = "\n".join(import_lines)
+        dels = "\n".join(del_lines)
+
+        res = ("\n"+self._section_sep).join([l for l in [imports,lines,dels]
+                           if 0 < len(l)])
+        return res
+   
 def get_imports(obj,env=None):
     """Return [imports] = [(module,iname,uiname)] where iname is the
     constructor of obj to be used and called as:
@@ -577,15 +988,6 @@ class Graph(object):
 
         self.order = self._topological_order()
 
-class ArchiveError(Exception):
-    """Archiving error."""
-
-class DuplicateError(ArchiveError):
-    """Object already exists."""
-    def __init__(self,name):
-        msg = "Object with name %r already exists in archive."%name
-        ArchiveError.__init__(self,msg)
-
 def _unzip(q,n=3):
     """Unzip q to lists.
 
@@ -680,407 +1082,6 @@ def _replace_rep(rep,replacements):
             raise ReplacementError(old,replacements[old],counts[old],n)
     return rep
 
-class Archive(object):
-    """Archival tool.
-    
-    Maintains a list of symbols to import in order to reconstruct the
-    states of objects and contains methods to convert objects to
-    strings for archival.
-
-    Members:
-        arch : List of (uname,obj,env) where obj is
-               the the object, which can be rescontructed from the
-               string rep evaluated in the contect of args, imports,
-               and env.
-
-        check_on_import : If True, then try generating the rep.
-
-    Invariants:
-        unames are unique
-    """
-    def __init__(self,flat=True):
-        self.flat = flat
-        self.imports = []
-        self.arch = []
-        self._section_sep = ""  # string to separate the sections
-        self._numpy_printoptions = {'infstr': 'Inf',
-                                    'threshold': np.inf,
-                                    'suppress': False,
-                                    'linewidth': 200,
-                                    'edgeitems': 3,
-                                    'precision': 16,
-                                    'nanstr': 'NaN'}
-        self.check_on_insert = False
-
-    def archive_1(self,obj,env):
-        """Return (rep,args,imports) where obj can be reconstructed
-        from the string rep evaluated in the context of args with the
-        specified imports = list of (module,iname,uiname) where one
-        has either "import module as uiname", "from module import
-        iname" or "from module import iname as uiname".
-        
-        """
-        if isinstance(obj,interfaces.IArchivable):
-            return obj.archive_1(env)
-
-        for class_ in self._dispatch:
-            if isinstance(obj,class_):
-                return self._dispatch[class_](self,obj,env=env)
-
-        if inspect.isclass(obj):
-            return archive_1_class(obj,env)
-
-        if hasattr(obj,'archive_1'):
-            try:
-                return obj.archive_1(env)
-            except TypeError:   # pragma: no cover
-                1+1             # Needed to deal with coverage bug
-        
-        return archive_1_repr(obj,env)
-
-    def _archive_ndarray(self,obj,env):
-        popts = np.get_printoptions()
-        np.set_printoptions(**(self._numpy_printoptions))
-        rep = repr(obj)
-        np.set_printoptions(**popts)
-
-        module = inspect.getmodule(obj.__class__)
-
-        mname = module.__name__
-        
-        constructor = rep.partition("(")[0]
-        if not constructor.startswith(mname):
-            rep = ".".join([mname,rep])
-        
-        imports = [(mname,None,mname),
-                   ('numpy','inf','inf'),
-                   ('numpy','inf','Infinity'),
-                   ('numpy','inf','Inf'),
-                   ('numpy','inf','infty'),
-                   ('numpy','nan','nan'),
-                   ('numpy','nan','NaN'),
-                   ('numpy','nan','NAN')]
-        return (rep,{},imports)
-
-    def _archive_list(self,obj,env):
-        return archive_1_list(obj,env)
-
-    def _archive_tuple(self,obj,env):
-        return archive_1_tuple(obj,env)
-
-    def _archive_dict(self,obj,env):
-        return archive_1_dict(obj,env)
-
-    def _archive_float(self,obj,env):
-        return archive_1_float(obj,env)
-
-    _dispatch = {
-        np.ndarray:_archive_ndarray,
-        list:_archive_list,
-        tuple:_archive_tuple,
-        dict:_archive_dict,
-        float:_archive_float,
-        complex:_archive_float}
-        
-    def unique_name(self,name):
-        """Return a unique name not contained in the archive."""
-        names = _unzip(self.arch)[0]
-        return _get_unique(name,names)
-
-    def insert(self,env=None,**kwargs):
-        """insert(name=obj): Add the obj to archive with name.
-
-        If self.check_on_insert, then try generating rep (may raise an
-        exception).
-
-        If name already exists in the archive, then a DuplicateError
-        exception is thrown.
-
-        Parameters:
-            name=obj : Insert the obj with name into the ar
-            obj     : Object to be archived
-            name    : Desired name of object in the archive.  If name is
-                      None, then obj must be a dictionary of name:obj.
-
-                      Names must not start with an underscore (these
-                      are used for private variables.)
-
-            env     : Dictionary used to resolve names found in repr
-                      strings (using repr is the last resort option).
-            
-        Returns (uname,obj) where uname is the unique name.
-
-        Throws DuplicateError if unique is False and name is already
-        in the archive.
-
-        Throws ArchiveError if there is a problem.
-
-        >>> a = Archive()
-        >>> a.insert(x=2)
-        'x'
-        >>> a.insert(x=2)       # Duplicates are okay.
-        'x'
-        >>> a.insert(x=3)       # Changes are not...
-        Traceback (most recent call last):
-           ...
-        DuplicateError: Object with name 'x' already exists in archive.
-        >>> a.insert(**{a.unique_name('x'):3}) # ...but can make unique label
-        'x_1'
-        >>> a.insert(a=4,b=5)   # Can insert multiple items
-        ['a', 'b']
-        >>> a.insert(A=np.array([1,2,3]))
-        'A'
-        >>> print a
-        import numpy as _numpy
-        from numpy import inf as _inf
-        from numpy import nan as _nan
-        x = 2
-        x_1 = 3
-        a = 4
-        b = 5
-        A = _numpy.array([1, 2, 3])
-        del _numpy
-        del _inf
-        del _nan
-        try: del __builtins__
-        except NameError: pass
-        >>> a = Archive()
-        >>> a.insert(x=2)
-        'x'
-        >>> a.insert(A=np.array([1,2,3]))
-        'A'
-        >>> c = np.array([1,2.0+3j,3])
-        >>> a.insert(c=c)
-        'c'
-        >>> a.insert(cc=[c,c,[3]])
-        'cc'
-        >>> a.make_persistent() # doctest: +NORMALIZE_WHITESPACE
-        ([('numpy', None, '_numpy'),
-          ('numpy', 'inf', '_inf'),
-          ('numpy', 'nan', '_nan')],
-         [('c', '_numpy.array([ 1.+0.j,  2.+3.j,  3.+0.j])'),
-          ('cc', '[c,c,[3]]'),
-          ('x', '2'),
-          ('A', '_numpy.array([1, 2, 3])')])
-        """
-        if env is None:
-            env = {}
-
-        names = []
-        for name in kwargs:
-            obj = kwargs[name]
-            if name.startswith('_'):
-                raise ValueError("name must not start with '_'")
-
-            # First check to see if object is already in archive:
-            unames,objs,envs = _unzip(self.arch)
-            try:
-                ind_obj = objs.index(obj)
-            except ValueError:
-                ind_obj = None
-
-            try:
-                ind_name = unames.index(name)
-            except ValueError:
-                ind_name = None
-
-            ind = None
-            if ind_name is not None:
-                # Name already in archive
-                if ind_name == ind_obj:
-                    ind = ind_name
-                else:
-                    raise DuplicateError(name)
-            else:
-                uname = name
-            
-            if ind is not None:
-                # Object already in archive.  We are done
-                pass
-            else:
-                if self.check_on_insert:
-                    (rep,args,imports) = self.archive_1(obj,env)
-
-                self.arch.append((uname,obj,env))
-                ind = len(self.arch) - 1
-                
-            assert(ind is not None)
-            uname,obj,env = self.arch[ind]
-            names.append(uname)
-
-        if 1 < len(names):
-            return names
-        elif 1 == len(names):
-            return names[0]
-        else:                   # pragma: no cover
-            return None
-
-    def make_persistent(self):
-        """Return (imports, defs) representing the persistent version
-        of the archive.
-
-        imports : a list of (module,iname,uiname) where one of the
-                  following:
-
-                  from module import iname as uiname
-                  from module import iname
-                  import module as uiname
-
-                  The second form is used if iname is uiname, and the
-                  last form is used if iname is None.  uiname must not
-                  be None.
-        defs : a list of (uname,rep) where rep is an expression
-               depending on the imports and the previously defined
-               unames.
-
-        Algorithm:
-            The core of the algorithm is a transformation that takes
-            an object obj and replaces that by a tuple
-            (rep,args,imports) where rep is a string representation of
-            the object that can be evaluated using eval() in the
-            context provided by args and imports.
-
-            The archive_1() method provides this functionality,
-            effectively defining a suite describing the dependencies
-            of the object.
-
-            Typically, rep will be a call to the objects constructor
-            with the arguments in args.  The constructor is typically
-            defined by the imports.
-
-            Objects are hierarchical in that one object will depend on
-            others.  Consider for example the following suite:
-            
-            a = [1,2,3]
-            b = [4,5,6]
-            c = dict(a=a,b=b)
-
-            The dictionary c could be represeted as this suite, or in
-            a single expression:
-
-            c = dict(a=[1,2,3],b=[4,5,6])
-            
-            In some cases, one must use a suite: for example
-
-            a = [1,2,3]
-            b = [a,a]
-            c = dict(a=a,b=b)
-
-            Since everything refers to a single list, one must
-            preserve this structure and we cannot expand anything.
-
-            These concepts can all be couched in the language of graph
-            theory.  The dependency structure forms a "directed graph"
-            (DG) and we are looking for an "evaluation order" or
-            "topological order", which is found using a "topological
-            sorting" algorithm.  We do not presently support cyclic
-            dependencies, so we will only archive directed acyclic
-            graphs (DAG), but the algorithm must determine if there is
-            a cycle and raise an exception in this case.
-
-            We use the topsort library to do this.
-
-            We would also like to (optionally) perform reductions of
-            the graph in the sense that we remove a node from the
-            list of computed quantities, and include it directly in
-            the evaluation of another node.  This can only be done if
-            the node has less than two parents.
-
-            flat: The flat algorithm recursively processes the archive
-                  in a depth first manner, adding each object with a
-                  temporary name.
-            tree: The recursive algorithm leaves objects within their
-                  recursive structures
-          
-       Example:
-                                A
-                               / \
-                              B   C
-                              |  /| \
-                              | / D  E
-                               F   \ /
-                                    G            
-G = 'G'
-F = 'F'
-D = [G]
-E = [G]
-C = [F, D, E]
-B = [F]
-A = [B,C]
-a = Archive()
-a.insert(A=A)
-        
-        """
-
-        # First we build the dependency tree using the nodes and a
-        # depth first search.  The nodes dictionary maps each id to
-        # the tuples (obj,(rep,args,imports),parents) where the
-        # children are specified by the "args" and parents is a set of
-        # the parent ids.  The nodes dictionary also acts as the
-        # "visited" list to prevent cycles.
-
-        names = _unzip(self.arch)[0]
-        
-        # Generate dependency graph
-        try:
-            graph = Graph(objects=self.arch,
-                          archive_1=self.archive_1)
-        except topsort.CycleError, err:
-            new_err = ArchiveError(
-                "Archive contains cyclic dependencies.")
-            new_err.cycle_err = err
-            raise new_err
-
-        # Optionally: at this stage perform a graph reduction.
-        graph.reduce()
-
-        names_reps = [(node.name,node.rep)
-                      for id_ in graph.order
-                      for node in [graph.nodes[id_]]]
-
-        return (graph.imports,names_reps)
-
-    def __repr__(self):
-        return str(self)
-
-    def __str__(self):
-        """Return a string representing the archive.
-
-        This string can be saved to a file, and that file imported to
-        define the required symbols.
-        """
-        imports, defs = self.make_persistent()
-        import_lines = []
-        del_lines = []
-        for (module,iname,uiname) in imports:
-            assert(iname is not None or uiname is not None)
-            if iname is None:
-                import_lines.append(
-                    "import %s as %s"%(module,uiname))
-                del_lines.append("del %s"%uiname)
-            elif iname == uiname or uiname is None: # pragma: no cover
-                # Probably never happens because uinames start with _
-                import_lines.append(
-                    "from %s import %s"%(module,uiname))
-                del_lines.append("del %s"%uiname)
-            else:
-                import_lines.append(
-                    "from %s import %s as %s"%(module,iname,uiname))
-                del_lines.append("del %s"%uiname)
-
-        del_lines.extend([
-                "try: del __builtins__",
-                "except NameError: pass"])
-
-        lines = "\n".join(["%s = %s"%(uname,rep) 
-                           for (uname,rep) in defs])
-        imports = "\n".join(import_lines)
-        dels = "\n".join(del_lines)
-
-        res = ("\n"+self._section_sep).join([l for l in [imports,lines,dels]
-                           if 0 < len(l)])
-        return res
-    
 class AST(object):
     """Class to represent and explore the AST of expressions."""
     def __init__(self,expr):
