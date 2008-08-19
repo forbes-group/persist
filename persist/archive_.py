@@ -63,7 +63,7 @@ import numpy as np
 import contrib.RADLogic.topsort as topsort
 
 import mmf.utils
-import interfaces as interfaces
+import mmf.objects.interfaces
 
 class ArchiveError(Exception):
     """Archiving error."""
@@ -132,7 +132,7 @@ class Archive(object):
         iname" or "from module import iname as uiname".
         
         """
-        if isinstance(obj,interfaces.IArchivable):
+        if isinstance(obj,mmf.objects.interfaces.IArchivable):
             return obj.archive_1(env)
 
         for class_ in self._dispatch:
