@@ -5,8 +5,8 @@ import nose.tools
 import numpy as np
 
 import mmf.objects
-import mmf.objects.interfaces as interfaces
-import mmf.archive as archive
+import mmf.interfaces as interfaces
+import mmf.archive.archive_ as archive
 
 import mmf.utils.mmf_test
 
@@ -45,6 +45,13 @@ class C(mmf.objects.Archivable):
 
 class TestException(Exception):
     pass
+
+class MyDict(dict):
+    """Class to test archiving of derived classes."""
+
+class MyList(list):
+    """Class to test archiving of derived classes."""
+
 
 class TestSuite(object):
     """Test the functionality of the archive module."""
@@ -117,14 +124,29 @@ class TestSuite(object):
         self._test_archiving((1,2))
         self._test_archiving([1])
         self._test_archiving([1,2])
-        self._test_archiving([1,2])
+        self._test_archiving((1,1))
+
+    def test_derived_types(self):
+        """Test archiving of simple derived types..."""
+        arch = archive.Archive()
+        d = MyDict(a=1,b=2)
+        l = MyList([1,2])
+        arch.insert(d=d,l=l)
+        s = str(arch)
+        ld = {}
+        exec(s,ld)
+        assert (ld['d']['a'] == d['a'])
+        assert isinstance(ld['d'],MyDict)
+        assert (ld['l'] == l)
+        assert isinstance(ld['l'], MyList)
 
     def test_numpy_types(self):
         """Test archiving of numpy types"""
         obj = dict(inf=np.inf,
                    neg_inf=-np.inf,
                    nan=np.nan,
-                   array=np.array([1,np.inf,np.nan]))
+                   array=np.array([1,np.inf,np.nan]),
+                   matrix=np.matrix([[1,2],[3,4]]))
 
         arch = archive.Archive()
         arch.insert(x=obj)

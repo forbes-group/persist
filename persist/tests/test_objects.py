@@ -5,16 +5,19 @@ import nose
 
 import numpy as np
 
+import mmf.utils.mmf_test
+
 import mmf.objects
 from mmf.objects import StateVars, Container, process_vars
-from mmf.objects import ClassVar, Required, Computed, NoCopy
+from mmf.objects import ClassVar, Required, Computed, NoCopy, Excluded
+
 
 class A(mmf.objects.Archivable):
     def __init__(self,x):
         self.x = x
     def items(self):
         return self.__dict__.items()
-    
+
 class TestArchivable(object):
     """Test Archivable class."""
     def test_repr(self):
@@ -89,6 +92,20 @@ class TestStateVars(object):
             _state_vars = [('a',1)]
             process_vars()
         nose.tools.assert_equal(B().a,1)
+
+    def test_copy0a(self):
+        """Test default copy semantics"""
+        c0 = [1]
+        c1 = [c0]
+        class A(StateVars):
+            _state_vars = [('c',c1)]
+            process_vars()
+        a = A()
+        b = A()
+        nose.tools.assert_equal(a.c[0][0], 1)
+        nose.tools.assert_equal(b.c[0][0], 1)
+        nose.tools.assert_not_equal(id(a.c), id(b.c))
+        nose.tools.assert_not_equal(id(a.c[0]), id(b.c[0]))
 
     def test_copy1(self):
         """Test copy=False"""
@@ -168,9 +185,32 @@ class TestStateVars(object):
     def test_Required(self):
         """Test required keys"""
         class A(StateVars):
-            _state_vars = [('c',mmf.objects.Required,'Required')]
+            _state_vars = [('x',mmf.objects.Required,'Required')]
             process_vars()
         a = A()
+
+    def test_Required2(self):
+        """Test providing required keys with class variables"""
+        class A(StateVars):
+            _state_vars = [('x',mmf.objects.Required,'Required')]
+            process_vars()
+        class B(A):
+            process_vars()
+            x = 2
+        class C(A):
+            process_vars()
+            @property
+            def x(self): return 5
+
+        b = B()
+        nose.tools.assert_equal(b.x,2)
+        c = C()
+        nose.tools.assert_equal(c.x,5)
+
+        b1 = B(x=3)
+        nose.tools.assert_equal(b1.x,3)
+        nose.tools.assert_equal(b.x,2)
+        nose.tools.assert_equal(B.x,2)
 
     @nose.tools.raises(AttributeError)
     def test_NotImplemented(self):
@@ -229,7 +269,6 @@ class TestStateVars(object):
         """Test default __init__ for invalid varargins."""
         a = StateVars(1,2)
 
-
     def test_compare_arrays(self):
         """Test that arrays can be compared."""
         class A(StateVars):
@@ -257,10 +296,20 @@ class TestStateVars(object):
         """Tests a bug with _gather_vars."""
         class C(StateVars):
             _state_vars = ['a']
-            _excluded_vars = ['_b']
+            _excluded_vars = ['b']
             process_vars()
         C.b = 5
         nose.tools.assert_equals(C.b, 5)
+
+    def test_excluded(self):
+        """Tests Excluded attribute definition."""
+        class C(StateVars):
+            _state_vars = [('a', Excluded),
+                           ('b', Excluded(3))]
+            process_vars()
+        c = C()
+        nose.tools.assert_equals(c.b, 3)
+        
 
     def test_class_vars(self):
         """Test ClassVars attribute bug with __new__ overwriting with
@@ -269,9 +318,36 @@ class TestStateVars(object):
             _state_vars = [('A',ClassVar(Required))]
             process_vars()
         class G(F):
+            process_vars()
             A = 1
         g = G()
         nose.tools.assert_equal(g.A,1)
+
+    @nose.tools.raises(AttributeError)
+    def test_class_vars2(self):
+        """Test that ClassVars cannot be initialized."""
+        class F(StateVars):
+            _state_vars = [('A',ClassVar(1))]
+            process_vars()
+        g = F(A=3)
+
+    def test_overriding_ClassVar(self):
+        """Test that overriding ClassVar works with archiving.
+
+        Normally a ClassVar would not be archived because it is a
+        property of a class.  A subclass might want this property to
+        become and instance var, so it might override this."""
+
+        class A(StateVars):
+            _state_vars = [('x', ClassVar(1))]
+            process_vars()
+
+        class B(A):
+            _state_vars = [('x', 2)]
+            process_vars()
+        
+        b = B(x=4)
+        nose.tools.assert_equal(b.x,4)
 
     def test_changing_defaults(self):
         """Test StateVars to see if changing default values preserves
@@ -289,6 +365,31 @@ class TestStateVars(object):
         nose.tools.assert_equals(doc_A,doc_B)
         nose.tools.assert_not_equals(A().a,B().a)
 
+    class HookException(Exception):
+        pass
+
+    @nose.tools.raises(HookException)
+    def test__pre_hook__new__(self_):
+        """Test _pre_hook__new__"""
+        class A(StateVars):
+            process_vars()
+            def _pre_hook__new__(self,*varargin,**kwargs):
+                raise self_.HookException()
+        a = A()
+
+    @nose.tools.raises(HookException)
+    def test__post_hook__new__(self_):
+        """Test _post_hook__new__"""
+        class A(StateVars):
+            _state_vars = [('x',1), ('y',None)]
+            process_vars()
+            def _pre_hook__new__(self,*varargin,**kwargs):
+                self.__dict__['_private'] = 2
+            def _post_hook__new__(self,*varargin,**kwargs):
+                nose.tools.assert_equals(self._private,2)
+                raise self_.HookException()
+        a = A()
+
     @mmf.utils.mmf_test.dec.skipknownfailure
     def test_get(self):
         """Test for uneeded getattr calls."""
@@ -303,6 +404,7 @@ class TestStateVars(object):
         
         e = E(y=1)
         nose.tools.ok_(okay)
+
 
 
 

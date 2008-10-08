@@ -63,7 +63,7 @@ import numpy as np
 import contrib.RADLogic.topsort as topsort
 
 import mmf.utils
-import mmf.objects.interfaces
+import mmf.interfaces as interfaces
 
 class ArchiveError(Exception):
     """Archiving error."""
@@ -132,7 +132,7 @@ class Archive(object):
         iname" or "from module import iname as uiname".
         
         """
-        if isinstance(obj,mmf.objects.interfaces.IArchivable):
+        if isinstance(obj,interfaces.IArchivable):
             return obj.archive_1(env)
 
         for class_ in self._dispatch:
@@ -158,13 +158,15 @@ class Archive(object):
 
         module = inspect.getmodule(obj.__class__)
 
-        mname = module.__name__
+        # Import A.B.C as C
+        iname = module.__name__
+        mname = iname.rpartition('.')[-1]
         
         constructor = rep.partition("(")[0]
         if not constructor.startswith(mname):
             rep = ".".join([mname,rep])
         
-        imports = [(mname,None,mname),
+        imports = [(iname,None,mname),
                    ('numpy','inf','inf'),
                    ('numpy','inf','Infinity'),
                    ('numpy','inf','Inf'),
@@ -615,6 +617,15 @@ def archive_1_class(obj,env):
     rep = name
     return (rep,{},imports)
 
+def _get_rep(obj,arg_rep):
+    """Return (rep,imports) where rep = "Class(args)" is a call to the
+    obj constructor.  This is used to represent derived instances of
+    builtin types."""
+    module = obj.__class__.__module__
+    cname = obj.__class__.__name__
+    rep = "%s(%s)"%(cname, arg_rep)
+    return (rep, (module, cname, cname))
+    
 def archive_1_list(l,env):
     args = []
     imports = []
@@ -626,21 +637,35 @@ def archive_1_list(l,env):
         args.append((name,o))
         names.add(name)
         reps.append(name)
+
     rep = "[%s]"%(",".join(reps))
+
+    if l.__class__ is not list:
+        rep, imp = _get_rep(l, rep)
+        imports.append(imp)
+
     return (rep,args,imports)
 
 def archive_1_tuple(t,env):
-    rep,args,imports = archive_1_list(t,env=env)
+    rep,args,imports = archive_1_list(list(t),env=env)
     if len(t) == 1:
         rep = "(%s,)"%(rep[1:-1])
     else:
         rep = "(%s)"%(rep[1:-1])
 
+    if t.__class__ is not tuple:
+        rep, imp = _get_rep(t, rep)
+        imports.append(imp)
+
     return (rep,args,imports)
 
 def archive_1_dict(d,env):
     rep,args,imports = archive_1_list(d.items(),env)
-    rep = "dict(%s)"%rep
+
+    if d.__class__ is not list:
+        rep, imp = _get_rep(d, rep)
+        imports.append(imp)
+
     return (rep,args,imports)
 
 def is_simple(obj):
@@ -1062,6 +1087,8 @@ def _replace_rep(rep,replacements):
     'n = array_1([1,2,3])'
     >>> _replace_rep('a + aa',dict(a='c'))
     'c + aa'
+    >>> _replace_rep('(a,a)',dict(a='c'))
+    '(c,c)'
     >>> _replace_rep("a + 'a'",dict(a='c'))
     Traceback (most recent call last):
         ...
@@ -1074,10 +1101,14 @@ def _replace_rep(rep,replacements):
                    [^\w\.]      # Either NOT a valid identifier 
                    | ^)         # OR the start of the string
                   (%s)          # The literal to be matched
-                  (?P<b>[^\w=]   # Either NOT a valid identifer
+                  (?P<b>[^\w=]  # Either NOT a valid identifer
                    | $)'''      # OR the end.
         regexp = re.compile(re_%(re.escape(old)),re.VERBOSE)
-        (rep,n) = regexp.subn(r"\g<a>%s\g<b>"%(replacements[old]),rep)
+        n = 0
+        while True: 
+            (rep,m) = regexp.subn(r"\g<a>%s\g<b>"%(replacements[old]),rep)
+            if m == 0: break
+            n += m
         if not n == counts[old]:
             raise ReplacementError(old,replacements[old],counts[old],n)
     return rep
