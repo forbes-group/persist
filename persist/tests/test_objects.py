@@ -27,44 +27,6 @@ class TestArchivable(object):
         a = A(x=1)
         nose.tools.assert_equal("A(x=1)",str(a))
 
-class TestStateVars1(object):
-    """Test StateVars processing without explicit calls to
-    process_vars()"""
-    def test1(self):
-        """Test StateVars without process_vars call."""
-        class StateVars1(StateVars):
-            _dynamic = True
-        a = StateVars1(a=1,b=2)
-        nose.tools.assert_equal(a.a,1)
-        nose.tools.assert_equal(a.b,2)
-
-    def test2(self):
-        """Test StateVars inheritance without process_vars call."""
-        class StateVars1(StateVars):
-            _state_vars = [('a',1)]
-            process_vars()
-        class StateVars2(StateVars1):
-            pass
-
-        a = StateVars2()
-        nose.tools.assert_equal(a.a,1)
-
-    @mmf.utils.mmf_test.dec.skipknownfailure
-    def test3(self):
-        """Test StateVars multiple inheritance without process_vars call."""
-        class StateVars1(StateVars):
-            _state_vars = [('a',1)]
-            process_vars()
-        class StateVars2(StateVars):
-            _state_vars = [('b',2)]
-            process_vars()
-        class StateVars3(StateVars1,StateVars2):
-            pass
-
-        a = StateVars3()
-        nose.tools.assert_equal(a.a,1)
-        nose.tools.assert_equal(a.b,2)
-
 class TestStateVars(object):
     def test_ordering(self):
         """Test the inherited order of _state_vars."""
@@ -405,7 +367,68 @@ class TestStateVars(object):
         e = E(y=1)
         nose.tools.ok_(okay)
 
+class TestStateVars1(object):
+    """Test StateVars processing without explicit calls to
+    process_vars()"""
+    def test1(self):
+        """Test StateVars without process_vars call."""
+        class StateVars1(StateVars):
+            _dynamic = True
+        a = StateVars1(a=1,b=2)
+        nose.tools.assert_equal(a.a,1)
+        nose.tools.assert_equal(a.b,2)
 
+    def test2(self):
+        """Test StateVars inheritance without process_vars call."""
+        class StateVars1(StateVars):
+            _state_vars = [('a',1)]
+            process_vars()
+        class StateVars2(StateVars1):
+            pass
+
+        a = StateVars2()
+        nose.tools.assert_equal(a.a,1)
+
+    @mmf.utils.mmf_test.dec.skipknownfailure
+    def test3(self):
+        """Test StateVars multiple inheritance without process_vars call."""
+        class StateVars1(StateVars):
+            _state_vars = [('a',1)]
+            process_vars()
+        class StateVars2(StateVars):
+            _state_vars = [('b',2)]
+            process_vars()
+        class StateVars3(StateVars1,StateVars2):
+            pass
+
+        a = StateVars3()
+        nose.tools.assert_equal(a.a,1)
+        nose.tools.assert_equal(a.b,2)
+
+class TestStateVars2(object):
+    """Test changing initialization format."""
+    class AA(StateVars):
+        _state_vars = [('a', Required),
+                       ('b', Computed)]
+        process_vars()
+        def __init__(self, *v, **k):
+            self.b = self.a*self.a
+
+    class BB(AA):
+        _state_vars = [('x', Required),
+                       ('a', Computed)]
+        process_vars()
+        def __init__(self, *v, **k):
+            self.a = 2*self.x
+            TestStateVars2.AA.__init__(self, *v, **k)
+
+    def test1(self):
+        """Testing inherited overriding of __init__"""
+        a = self.AA(a=2)
+        nose.tools.assert_equal(a.b,4)
+        b = self.BB(x=2)
+        nose.tools.assert_equal(b.a,4)
+        nose.tools.assert_equal(b.b,16)
 
 
 class Doctests(object):
