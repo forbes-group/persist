@@ -3,26 +3,26 @@
 Objects can aid this by implementing an archive method, for example:
 
     def archive_1(self):
-        '''Return (rep,args,imports) where obj can be reconstructed
+        '''Return (rep, args, imports) where obj can be reconstructed
         from the string rep evaluated in the context of args with the
-        specified imports = list of (module,iname,uiname) where one
+        specified imports = list of (module, iname, uiname) where one
         has either "import module as uiname", "from module import
         iname" or "from module import iname as uiname".
         '''
-        args = [('a',self.a),('b',self.b),...]
+        args = [('a', self.a), ('b', self.b), ...]
 
         module = self.__class__.__module__
         name = self.__class__.__name__
-        imports = [(module,name,name)]
+        imports = [(module, name, name)]
 
-        keyvals = ["=".join((k,k)) for (k,v) in args]
-        rep = "%s(%s)"%(name,",".join(keyvals))
-        return (rep,args,imports)
+        keyvals = ["=".join((k, k)) for (k, v) in args]
+        rep = "%s(%s)"%(name, ", ".join(keyvals))
+        return (rep, args, imports)
 
 The idea is to save state in a file that looks like the following:
 
 import numpy as _numpy
-a = _numpy.array([1,2,3])
+a = _numpy.array([1, 2, 3])
 del _numpy
 
 BUGS:
@@ -57,6 +57,7 @@ import copy
 import textwrap
 import __builtin__
 import re
+import types
 
 import numpy as np
 
@@ -70,26 +71,26 @@ class ArchiveError(Exception):
 
 class DuplicateError(ArchiveError):
     """Object already exists."""
-    def __init__(self,name):
+    def __init__(self, name):
         msg = "Object with name %r already exists in archive."%name
-        ArchiveError.__init__(self,msg)
+        ArchiveError.__init__(self, msg)
 
-def restore(archive,env={}):
+def restore(archive, env={}):
     """Return dictionary obtained by evaluating the string arch.
     
     arch is typically returned by converting an Archive instance into
     a string using str or repr:
     >>> a = Archive()
-    >>> a.insert(a=1,b=2)
+    >>> a.insert(a=1, b=2)
     ['a', 'b']
     >>> arch = str(a)
     >>> d = restore(arch)
-    >>> print "%(a)i,%(b)i"%d
-    1,2
+    >>> print "%(a)i, %(b)i"%d
+    1, 2
     """
     ld = {}
     ld.update(env)
-    exec(archive,ld)
+    exec(archive, ld)
     return ld
 
 class Archive(object):
@@ -100,7 +101,7 @@ class Archive(object):
     strings for archival.
 
     Members:
-        arch : List of (uname,obj,env) where obj is
+        arch : List of (uname, obj, env) where obj is
                the the object, which can be rescontructed from the
                string rep evaluated in the contect of args, imports,
                and env.
@@ -110,7 +111,7 @@ class Archive(object):
     Invariants:
         unames are unique
     """
-    def __init__(self,flat=True):
+    def __init__(self, flat=True):
         self.flat = flat
         self.imports = []
         self.arch = []
@@ -124,33 +125,33 @@ class Archive(object):
                                     'nanstr': 'NaN'}
         self.check_on_insert = False
 
-    def archive_1(self,obj,env):
-        """Return (rep,args,imports) where obj can be reconstructed
+    def archive_1(self, obj, env):
+        """Return (rep, args, imports) where obj can be reconstructed
         from the string rep evaluated in the context of args with the
-        specified imports = list of (module,iname,uiname) where one
+        specified imports = list of (module, iname, uiname) where one
         has either "import module as uiname", "from module import
         iname" or "from module import iname as uiname".
         
         """
-        if isinstance(obj,interfaces.IArchivable):
+        if isinstance(obj, interfaces.IArchivable):
             return obj.archive_1(env)
 
         for class_ in self._dispatch:
-            if isinstance(obj,class_):
-                return self._dispatch[class_](self,obj,env=env)
+            if isinstance(obj, class_):
+                return self._dispatch[class_](self, obj, env=env)
 
         if inspect.isclass(obj):
-            return archive_1_class(obj,env)
+            return archive_1_class(obj, env)
 
-        if hasattr(obj,'archive_1'):
+        if hasattr(obj, 'archive_1'):
             try:
                 return obj.archive_1(env)
             except TypeError:   # pragma: no cover
                 1+1             # Needed to deal with coverage bug
         
-        return archive_1_repr(obj,env)
+        return archive_1_repr(obj, env)
 
-    def _archive_ndarray(self,obj,env):
+    def _archive_ndarray(self, obj, env):
         popts = np.get_printoptions()
         np.set_printoptions(**(self._numpy_printoptions))
         rep = repr(obj)
@@ -164,44 +165,70 @@ class Archive(object):
         
         constructor = rep.partition("(")[0]
         if not constructor.startswith(mname):
-            rep = ".".join([mname,rep])
+            rep = ".".join([mname, rep])
         
-        imports = [(iname,None,mname),
-                   ('numpy','inf','inf'),
-                   ('numpy','inf','Infinity'),
-                   ('numpy','inf','Inf'),
-                   ('numpy','inf','infty'),
-                   ('numpy','nan','nan'),
-                   ('numpy','nan','NaN'),
-                   ('numpy','nan','NAN')]
-        return (rep,{},imports)
+        imports = [(iname, None, mname),
+                   ('numpy', 'inf', 'inf'),
+                   ('numpy', 'inf', 'Infinity'),
+                   ('numpy', 'inf', 'Inf'),
+                   ('numpy', 'inf', 'infty'),
+                   ('numpy', 'nan', 'nan'),
+                   ('numpy', 'nan', 'NaN'),
+                   ('numpy', 'nan', 'NAN')]
+        return (rep, {}, imports)
 
-    def _archive_list(self,obj,env):
-        return archive_1_list(obj,env)
+    def _archive_func(self, obj, env):
+        """Attempt to archive the func."""
+        module = inspect.getmodule(obj)
+        if module is None:
+            module = inspect.getmodule(obj.__class__)
 
-    def _archive_tuple(self,obj,env):
-        return archive_1_tuple(obj,env)
+        # Import A.B.C as C
+        iname = module.__name__
+        mname = iname.rpartition('.')[-1]
 
-    def _archive_dict(self,obj,env):
-        return archive_1_dict(obj,env)
+        name = obj.__name__
+        rep = ".".join([mname, name])
 
-    def _archive_float(self,obj,env):
-        return archive_1_float(obj,env)
+        try:
+            _obj = getattr(module, name)
+            if _obj is not obj: # pragma: nocover
+                raise AttributeError
+        except AttributeError: # pragma: nocover
+            raise ArchiveError(
+                "func %s is not in module %s."%(name, mname))
+
+        imports = [(iname, None, mname)]
+        return (rep, {}, imports)
+
+    def _archive_list(self, obj, env):
+        return archive_1_list(obj, env)
+
+    def _archive_tuple(self, obj, env):
+        return archive_1_tuple(obj, env)
+
+    def _archive_dict(self, obj, env):
+        return archive_1_dict(obj, env)
+
+    def _archive_float(self, obj, env):
+        return archive_1_float(obj, env)
 
     _dispatch = {
         np.ndarray:_archive_ndarray,
+        np.ufunc:_archive_func,
+        types.BuiltinFunctionType:_archive_func,
         list:_archive_list,
         tuple:_archive_tuple,
         dict:_archive_dict,
         float:_archive_float,
         complex:_archive_float}
         
-    def unique_name(self,name):
+    def unique_name(self, name):
         """Return a unique name not contained in the archive."""
         names = _unzip(self.arch)[0]
-        return _get_unique(name,names)
+        return _get_unique(name, names)
 
-    def insert(self,env=None,**kwargs):
+    def insert(self, env=None, **kwargs):
         """insert(name=obj): Add the obj to archive with name.
 
         If self.check_on_insert, then try generating rep (may raise an
@@ -222,7 +249,7 @@ class Archive(object):
             env     : Dictionary used to resolve names found in repr
                       strings (using repr is the last resort option).
             
-        Returns (uname,obj) where uname is the unique name.
+        Returns (uname, obj) where uname is the unique name.
 
         Throws DuplicateError if unique is False and name is already
         in the archive.
@@ -240,9 +267,9 @@ class Archive(object):
         DuplicateError: Object with name 'x' already exists in archive.
         >>> a.insert(**{a.unique_name('x'):3}) # ...but can make unique label
         'x_1'
-        >>> a.insert(a=4,b=5)   # Can insert multiple items
+        >>> a.insert(a=4, b=5)   # Can insert multiple items
         ['a', 'b']
-        >>> a.insert(A=np.array([1,2,3]))
+        >>> a.insert(A=np.array([1, 2, 3]))
         'A'
         >>> print a
         import numpy as _numpy
@@ -261,19 +288,19 @@ class Archive(object):
         >>> a = Archive()
         >>> a.insert(x=2)
         'x'
-        >>> a.insert(A=np.array([1,2,3]))
+        >>> a.insert(A=np.array([1, 2, 3]))
         'A'
-        >>> c = np.array([1,2.0+3j,3])
+        >>> c = np.array([1, 2.0+3j, 3])
         >>> a.insert(c=c)
         'c'
-        >>> a.insert(cc=[c,c,[3]])
+        >>> a.insert(cc=[c, c, [3]])
         'cc'
         >>> a.make_persistent() # doctest: +NORMALIZE_WHITESPACE
         ([('numpy', None, '_numpy'),
           ('numpy', 'inf', '_inf'),
           ('numpy', 'nan', '_nan')],
          [('c', '_numpy.array([ 1.+0.j,  2.+3.j,  3.+0.j])'),
-          ('cc', '[c,c,[3]]'),
+          ('cc', '[c, c, [3]]'),
           ('x', '2'),
           ('A', '_numpy.array([1, 2, 3])')])
         """
@@ -287,7 +314,7 @@ class Archive(object):
                 raise ValueError("name must not start with '_'")
 
             # First check to see if object is already in archive:
-            unames,objs,envs = _unzip(self.arch)
+            unames, objs, envs = _unzip(self.arch)
             try:
                 ind_obj = objs.index(obj)
             except ValueError:
@@ -313,13 +340,13 @@ class Archive(object):
                 pass
             else:
                 if self.check_on_insert:
-                    (rep,args,imports) = self.archive_1(obj,env)
+                    (rep, args, imports) = self.archive_1(obj, env)
 
-                self.arch.append((uname,obj,env))
+                self.arch.append((uname, obj, env))
                 ind = len(self.arch) - 1
                 
             assert(ind is not None)
-            uname,obj,env = self.arch[ind]
+            uname, obj, env = self.arch[ind]
             names.append(uname)
 
         if 1 < len(names):
@@ -333,7 +360,7 @@ class Archive(object):
         """Return (imports, defs) representing the persistent version
         of the archive.
 
-        imports : a list of (module,iname,uiname) where one of the
+        imports : a list of (module, iname, uiname) where one of the
                   following:
 
                   from module import iname as uiname
@@ -343,14 +370,14 @@ class Archive(object):
                   The second form is used if iname is uiname, and the
                   last form is used if iname is None.  uiname must not
                   be None.
-        defs : a list of (uname,rep) where rep is an expression
+        defs : a list of (uname, rep) where rep is an expression
                depending on the imports and the previously defined
                unames.
 
         Algorithm:
             The core of the algorithm is a transformation that takes
             an object obj and replaces that by a tuple
-            (rep,args,imports) where rep is a string representation of
+            (rep, args, imports) where rep is a string representation of
             the object that can be evaluated using eval() in the
             context provided by args and imports.
 
@@ -365,20 +392,20 @@ class Archive(object):
             Objects are hierarchical in that one object will depend on
             others.  Consider for example the following suite:
             
-            a = [1,2,3]
-            b = [4,5,6]
-            c = dict(a=a,b=b)
+            a = [1, 2, 3]
+            b = [4, 5, 6]
+            c = dict(a=a, b=b)
 
             The dictionary c could be represeted as this suite, or in
             a single expression:
 
-            c = dict(a=[1,2,3],b=[4,5,6])
+            c = dict(a=[1, 2, 3], b=[4, 5, 6])
             
             In some cases, one must use a suite: for example
 
-            a = [1,2,3]
-            b = [a,a]
-            c = dict(a=a,b=b)
+            a = [1, 2, 3]
+            b = [a, a]
+            c = dict(a=a, b=b)
 
             Since everything refers to a single list, one must
             preserve this structure and we cannot expand anything.
@@ -420,7 +447,7 @@ D = [G]
 E = [G]
 C = [F, D, E]
 B = [F]
-A = [B,C]
+A = [B, C]
 a = Archive()
 a.insert(A=A)
         
@@ -428,7 +455,7 @@ a.insert(A=A)
 
         # First we build the dependency tree using the nodes and a
         # depth first search.  The nodes dictionary maps each id to
-        # the tuples (obj,(rep,args,imports),parents) where the
+        # the tuples (obj, (rep, args, imports), parents) where the
         # children are specified by the "args" and parents is a set of
         # the parent ids.  The nodes dictionary also acts as the
         # "visited" list to prevent cycles.
@@ -448,11 +475,11 @@ a.insert(A=A)
         # Optionally: at this stage perform a graph reduction.
         graph.reduce()
 
-        names_reps = [(node.name,node.rep)
+        names_reps = [(node.name, node.rep)
                       for id_ in graph.order
                       for node in [graph.nodes[id_]]]
 
-        return (graph.imports,names_reps)
+        return (graph.imports, names_reps)
 
     def __repr__(self):
         return str(self)
@@ -466,44 +493,44 @@ a.insert(A=A)
         imports, defs = self.make_persistent()
         import_lines = []
         del_lines = []
-        for (module,iname,uiname) in imports:
+        for (module, iname, uiname) in imports:
             assert(iname is not None or uiname is not None)
             if iname is None:
                 import_lines.append(
-                    "import %s as %s"%(module,uiname))
+                    "import %s as %s"%(module, uiname))
                 del_lines.append("del %s"%uiname)
             elif iname == uiname or uiname is None: # pragma: no cover
                 # Probably never happens because uinames start with _
                 import_lines.append(
-                    "from %s import %s"%(module,uiname))
+                    "from %s import %s"%(module, uiname))
                 del_lines.append("del %s"%uiname)
             else:
                 import_lines.append(
-                    "from %s import %s as %s"%(module,iname,uiname))
+                    "from %s import %s as %s"%(module, iname, uiname))
                 del_lines.append("del %s"%uiname)
 
         del_lines.extend([
                 "try: del __builtins__",
                 "except NameError: pass"])
 
-        lines = "\n".join(["%s = %s"%(uname,rep) 
-                           for (uname,rep) in defs])
+        lines = "\n".join(["%s = %s"%(uname, rep) 
+                           for (uname, rep) in defs])
         imports = "\n".join(import_lines)
         dels = "\n".join(del_lines)
 
-        res = ("\n"+self._section_sep).join([l for l in [imports,lines,dels]
+        res = ("\n"+self._section_sep).join([l for l in [imports, lines, dels]
                            if 0 < len(l)])
         return res
    
-def get_imports(obj,env=None):
-    """Return [imports] = [(module,iname,uiname)] where iname is the
+def get_imports(obj, env=None):
+    """Return [imports] = [(module, iname, uiname)] where iname is the
     constructor of obj to be used and called as:
 
     from module import iname as uiname
     obj = uiname(...)
 
     Example:
-    >>> a = np.array([1,2,3])
+    >>> a = np.array([1, 2, 3])
     >>> get_imports(a)
     [('numpy', 'ndarray', 'ndarray')]
     """
@@ -514,7 +541,7 @@ def get_imports(obj,env=None):
     except AttributeError:
         module = obj.__class__.__module__
         
-    return [(module,iname,uiname)]
+    return [(module, iname, uiname)]
 
 def repr_(obj):
     """Return representation of obj.
@@ -523,20 +550,20 @@ def repr_(obj):
     method.
 
     >>> class A(object):
-    ...     def __init__(self,x):
+    ...     def __init__(self, x):
     ...         self.x = x
     ...     def archive_1(self):
-    ...         return ('A(x=x)',[('x',self.x)],[])
+    ...         return ('A(x=x)', [('x', self.x)], [])
     ...     def __repr__(self):
     ...         return repr_(self)
     >>> A(x=[1])
     A(x=[1])
     """
-    (rep,args,imports) = obj.archive_1()
+    (rep, args, imports) = obj.archive_1()
     replacements = {}
-    replacements = dict((k,repr(v))
-                        for (k,v) in args)
-    rep = _replace_rep(rep,replacements=replacements)
+    replacements = dict((k, repr(v))
+                        for (k, v) in args)
+    rep = _replace_rep(rep, replacements=replacements)
     return rep
     
 def get_module(obj):
@@ -548,27 +575,27 @@ def get_module(obj):
         return None
     
 def archive_1_args(obj, args):
-    """Return (rep,args,imports).
+    """Return (rep, args, imports).
 
     Constructs rep and imports dynamically from obj and args.
 
     >>> a = 1
     >>> b = 2
-    >>> l = [a,b]
-    >>> archive_1_args(l,[('a',a),('b',b)])
-    ('list(a=a,b=b)', [('a', 1), ('b', 2)], [('__builtin__', 'list', 'list')])
+    >>> l = [a, b]
+    >>> archive_1_args(l, [('a', a), ('b', b)])
+    ('list(a=a, b=b)', [('a', 1), ('b', 2)], [('__builtin__', 'list', 'list')])
     """
     module = obj.__class__.__module__
     name = obj.__class__.__name__
-    imports = [(module,name,name)]
+    imports = [(module, name, name)]
     
-    keyvals = ["=".join((k,k)) for (k,v) in args]
-    rep = "%s(%s)"%(name,",".join(keyvals))
-    return (rep,args,imports)
+    keyvals = ["=".join((k, k)) for (k, v) in args]
+    rep = "%s(%s)"%(name, ", ".join(keyvals))
+    return (rep, args, imports)
 
 
-def archive_1_repr(obj,env):
-    """Return (rep,args,imports).
+def archive_1_repr(obj, env):
+    """Return (rep, args, imports).
     
     This is the fallback: try to make a rep from the repr call.
     """
@@ -587,38 +614,38 @@ def archive_1_repr(obj,env):
     ast = AST(rep)
 
     for name in ast.names:
-        obj = eval(name,scope)
+        obj = eval(name, scope)
         module = get_module(obj)
         if module:
-            imports.append((module.__name__,name,name))
+            imports.append((module.__name__, name, name))
             
     return (rep, args, imports)
 
-def archive_1_float(obj,env):
+def archive_1_float(obj, env):
     """Deal with float types, including inf or nan.
 
     These are floats, but the symbols require the import of numpy.
 
-    >>> archive_1_float(np.inf,{})
+    >>> archive_1_float(np.inf, {})
     ('inf', [], [('numpy', 'inf', 'inf')])
     """
     rep = repr(obj)
-    imports = [('numpy',name,name) for name in AST(rep)._get_names()]
+    imports = [('numpy', name, name) for name in AST(rep)._get_names()]
     args = []
     
     return (rep, args, imports)
 
-def archive_1_class(obj,env):
+def archive_1_class(obj, env):
     """Archive classes."""
     module = inspect.getmodule(obj)
     mname = module.__name__
     name = obj.__name__
-    imports = [(mname,name,name)]
+    imports = [(mname, name, name)]
     rep = name
-    return (rep,{},imports)
+    return (rep, {}, imports)
 
-def _get_rep(obj,arg_rep):
-    """Return (rep,imports) where rep = "Class(args)" is a call to the
+def _get_rep(obj, arg_rep):
+    """Return (rep, imports) where rep = "Class(args)" is a call to the
     obj constructor.  This is used to represent derived instances of
     builtin types."""
     module = obj.__class__.__module__
@@ -626,30 +653,30 @@ def _get_rep(obj,arg_rep):
     rep = "%s(%s)"%(cname, arg_rep)
     return (rep, (module, cname, cname))
     
-def archive_1_list(l,env):
+def archive_1_list(l, env):
     args = []
     imports = []
     name = '_l_0'
     names = set(env)
     reps = []
     for o in l:
-        name = _get_unique(name,names)
-        args.append((name,o))
+        name = _get_unique(name, names)
+        args.append((name, o))
         names.add(name)
         reps.append(name)
 
-    rep = "[%s]"%(",".join(reps))
+    rep = "[%s]"%(", ".join(reps))
 
     if l.__class__ is not list:
         rep, imp = _get_rep(l, rep)
         imports.append(imp)
 
-    return (rep,args,imports)
+    return (rep, args, imports)
 
-def archive_1_tuple(t,env):
-    rep,args,imports = archive_1_list(list(t),env=env)
+def archive_1_tuple(t, env):
+    rep, args, imports = archive_1_list(list(t), env=env)
     if len(t) == 1:
-        rep = "(%s,)"%(rep[1:-1])
+        rep = "(%s, )"%(rep[1:-1])
     else:
         rep = "(%s)"%(rep[1:-1])
 
@@ -657,26 +684,26 @@ def archive_1_tuple(t,env):
         rep, imp = _get_rep(t, rep)
         imports.append(imp)
 
-    return (rep,args,imports)
+    return (rep, args, imports)
 
-def archive_1_dict(d,env):
-    rep,args,imports = archive_1_list(d.items(),env)
+def archive_1_dict(d, env):
+    rep, args, imports = archive_1_list(d.items(), env)
 
     if d.__class__ is not list:
         rep, imp = _get_rep(d, rep)
         imports.append(imp)
 
-    return (rep,args,imports)
+    return (rep, args, imports)
 
 def is_simple(obj):
     """Return True if obj is a simple type defined only by its
     representation.
 
     >>> map(is_simple,
-    ...     [True,1,'Hi',1.0,1.0j,None,123L])
+    ...     [True, 1, 'Hi', 1.0, 1.0j, None, 123L])
     [True, True, True, True, True, True, True]
     >>> map(is_simple,
-    ...     [[1],(1,),{'a':2}])
+    ...     [[1], (1, ), {'a':2}])
     [False, False, False]
     """
     try:
@@ -686,7 +713,7 @@ def is_simple(obj):
     else:
         result = (
             class_ in [
-                bool, int, long, 
+                bool, int, long,
                 str, unicode,
                 None.__class__]
             or
@@ -700,36 +727,36 @@ def is_simple(obj):
 
 class Node(object):
     """Represents a Node in the tree as a tuple:
-    (obj,rep,args,name,parents)
+    (obj, rep, args, name, parents)
     obj : object the node represents
     rep : string representation of obj.  This depends on the
         names defined in args
-    args : list of (name,obj) pairs where the specified
+    args : list of (name, obj) pairs where the specified
         object is referenced in rep by name.
     parents : set of parent id's
     """
-    def __init__(self,obj,rep,args,name,parents=set()):
+    def __init__(self, obj, rep, args, name, parents=set()):
         self.obj = obj
         self.rep = rep
-        self.args = [[name_,obj] for (name_,obj) in args]
+        self.args = [[name_, obj] for (name_, obj) in args]
         self.name = name
         self.parents = set(parents)
 
     def __repr__(self):
         """Return string representation of node.
 
-        >>> Node(obj=['A'],rep='[x]',args=[('x','A')],name='a')
-        Node(obj=['A'],rep='[x]',args=[['x', 'A']],name='a',parents=set([]))
+        >>> Node(obj=['A'], rep='[x]', args=[('x', 'A')], name='a')
+        Node(obj=['A'], rep='[x]', args=[['x', 'A']], name='a', parents=set([]))
         """
-        return "Node(obj=%r,rep=%r,args=%r,name=%r,parents=%r)"%(
-            self.obj,self.rep,self.args,self.name,self.parents)
+        return "Node(obj=%r, rep=%r, args=%r, name=%r, parents=%r)"%(
+            self.obj, self.rep, self.args, self.name, self.parents)
 
     def __str__(self):
         """Return string showing node.
-        >>> print Node(obj=['A'],rep='[x]',args=[('x','A')],name='a')
+        >>> print Node(obj=['A'], rep='[x]', args=[('x', 'A')], name='a')
         Node(a=[x])
         """
-        return "Node(%s=%s)"%(self.name,self.rep)
+        return "Node(%s=%s)"%(self.name, self.rep)
 
     @property
     def id(self):
@@ -739,10 +766,10 @@ class Node(object):
     @property
     def children(self):
         """List of dependent ids"""
-        return [id(obj) for (name,obj) in self.args]
+        return [id(obj) for (name, obj) in self.args]
     
 
-    def isreducible(self,roots):
+    def isreducible(self, roots):
         """Return True if the node can be reduced.
 
         A node can be reduced if it is either a simple object with an
@@ -757,22 +784,22 @@ class Graph(object):
     """Dependency graph.  Also manages imports.
 
     """
-    def __init__(self,objects,archive_1):
+    def __init__(self, objects, archive_1):
         """Initialize the dependency graph with some reserved
         names.
 
         Parameters:
-            roots : [(id,env)]
+            roots : [(id, env)]
             objects : list of top-level objects and names
-                [(name,obj,env)].  Generated names will be from these and
+                [(name, obj, env)].  Generated names will be from these and
                 the graph will be generated from thes dependents of
                 these objects as determined by applying archive_1.
-            archive_1 : Function of (obj,env) that returns
-                (rep,args,imports) where rep is a representation of
+            archive_1 : Function of (obj, env) that returns
+                (rep, args, imports) where rep is a representation of
                 objs descending a single level.  This representation
                 is a string expression and can refer to either names
-                in the list args = [[name,obj]] of dependents or the
-                uinames in the list imports = [(module,iname,uiname)]
+                in the list args = [[name, obj]] of dependents or the
+                uinames in the list imports = [(module, iname, uiname)]
                 which will be imported as
 
                 from module import iname as uiname
@@ -781,19 +808,19 @@ class Graph(object):
         self.roots = []
         self.envs = {}
         self.imports = []
-        self.names = [name for (name,obj,env) in objects]
+        self.names = [name for (name, obj, env) in objects]
         self.archive_1 = archive_1
 
         # First insert the root nodes
-        for (name,obj,env) in objects:
-            node = self._new_node(obj,env,name)
+        for (name, obj, env) in objects:
+            node = self._new_node(obj, env, name)
             self.roots.append(node.id)
             self.envs[node.id] = env
             self.nodes[node.id] = node
 
         # Now do a depth first search to build the graph.
         for id_ in self.roots:
-            self._DFS(node=self.nodes[id_],env=self.envs[id_])
+            self._DFS(node=self.nodes[id_], env=self.envs[id_])
         
         self.order = self._topological_order()
 
@@ -808,13 +835,13 @@ class Graph(object):
                 uname = node.name
                 if not node.name.startswith('_'):
                     uname = "_" + uname
-                uname = _get_unique(uname,self.names)
+                uname = _get_unique(uname, self.names)
                 self.names.append(uname)
                 node.name = uname
 
             replacements = {}
             for args in node.args:
-                name,obj = args
+                name, obj = args
                 uname = self.nodes[id(obj)].name
                 if not name == uname:
                     replacements[name] = uname
@@ -828,31 +855,31 @@ class Graph(object):
                 cnode = self.nodes[child]
                 cnode.parents.add(node.id)
 
-            node.rep = _replace_rep(node.rep,replacements)
+            node.rep = _replace_rep(node.rep, replacements)
 
-    def _new_node(self,obj,env,name=None):
+    def _new_node(self, obj, env, name=None):
         """Return a new node associated with obj and using the
         specified name  If name is specified, then we assume
         that the name is to be exported.  Also process the
         imports of the node."""
-        rep, args, imports = self.archive_1(obj,env)
-        rep = self._process_imports(rep,args,imports)
-        return Node(obj=obj,rep=rep,args=args,name=name)
+        rep, args, imports = self.archive_1(obj, env)
+        rep = self._process_imports(rep, args, imports)
+        return Node(obj=obj, rep=rep, args=args, name=name)
 
-    def _DFS(self,node,env):
+    def _DFS(self, node, env):
         """Visit all nodes in the directed subgraph specified by
         node, and insert them into nodes."""
         for (name, obj) in node.args:
             id_ = id(obj)
             if id_ not in self.nodes:
-                node = self._new_node(obj,env,name)
+                node = self._new_node(obj, env, name)
                 self.nodes[id_] = node
-                self._DFS(node,env)
+                self._DFS(node, env)
 
-    def _process_imports(self,rep,args,imports):
+    def _process_imports(self, rep, args, imports):
         """Process imports and add them to self.imports,
         changing names as needed so there are no conflicts
-        between args = [(name,obj)] and self.names."""
+        between args = [(name, obj)] and self.names."""
 
         arg_names = _unzip(args)[0]
         # Check for duplicate imports
@@ -861,7 +888,7 @@ class Graph(object):
         for (module_, iname_, uiname_) in imports:
             mod_inames = zip(*_unzip(self.imports)[:2])
             try:
-                ind = mod_inames.index((module_,iname_))
+                ind = mod_inames.index((module_, iname_))
             except ValueError:
                 # Get new name.  All import names are local
                 uiname = uiname_
@@ -869,7 +896,7 @@ class Graph(object):
                     uiname = "_" + uiname
                 uiname = _get_unique(uiname,
                                      self.names + arg_names)
-                self.imports.append((module_,iname_,uiname))
+                self.imports.append((module_, iname_, uiname))
                 self.names.append(uiname)
             else:
                 # Import already specified.  Just refer to it
@@ -879,15 +906,15 @@ class Graph(object):
                 replacements[uiname_] = uiname
 
         # Update names of rep in archive
-        rep = _replace_rep(rep,replacements)
+        rep = _replace_rep(rep, replacements)
         return rep
 
     def edges(self):
         """Return a list of edges (id1, id2) where object id1 depends
         on object id2."""
-        return [(id_,id(obj))
+        return [(id_, id(obj))
                 for id_ in self.nodes
-                for (name,obj) in self.nodes[id_].args]
+                for (name, obj) in self.nodes[id_].args]
 
     def _topological_order(self):
         """Return a list of the ids for all nodes in the graph in a
@@ -898,15 +925,15 @@ class Graph(object):
         order.extend([id for id in self.roots if id not in order])
         return order
     
-    def _reduce(self,id):
+    def _reduce(self, id):
         """Reduce the node."""
         node = self.nodes[id]
         if node.isreducible(roots=self.roots):
             replacements = {node.name:node.rep}
             for parent in node.parents:
                 pnode = self.nodes[parent]
-                pnode.rep = _replace_rep(pnode.rep,replacements)
-                pnode.args.remove([node.name,node.obj])
+                pnode.rep = _replace_rep(pnode.rep, replacements)
+                pnode.args.remove([node.name, node.obj])
                 pnode.args.extend(node.args)
                 pnode.args = mmf.utils.unique_list(pnode.args)
             for child in node.children:
@@ -942,18 +969,18 @@ class Graph(object):
        E.
 
        >>> G = 'G'; F = 'F'
-       >>> D = [G]; E = [G]; C = [F, D, E]; B = [F]; A = [B,C]
+       >>> D = [G]; E = [G]; C = [F, D, E]; B = [F]; A = [B, C]
        >>> a = Archive(); 
        >>> a.insert(A=A)
        'A'
-       >>> g = Graph(a.arch,a.archive_1)
+       >>> g = Graph(a.arch, a.archive_1)
        >>> len(g.nodes)
        7
        >>> g.reduce()
        >>> len(g.nodes)         # Completely reducible
        1
        >>> print a
-       A = [['F'],['F',['G'],['G']]]
+       A = [['F'], ['F', ['G'], ['G']]]
        try: del __builtins__
        except NameError: pass
 
@@ -971,11 +998,11 @@ class Graph(object):
                                    'G'
 
        >>> G = ['G']; F = ['F']
-       >>> D = [G]; E = [G]; C = [F, D, E]; B = [F]; A = [B,C]
+       >>> D = [G]; E = [G]; C = [F, D, E]; B = [F]; A = [B, C]
        >>> a = Archive(); 
        >>> a.insert(A=A)
        'A'
-       >>> g = Graph(a.arch,a.archive_1)
+       >>> g = Graph(a.arch, a.archive_1)
        >>> len(g.nodes)
        9
        >>> g.reduce()
@@ -984,14 +1011,14 @@ class Graph(object):
        >>> print a
        _l_1 = ['G']
        _l_5 = ['F']
-       A = [[_l_5],[_l_5,[_l_1],[_l_1]]]
+       A = [[_l_5], [_l_5, [_l_1], [_l_1]]]
        try: del __builtins__
        except NameError: pass
        
        If we explicitly add a node, then it can no longer be reduced:
        >>> a.insert(B=B)
        'B'
-       >>> g = Graph(a.arch,a.archive_1)
+       >>> g = Graph(a.arch, a.archive_1)
        >>> len(g.nodes)
        9
        >>> g.reduce()
@@ -1001,7 +1028,7 @@ class Graph(object):
        _l_5 = ['F']
        _l_1 = ['G']
        B = [_l_5]
-       A = [B,[_l_5,[_l_1],[_l_1]]]
+       A = [B, [_l_5, [_l_1], [_l_1]]]
        try: del __builtins__
        except NameError: pass
        """
@@ -1013,38 +1040,38 @@ class Graph(object):
 
         self.order = self._topological_order()
 
-def _unzip(q,n=3):
+def _unzip(q, n=3):
     """Unzip q to lists.
 
     If len(q) = 0, then assumes that q was zipped from n lists.
 
     Example:
-    >>> _unzip(zip([1,2,3],[4,5,6]))
+    >>> _unzip(zip([1, 2, 3], [4, 5, 6]))
     [[1, 2, 3], [4, 5, 6]]
-    >>> _unzip([],n=3)
+    >>> _unzip([], n=3)
     [[], [], []]
-    >>> _unzip([('a','b','c'),('d','e','f')])
+    >>> _unzip([('a', 'b', 'c'), ('d', 'e', 'f')])
     [['a', 'd'], ['b', 'e'], ['c', 'f']]
 
     """
     if 0 == len(q):
         return [[] for n in range(n)]
     else:
-        return map(list,zip(*q))
+        return map(list, zip(*q))
 
-def _get_unique(name,names,sep='_'):
+def _get_unique(name, names, sep='_'):
     """Return a unique name not in names starting with name.
     
-    >>> names = ['a','a.1','b']
-    >>> _get_unique('c',names)
+    >>> names = ['a', 'a.1', 'b']
+    >>> _get_unique('c', names)
     'c'
-    >>> _get_unique('a',names,sep='.')
+    >>> _get_unique('a', names, sep='.')
     'a.2'
-    >>> _get_unique('b',names)
+    >>> _get_unique('b', names)
     'b_1'
-    >>> _get_unique('b_1',names)
+    >>> _get_unique('b_1', names)
     'b_1'
-    >>> _get_unique('a.1',names,sep='.')
+    >>> _get_unique('a.1', names, sep='.')
     'a.2'
     """
     # Matches extension for unique names so they can be incremented.
@@ -1059,11 +1086,11 @@ def _get_unique(name,names,sep='_'):
             base = name
             c = 1
         else:
-            base,c = match.groups()
+            base, c = match.groups()
             c = int(c) + 1
 
         while True:
-            uname = sep.join((base,"%i"%c))
+            uname = sep.join((base, "%i"%c))
             if uname not in names:
                 break
             c += 1
@@ -1071,31 +1098,31 @@ def _get_unique(name,names,sep='_'):
 
 class ReplacementError(Exception):
     """Replacements not consistent with parse tree."""
-    def __init__(self,old,new,expected,actual):
+    def __init__(self, old, new, expected, actual):
         Exception.__init__(self,
             "Replacement %s->%s: Expected %i, replaced %i"%(
-                old,new,expected,actual))
+                old, new, expected, actual))
 
-def _replace_rep(rep,replacements):
+def _replace_rep(rep, replacements):
     """Return rep with all replacements made.
 
     Inputs:
         rep : String expression to make replacements in
         replacements : Dictionary of replacements.
     
-    >>> _replace_rep('n = array([1,2,3])',dict(array='array_1'))
-    'n = array_1([1,2,3])'
-    >>> _replace_rep('a + aa',dict(a='c'))
+    >>> _replace_rep('n = array([1, 2, 3])', dict(array='array_1'))
+    'n = array_1([1, 2, 3])'
+    >>> _replace_rep('a + aa', dict(a='c'))
     'c + aa'
-    >>> _replace_rep('(a,a)',dict(a='c'))
-    '(c,c)'
-    >>> _replace_rep("a + 'a'",dict(a='c'))
+    >>> _replace_rep('(a, a)', dict(a='c'))
+    '(c, c)'
+    >>> _replace_rep("a + 'a'", dict(a='c'))
     Traceback (most recent call last):
         ...
     ReplacementError: Replacement a->c: Expected 1, replaced 2
     """
     rep_names = AST(rep).names
-    counts = dict((n,rep_names.count(n)) for n in replacements)
+    counts = dict((n, rep_names.count(n)) for n in replacements)
     for old in replacements:
         re_ = r'''(?P<a>        # Refer to the group by name <a>
                    [^\w\.]      # Either NOT a valid identifier 
@@ -1103,19 +1130,19 @@ def _replace_rep(rep,replacements):
                   (%s)          # The literal to be matched
                   (?P<b>[^\w=]  # Either NOT a valid identifer
                    | $)'''      # OR the end.
-        regexp = re.compile(re_%(re.escape(old)),re.VERBOSE)
+        regexp = re.compile(re_%(re.escape(old)), re.VERBOSE)
         n = 0
         while True: 
-            (rep,m) = regexp.subn(r"\g<a>%s\g<b>"%(replacements[old]),rep)
+            (rep, m) = regexp.subn(r"\g<a>%s\g<b>"%(replacements[old]), rep)
             if m == 0: break
             n += m
         if not n == counts[old]:
-            raise ReplacementError(old,replacements[old],counts[old],n)
+            raise ReplacementError(old, replacements[old], counts[old], n)
     return rep
 
 class AST(object):
     """Class to represent and explore the AST of expressions."""
-    def __init__(self,expr):
+    def __init__(self, expr):
         self.__dict__['expr'] = expr
         self.__dict__['ast'] = compiler.parse(expr)
         self.__dict__['names'] = self._get_names()
@@ -1140,7 +1167,7 @@ class AST(object):
             if isinstance(node, compiler.ast.Name):
                 names.append(node.name)
             try:
-                map(_descend,node.getChildren())
+                map(_descend, node.getChildren())
             except AttributeError:
                 return
 
@@ -1149,4 +1176,4 @@ class AST(object):
 
 # Testing
 import run
-run.run(__name__,__file__,locals())
+run.run(__name__, __file__, locals())

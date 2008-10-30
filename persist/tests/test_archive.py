@@ -1,4 +1,5 @@
 import inspect
+import math
 
 import nose.tools
 
@@ -125,6 +126,8 @@ class TestSuite(object):
         self._test_archiving([1])
         self._test_archiving([1,2])
         self._test_archiving((1,1))
+        self._test_archiving(np.sin)
+        self._test_archiving(math.sin)
 
     def test_derived_types(self):
         """Test archiving of simple derived types..."""
