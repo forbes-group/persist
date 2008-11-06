@@ -1,6 +1,8 @@
 import inspect
+import warnings
 
 from copy import copy, deepcopy
+
 import nose
 
 import numpy as np
@@ -13,7 +15,7 @@ from mmf.objects import ClassVar, Required, Computed, NoCopy, Excluded
 
 
 class A(mmf.objects.Archivable):
-    def __init__(self,x):
+    def __init__(self, x):
         self.x = x
     def items(self):
         return self.__dict__.items()
@@ -22,45 +24,62 @@ class TestArchivable(object):
     """Test Archivable class."""
     def test_repr(self):
         a = A(x=1)
-        nose.tools.assert_equal("A(x=1)",repr(a))
+        nose.tools.assert_equal("A(x=1)", repr(a))
     def test_str(self):
         a = A(x=1)
-        nose.tools.assert_equal("A(x=1)",str(a))
+        nose.tools.assert_equal("A(x=1)", str(a))
+    def test_archive(self):
+        """Test the archive method."""
+        a = A(6)            # Create an instance
+        s = a.archive('n')  # Get string archive
+        env = {}            # Define an environment
+        exec(s, env)        # Evaluate the string in env
+        o = env['n']        # Access the object from env
+        nose.tools.assert_equals(o.x, a.x)
+
 
 class TestStateVars(object):
+
+    def setUp(self):
+        warnings.simplefilter('error', UserWarning)
+
+    def tearDown(self):
+        warnings.resetwarnings()
+
     def test_ordering(self):
         """Test the inherited order of _state_vars."""
         class A(StateVars):
-            _state_vars = [('a',1),
-                           ('b',2)]
+            _state_vars = [('a', 1),
+                           ('b', 2)]
             process_vars()
         class B(A):
-            _state_vars = [('c',3),
-                           ('d',4)]
+            _state_vars = [('c', 3),
+                           ('d', 4)]
             process_vars()
         class C(B):
-            _state_vars = [('e',5),
-                           ('f',6)]
+            _state_vars = [('e', 5),
+                           ('f', 6)]
             process_vars()
     
-        nose.tools.assert_equal(C.class_keys(),['a','b','c','d','e','f'])
+        nose.tools.assert_equal(C.class_keys(), 
+                                ['a', 'b', 'c', 'd', 'e', 'f'])
 
     def test_replacement(self):
         """Test the replacement of _state_vars."""
         class A(StateVars):
-            _state_vars = [('a',5)]
+            _state_vars = [('a', 5)]
             process_vars()
         class B(A):
-            _state_vars = [('a',1)]
+            _state_vars = [('a', 1)]
             process_vars()
-        nose.tools.assert_equal(B().a,1)
+        nose.tools.assert_equal(B().a, 1)
 
     def test_copy0a(self):
         """Test default copy semantics"""
         c0 = [1]
         c1 = [c0]
         class A(StateVars):
-            _state_vars = [('c',c1)]
+            _state_vars = [('c', c1)]
             process_vars()
         a = A()
         b = A()
@@ -73,88 +92,88 @@ class TestStateVars(object):
         """Test copy=False"""
         c = [1]
         class A(StateVars):
-            _state_vars = [('c',c)]
+            _state_vars = [('c', c)]
             process_vars(copy=False)
         a = A()
         b = A()
-        nose.tools.assert_equal(a.c[0],1)
-        nose.tools.assert_equal(b.c[0],1)
+        nose.tools.assert_equal(a.c[0], 1)
+        nose.tools.assert_equal(b.c[0], 1)
         a.c[0] = 2
-        nose.tools.assert_equal(a.c[0],2)
-        nose.tools.assert_equal(b.c[0],2)
+        nose.tools.assert_equal(a.c[0], 2)
+        nose.tools.assert_equal(b.c[0], 2)
 
     def test_copy1a(self):
         """Test NoCopy"""
         c = [1]
         class A(StateVars):
-            _state_vars = [('c',NoCopy(c))]
+            _state_vars = [('c', NoCopy(c))]
             process_vars()
         a = A()
         b = A()
-        nose.tools.assert_equal(a.c[0],1)
-        nose.tools.assert_equal(b.c[0],1)
+        nose.tools.assert_equal(a.c[0], 1)
+        nose.tools.assert_equal(b.c[0], 1)
         a.c[0] = 2
-        nose.tools.assert_equal(a.c[0],2)
-        nose.tools.assert_equal(b.c[0],2)
+        nose.tools.assert_equal(a.c[0], 2)
+        nose.tools.assert_equal(b.c[0], 2)
 
     def test_copy1b(self):
         """Test NoCopy(Required)"""
         c = [1]
         class A(StateVars):
-            _state_vars = [('c',NoCopy(Required))]
+            _state_vars = [('c', NoCopy(Required))]
             process_vars()
-        nose.tools.assert_raises(ValueError,A)
+        nose.tools.assert_raises(ValueError, A)
         a = A(c=c)
         b = A(c=c)
-        nose.tools.assert_equal(a.c[0],1)
-        nose.tools.assert_equal(b.c[0],1)
+        nose.tools.assert_equal(a.c[0], 1)
+        nose.tools.assert_equal(b.c[0], 1)
         a.c[0] = 2
-        nose.tools.assert_equal(a.c[0],2)
-        nose.tools.assert_equal(b.c[0],2)
+        nose.tools.assert_equal(a.c[0], 2)
+        nose.tools.assert_equal(b.c[0], 2)
 
     def test_copy2(self):
         """Test copy=copy"""
         c = [[1]]
         class A(StateVars):
-            _state_vars = [('c',c)]
+            _state_vars = [('c', c)]
             process_vars(copy=copy)
         a = A()
         b = A()
-        nose.tools.assert_equal(a.c[0][0],1)
-        nose.tools.assert_equal(b.c[0][0],1)
+        nose.tools.assert_equal(a.c[0][0], 1)
+        nose.tools.assert_equal(b.c[0][0], 1)
         a.c[0][0] = 2
-        nose.tools.assert_equal(a.c[0][0],2)
-        nose.tools.assert_equal(b.c[0][0],2)
+        nose.tools.assert_equal(a.c[0][0], 2)
+        nose.tools.assert_equal(b.c[0][0], 2)
         a.c[0] = 1
-        nose.tools.assert_equal(a.c[0],1)
-        nose.tools.assert_equal(b.c[0],[2])
+        nose.tools.assert_equal(a.c[0], 1)
+        nose.tools.assert_equal(b.c[0], [2])
 
     def test_copy3(self):
         """Test copy=deepcopy"""
         c = [[1]]
         class A(StateVars):
-            _state_vars = [('c',c)]
+            _state_vars = [('c', c)]
             process_vars(copy=deepcopy)
         a = A()
         b = A()
-        nose.tools.assert_equal(a.c[0][0],1)
-        nose.tools.assert_equal(b.c[0][0],1)
+        nose.tools.assert_equal(a.c[0][0], 1)
+        nose.tools.assert_equal(b.c[0][0], 1)
         a.c[0][0] = 2
-        nose.tools.assert_equal(a.c[0][0],2)
-        nose.tools.assert_equal(b.c[0][0],1)
+        nose.tools.assert_equal(a.c[0][0], 2)
+        nose.tools.assert_equal(b.c[0][0], 1)
 
     @nose.tools.raises(ValueError)
     def test_Required(self):
         """Test required keys"""
         class A(StateVars):
-            _state_vars = [('x',mmf.objects.Required,'Required')]
+            _state_vars = [('x', mmf.objects.Required, 'Required')]
             process_vars()
         a = A()
 
     def test_Required2(self):
         """Test providing required keys with class variables"""
         class A(StateVars):
-            _state_vars = [('x',mmf.objects.Required,'Required')]
+            _state_vars = [('x', mmf.objects.Required, 'Required')]
             process_vars()
         class B(A):
             process_vars()
@@ -165,20 +184,20 @@ class TestStateVars(object):
             def x(self): return 5
 
         b = B()
-        nose.tools.assert_equal(b.x,2)
+        nose.tools.assert_equal(b.x, 2)
         c = C()
-        nose.tools.assert_equal(c.x,5)
+        nose.tools.assert_equal(c.x, 5)
 
         b1 = B(x=3)
-        nose.tools.assert_equal(b1.x,3)
-        nose.tools.assert_equal(b.x,2)
-        nose.tools.assert_equal(B.x,2)
+        nose.tools.assert_equal(b1.x, 3)
+        nose.tools.assert_equal(b.x, 2)
+        nose.tools.assert_equal(B.x, 2)
 
     @nose.tools.raises(AttributeError)
     def test_NotImplemented(self):
         """Test NotImplemented keys"""
         class A(StateVars):
-            _state_vars = [('c',NotImplemented,'NotImplemented')]
+            _state_vars = [('c', NotImplemented, 'NotImplemented')]
             process_vars()
         a = A()
         c = a.c
@@ -186,7 +205,7 @@ class TestStateVars(object):
     @nose.tools.raises(ValueError)
     def test_get_args(self):
         """Test get_args arg checking"""
-        StateVars.get_args(1,2)
+        StateVars.get_args(1, 2)
 
     @nose.tools.raises(TypeError)
     def test_key_check_1(self):
@@ -194,7 +213,7 @@ class TestStateVars(object):
         class A(StateVars):
             _state_vars = ['x']
             process_vars()
-        a = A(x=1,y=2)
+        a = A(x=1, y=2)
 
     @nose.tools.raises(TypeError)
     def test_key_check_2(self):
@@ -202,7 +221,7 @@ class TestStateVars(object):
         class A(StateVars):
             _state_vars = ['x']
             process_vars()
-        a = A(x=1,y=2,z=3)
+        a = A(x=1, y=2, z=3)
 
     @nose.tools.raises(TypeError)
     def test_empty_state_vars1(self):
@@ -229,12 +248,12 @@ class TestStateVars(object):
     @nose.tools.raises(ValueError)
     def test_invalid_varargin2(self):
         """Test default __init__ for invalid varargins."""
-        a = StateVars(1,2)
+        a = StateVars(1, 2)
 
     def test_compare_arrays(self):
         """Test that arrays can be compared."""
         class A(StateVars):
-            _state_vars = [('a',np.array([1,2]))]
+            _state_vars = [('a', np.array([1, 2]))]
             process_vars()
         a = repr(A())
 
@@ -244,7 +263,7 @@ class TestStateVars(object):
         a = Container(l=l)
         b = copy(a)
         a.l[0] = 2
-        nose.tools.assert_equal(b.l[0],a.l[0])
+        nose.tools.assert_equal(b.l[0], a.l[0])
 
     def test_deepcopy(self):
         """Test StateVars.__deepcopy__"""
@@ -252,7 +271,7 @@ class TestStateVars(object):
         a = Container(l=l)
         b = deepcopy(a)
         a.l[0] = 2
-        nose.tools.assert_not_equal(b.l[0],a.l[0])
+        nose.tools.assert_not_equal(b.l[0], a.l[0])
 
     def test_exclude(self):
         """Tests a bug with _gather_vars."""
@@ -277,19 +296,19 @@ class TestStateVars(object):
         """Test ClassVars attribute bug with __new__ overwriting with
         default values."""
         class F(StateVars):
-            _state_vars = [('A',ClassVar(Required))]
+            _state_vars = [('A', ClassVar(Required))]
             process_vars()
         class G(F):
             process_vars()
             A = 1
         g = G()
-        nose.tools.assert_equal(g.A,1)
+        nose.tools.assert_equal(g.A, 1)
 
     @nose.tools.raises(AttributeError)
     def test_class_vars2(self):
         """Test that ClassVars cannot be initialized."""
         class F(StateVars):
-            _state_vars = [('A',ClassVar(1))]
+            _state_vars = [('A', ClassVar(1))]
             process_vars()
         g = F(A=3)
 
@@ -309,23 +328,23 @@ class TestStateVars(object):
             process_vars()
         
         b = B(x=4)
-        nose.tools.assert_equal(b.x,4)
+        nose.tools.assert_equal(b.x, 4)
 
     def test_changing_defaults(self):
         """Test StateVars to see if changing default values preserves
         the documentation."""
         class A(StateVars):
-            _state_vars = [('a',1,"Documentation for A")]
+            _state_vars = [('a', 1, "Documentation for A")]
             process_vars()
 
         class B(A):
-            _state_vars = [('a',2)]
+            _state_vars = [('a', 2)]
             process_vars()
 
-        doc_A = [doc for (name,default,doc) in A._state_vars]
-        doc_B = [doc for (name,default,doc) in B._state_vars]
-        nose.tools.assert_equals(doc_A,doc_B)
-        nose.tools.assert_not_equals(A().a,B().a)
+        doc_A = [doc for (name, default, doc) in A._state_vars]
+        doc_B = [doc for (name, default, doc) in B._state_vars]
+        nose.tools.assert_equals(doc_A, doc_B)
+        nose.tools.assert_not_equals(A().a, B().a)
 
     class HookException(Exception):
         pass
@@ -335,7 +354,7 @@ class TestStateVars(object):
         """Test _pre_hook__new__"""
         class A(StateVars):
             process_vars()
-            def _pre_hook__new__(self,*varargin,**kwargs):
+            def _pre_hook__new__(self, *varargin, **kwargs):
                 raise self_.HookException()
         a = A()
 
@@ -343,12 +362,12 @@ class TestStateVars(object):
     def test__post_hook__new__(self_):
         """Test _post_hook__new__"""
         class A(StateVars):
-            _state_vars = [('x',1), ('y',None)]
+            _state_vars = [('x', 1), ('y', None)]
             process_vars()
-            def _pre_hook__new__(self,*varargin,**kwargs):
+            def _pre_hook__new__(self, *varargin, **kwargs):
                 self.__dict__['_private'] = 2
-            def _post_hook__new__(self,*varargin,**kwargs):
-                nose.tools.assert_equals(self._private,2)
+            def _post_hook__new__(self, *varargin, **kwargs):
+                nose.tools.assert_equals(self._private, 2)
                 raise self_.HookException()
         a = A()
 
@@ -357,7 +376,7 @@ class TestStateVars(object):
         """Test for uneeded getattr calls."""
         okay = True
         class E(StateVars):
-            _state_vars = ['x','y']
+            _state_vars = ['x', 'y']
             process_vars()
             def get_x(self):
                 okay = False
@@ -367,6 +386,17 @@ class TestStateVars(object):
         e = E(y=1)
         nose.tools.ok_(okay)
 
+    @nose.tools.raises(UserWarning)
+    def test_hiding_warning(self):
+        """Test attribute hiding warning."""
+        class A(StateVars):
+            _state_vars = [('x', 1)]
+            x = 3
+            process_vars()
+        
+        a = A()
+        nose.tools.assert_equals(a.x, 1)
+        
 class TestStateVars1(object):
     """Test StateVars processing without explicit calls to
     process_vars()"""
@@ -374,36 +404,36 @@ class TestStateVars1(object):
         """Test StateVars without process_vars call."""
         class StateVars1(StateVars):
             _dynamic = True
-        a = StateVars1(a=1,b=2)
-        nose.tools.assert_equal(a.a,1)
-        nose.tools.assert_equal(a.b,2)
+        a = StateVars1(a=1, b=2)
+        nose.tools.assert_equal(a.a, 1)
+        nose.tools.assert_equal(a.b, 2)
 
     def test2(self):
         """Test StateVars inheritance without process_vars call."""
         class StateVars1(StateVars):
-            _state_vars = [('a',1)]
+            _state_vars = [('a', 1)]
             process_vars()
         class StateVars2(StateVars1):
             pass
 
         a = StateVars2()
-        nose.tools.assert_equal(a.a,1)
+        nose.tools.assert_equal(a.a, 1)
 
     @mmf.utils.mmf_test.dec.skipknownfailure
     def test3(self):
         """Test StateVars multiple inheritance without process_vars call."""
         class StateVars1(StateVars):
-            _state_vars = [('a',1)]
+            _state_vars = [('a', 1)]
             process_vars()
         class StateVars2(StateVars):
-            _state_vars = [('b',2)]
+            _state_vars = [('b', 2)]
             process_vars()
-        class StateVars3(StateVars1,StateVars2):
+        class StateVars3(StateVars1, StateVars2):
             pass
 
         a = StateVars3()
-        nose.tools.assert_equal(a.a,1)
-        nose.tools.assert_equal(a.b,2)
+        nose.tools.assert_equal(a.a, 1)
+        nose.tools.assert_equal(a.b, 2)
 
 class TestStateVars2(object):
     """Test changing initialization format."""
@@ -425,10 +455,10 @@ class TestStateVars2(object):
     def test1(self):
         """Testing inherited overriding of __init__"""
         a = self.AA(a=2)
-        nose.tools.assert_equal(a.b,4)
+        nose.tools.assert_equal(a.b, 4)
         b = self.BB(x=2)
-        nose.tools.assert_equal(b.a,4)
-        nose.tools.assert_equal(b.b,16)
+        nose.tools.assert_equal(b.a, 4)
+        nose.tools.assert_equal(b.b, 16)
 
 
 class Doctests(object):
@@ -439,7 +469,7 @@ class Doctests(object):
     ...                    ('b', NotImplemented),
     ...                    ('c', Computed)]
     ...     process_vars()
-    ...     def __init__(self,*varargin,**kwargs):
+    ...     def __init__(self, *varargin, **kwargs):
     ...         if 'a' in kwargs:
     ...             print "'a' changed"
     ...         if 'b' in kwargs:
