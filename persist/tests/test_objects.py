@@ -20,6 +20,24 @@ class A(mmf.objects.Archivable):
     def items(self):
         return self.__dict__.items()
 
+class MyFloat(StateVars, float):
+    """Overloading builtin type with extra data members."""
+    _state_vars = [
+        ('min', Required, "Minimum range"),
+        ('max', Required, "Maximum range")]
+    process_vars()
+    def __new__(self, *v, **kw):
+        return float.__new__(self, v[0])
+    def __init__(self, *v, **kw):
+        if self < self.min or self.max < self:
+            raise ValueError(
+                "Value must be between self.min and self.max")
+
+def test_MyFloat():
+    """Test the subclassing of a builtin as a StateVar."""
+    f = MyFloat(3, min=2.0, max=4.0)
+    nose.tools.assert_equals(f, 3)
+    
 class TestArchivable(object):
     """Test Archivable class."""
     def test_repr(self):
