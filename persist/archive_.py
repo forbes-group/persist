@@ -1103,7 +1103,7 @@ class ReplacementError(Exception):
             "Replacement %s->%s: Expected %i, replaced %i"%(
                 old, new, expected, actual))
 
-def _replace_rep(rep, replacements):
+def _replace_rep(rep, replacements, check=True):
     """Return rep with all replacements made.
 
     Inputs:
@@ -1116,13 +1116,15 @@ def _replace_rep(rep, replacements):
     'c + aa'
     >>> _replace_rep('(a, a)', dict(a='c'))
     '(c, c)'
-    >>> _replace_rep("a + 'a'", dict(a='c'))
+    >>> _replace_rep("a + 'a'", dict(a='c'), check=True)
     Traceback (most recent call last):
         ...
     ReplacementError: Replacement a->c: Expected 1, replaced 2
     """
-    rep_names = AST(rep).names
-    counts = dict((n, rep_names.count(n)) for n in replacements)
+    if check:
+        rep_names = AST(rep).names
+        counts = dict((n, rep_names.count(n)) for n in replacements)
+
     for old in replacements:
         re_ = r'''(?P<a>        # Refer to the group by name <a>
                    [^\w\.]      # Either NOT a valid identifier 
@@ -1136,7 +1138,7 @@ def _replace_rep(rep, replacements):
             (rep, m) = regexp.subn(r"\g<a>%s\g<b>"%(replacements[old]), rep)
             if m == 0: break
             n += m
-        if not n == counts[old]:
+        if check and not n == counts[old]:
             raise ReplacementError(old, replacements[old], counts[old], n)
     return rep
 
