@@ -66,6 +66,8 @@ class MyDict(dict):
 class MyList(list):
     """Class to test archiving of derived classes."""
 
+class MyTuple(tuple):
+    """Class to test archiving of derived classes."""
 
 class TestSuite(object):
     """Test the functionality of the archive module."""
@@ -147,14 +149,17 @@ class TestSuite(object):
         arch = archive.Archive()
         d = MyDict(a=1,b=2)
         l = MyList([1,2])
-        arch.insert(d=d,l=l)
+        t = MyTuple((1,2))
+        arch.insert(d=d,l=l, t=t)
         s = str(arch)
         ld = {}
         exec(s,ld)
         assert (ld['d']['a'] == d['a'])
-        assert isinstance(ld['d'],MyDict)
+        assert isinstance(ld['d'], MyDict)
         assert (ld['l'] == l)
         assert isinstance(ld['l'], MyList)
+        assert (ld['t'] == t)
+        assert isinstance(ld['t'], MyTuple)
 
     def test_numpy_types(self):
         """Test archiving of numpy types"""
@@ -249,11 +254,12 @@ class TestSuite(object):
         """Test the archiving of bound class members."""
         F = Functions(a=2)
         arch = archive.Archive()
-        arch.insert(f=F.f)
+        arch.insert(f=F.f, g=Functions.f)
         s = str(arch)
         ld = {}
         exec(s,ld)
         nose.tools.assert_equals(F.f(2), ld['f'](2))
+        nose.tools.assert_equals(F.f(2), ld['g'](F, 2))
 
 class TestCoverage(object):
     """Ensure coverage."""
