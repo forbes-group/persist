@@ -22,7 +22,7 @@ class A(object):
         args = [('d',self.d),
                 ('l',self.l)]
         rep = imports[0][-1] + '(d=d,l=l)'
-        return (rep,args,imports)
+        return (rep, args, imports)
 
 class B(object):
     """Example of a class without an archive function but with a repr
@@ -43,6 +43,19 @@ class C(mmf.objects.Archivable):
         args = [('d',self.d),
                 ('l',self.l)]
         return args
+
+class Functions(object):
+    """Example of a class with methods that are archivable.   This
+    gives one way to use "archivable functions with associated
+    data"."""
+    def __init__(self, a):
+        self.a = 2
+    def __repr__(self):
+        """Use repr to make `self` archivable."""
+        return "Functions(a=%r)" % (self.a,)
+    def f(self, x):
+        """A function that depends on a."""
+        return self.a*x
 
 class TestException(Exception):
     pass
@@ -67,7 +80,7 @@ class TestSuite(object):
         nose.tools.assert_equals(obj,ld['x'])
 
     def test_1(self):
-        """Test archiving of class A()"""
+        """Test archiving of instance A()"""
         l = [1,2,3]
         d = {'a':1.0,'b':2.0,'l':l}
         a = A(d=d,l=l)
@@ -80,7 +93,7 @@ class TestSuite(object):
         assert (ld['a'].d == a.d and id(ld['a'].d) != id(a.d))
         
     def test_2(self):
-        """Test archiving of class B()"""
+        """Test archiving of instance B()"""
         l = [1,2,3]
         d = {'a':1.0,'b':2.0,'l':l}
         a = B(d=d,l=l)
@@ -93,7 +106,7 @@ class TestSuite(object):
         assert (ld['a'].d == a.d and id(ld['a'].d) != id(a.d))
 
     def test_3(self):
-        """Test archiving of class C()"""
+        """Test archiving of instance C()"""
         l = [1,2,3]
         d = {'a':1.0,'b':2.0,'l':l}
         a = C(d=d,l=l)
@@ -231,6 +244,16 @@ class TestSuite(object):
         arch = archive.Archive()
         arch.insert(a=A)
         arch.make_persistent()
+
+    def test_archivable_members(self):
+        """Test the archiving of bound class members."""
+        F = Functions(a=2)
+        arch = archive.Archive()
+        arch.insert(f=F.f)
+        s = str(arch)
+        ld = {}
+        exec(s,ld)
+        nose.tools.assert_equals(F.f(2), ld['f'](2))
 
 class TestCoverage(object):
     """Ensure coverage."""

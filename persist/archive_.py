@@ -141,7 +141,10 @@ class Archive(object):
                 return self._dispatch[class_](self, obj, env=env)
 
         if inspect.isclass(obj):
-            return archive_1_class(obj, env)
+            return archive_1_obj(obj, env)
+
+        if inspect.ismethod(obj):
+            return archive_1_method(obj, env)
 
         if hasattr(obj, 'archive_1'):
             try:
@@ -179,27 +182,7 @@ class Archive(object):
 
     def _archive_func(self, obj, env):
         """Attempt to archive the func."""
-        module = inspect.getmodule(obj)
-        if module is None:
-            module = inspect.getmodule(obj.__class__)
-
-        # Import A.B.C as C
-        iname = module.__name__
-        mname = iname.rpartition('.')[-1]
-
-        name = obj.__name__
-        rep = ".".join([mname, name])
-
-        try:
-            _obj = getattr(module, name)
-            if _obj is not obj: # pragma: nocover
-                raise AttributeError
-        except AttributeError: # pragma: nocover
-            raise ArchiveError(
-                "func %s is not in module %s."%(name, mname))
-
-        imports = [(iname, None, mname)]
-        return (rep, {}, imports)
+        return archive_1_obj(obj, env)
 
     def _archive_list(self, obj, env):
         return archive_1_list(obj, env)
@@ -523,8 +506,8 @@ a.insert(A=A)
         return res
    
 def get_imports(obj, env=None):
-    """Return [imports] = [(module, iname, uiname)] where iname is the
-    constructor of obj to be used and called as:
+    """Return imports = [(module, iname, uiname)] where
+    `iname` is the constructor of obj to be used and called as:
 
     from module import iname as uiname
     obj = uiname(...)
@@ -540,8 +523,37 @@ def get_imports(obj, env=None):
         module = obj.__module__
     except AttributeError:
         module = obj.__class__.__module__
-        
+
     return [(module, iname, uiname)]
+
+def get_toplevel_imports(obj, env=None):
+    """Return (imports, uname) = [(module, name, uname)] where
+    `obj` is `module.name`::
+
+       from module import name as uname
+       obj = uname
+
+    Example:
+    >>> a = np.array
+    >>> get_toplevel_imports(a)
+    ([('numpy.core.multiarray', 'array', 'array')], 'array')
+    """
+    module = inspect.getmodule(obj)
+    if module is None:
+        module = inspect.getmodule(obj.__class__)
+
+    mname = module.__name__
+    name = obj.__name__
+
+    try:
+        _obj = getattr(module, name)
+        if _obj is not obj: # pragma: nocover
+            raise AttributeError
+    except AttributeError: # pragma: nocover
+        raise ArchiveError(
+            "name %s is not in module %s."%(name, mname))
+
+    return ([(mname, name, name)], name)
 
 def repr_(obj):
     """Return representation of obj.
@@ -604,7 +616,7 @@ def archive_1_repr(obj, env):
     rep = repr(obj)
     scope = {}
     try:
-        module = inspect.getmodule(obj.__class__)
+        module = get_module(obj.__class__)
         if module is not __builtin__:
             scope = copy.copy(module.__dict__)
     except:                     # pragma: no cover
@@ -635,14 +647,28 @@ def archive_1_float(obj, env):
     
     return (rep, args, imports)
 
-def archive_1_class(obj, env):
-    """Archive classes."""
-    module = inspect.getmodule(obj)
-    mname = module.__name__
-    name = obj.__name__
-    imports = [(mname, name, name)]
-    rep = name
+def archive_1_obj(obj, env):
+    """Archive objects at the top level of a module."""
+    module = get_module(obj)
+    imports, rep = get_toplevel_imports(obj, env)
     return (rep, {}, imports)
+
+def archive_1_method(obj, env):
+    """Archive methods."""
+    cls = obj.im_class
+    instance = obj.im_self
+    name = obj.__name__
+
+    if instance is None:
+        imports, cls_name = get_toplevel_imports(cls, env)
+        rep = ".".join([cls_name, name])
+        args = []
+    else:
+        rep = ".".join(["_instance", name])
+        args = [('_instance', instance)]
+        imports = []
+    return (rep, args, imports)
+
 
 def _get_rep(obj, arg_rep):
     """Return (rep, imports) where rep = "Class(args)" is a call to the
