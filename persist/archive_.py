@@ -1203,5 +1203,5 @@ class AST(object):
         return sorted(names)
 
 # Testing
-import run
-run.run(__name__, __file__, locals())
+from mmf.utils.mmf_test import run
+run(__name__, __file__, locals())
