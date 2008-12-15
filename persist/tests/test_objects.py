@@ -26,8 +26,9 @@ class MyFloat(StateVars, float):
         ('min', Required, "Minimum range"),
         ('max', Required, "Maximum range")]
     process_vars()
-    def __new__(self, *v, **kw):
-        return float.__new__(self, v[0])
+    def __new__(cls, *v, **kw):
+        self = float.__new__(cls, v[0])
+        return StateVars.__new__(cls, self=self, *v, **kw)
     def __init__(self, *v, **kw):
         if self < self.min or self.max < self:
             raise ValueError(

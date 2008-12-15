@@ -57,6 +57,10 @@ class Functions(object):
         """A function that depends on a."""
         return self.a*x
 
+class NestedClasses(object):
+    class NestedFunctions(Functions):
+        """Example of a nested class."""
+
 class TestException(Exception):
     pass
 
@@ -255,6 +259,18 @@ class TestSuite(object):
         F = Functions(a=2)
         arch = archive.Archive()
         arch.insert(f=F.f, g=Functions.f)
+        s = str(arch)
+        ld = {}
+        exec(s,ld)
+        nose.tools.assert_equals(F.f(2), ld['f'](2))
+        nose.tools.assert_equals(F.f(2), ld['g'](F, 2))
+
+    @mmf.utils.mmf_test.dec.skipknownfailure
+    def test_nested_classes(self):
+        """Test the archiving of nested classes."""
+        F = NestedClasses.NestedFunctions(a=2)
+        arch = archive.Archive()
+        arch.insert(f=F.f, g=NestedClasses.NestedFunctions.f)
         s = str(arch)
         ld = {}
         exec(s,ld)
