@@ -1147,6 +1147,7 @@ def _replace_rep(rep, replacements, check=True):
         ...
     ReplacementError: Replacement a->c: Expected 1, replaced 2
     """
+    check = False
     if check:
         rep_names = AST(rep).names
         counts = dict((n, rep_names.count(n)) for n in replacements)
