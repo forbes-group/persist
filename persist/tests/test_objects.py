@@ -20,6 +20,22 @@ class A(mmf.objects.Archivable):
     def items(self):
         return self.__dict__.items()
 
+class WithProperty(mmf.objects.StateVars):
+    """Test required attributes specified by proeprties."""
+    _state_vars = [('x', Required),
+                   ('_x', Computed)]
+    process_vars()
+
+    def __init__(self):
+        self._x = 1
+
+    @property
+    def x(self):
+        """Only valid after initialization (which can cause a bug in
+        the __new__ checking of Required attributes)."""
+        return self._x
+    
+
 class MyFloat(StateVars, float):
     """Overloading builtin type with extra data members."""
     _state_vars = [
@@ -414,6 +430,12 @@ class TestStateVars(object):
             process_vars()
         
         a = A()
+        nose.tools.assert_equals(a.x, 1)
+
+    def test_properties(self):
+        """Makes sure that properties can provide for Required
+        values."""
+        a = WithProperty()
         nose.tools.assert_equals(a.x, 1)
         
 class TestStateVars1(object):
