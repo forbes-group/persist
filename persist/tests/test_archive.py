@@ -277,6 +277,22 @@ class TestSuite(object):
         nose.tools.assert_equals(F.f(2), ld['f'](2))
         nose.tools.assert_equals(F.f(2), ld['g'](F, 2))
 
+class TestPerformance(object):
+    """Tests that could illustrate bad performance."""
+    def test_1(self):
+        args = dict(replacements={'infty': '_inf',
+                                  'Infinity': '_inf',
+                                  'NaN': '_nan',
+                                  'nan': '_nan',
+                                  'inf': '_inf',
+                                  'numpy': '_numpy',
+                                  'Inf': '_inf',
+                                  'NAN': '_nan'},
+                    rep="numpy.array([" + " ".join(("0.,",)*1000000) + "0])")
+        archive._replace_rep(**args)
+        
+
+
 class TestCoverage(object):
     """Ensure coverage."""
     def test_repr(self):

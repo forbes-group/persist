@@ -1,6 +1,6 @@
-"""This is an idea for a model of objects that save their state.
+r"""This is an idea for a model of objects that save their state.
 
-Objects can aid this by implementing an archive method, for example:
+Objects can aid this by implementing an archive method, for example::
 
     def archive_1(self):
         '''Return (rep, args, imports) where obj can be reconstructed
@@ -19,34 +19,36 @@ Objects can aid this by implementing an archive method, for example:
         rep = "%s(%s)"%(name, ", ".join(keyvals))
         return (rep, args, imports)
 
-The idea is to save state in a file that looks like the following:
+The idea is to save state in a file that looks like the following::
 
-import numpy as _numpy
-a = _numpy.array([1, 2, 3])
-del _numpy
+   import numpy as _numpy
+   a = _numpy.array([1, 2, 3])
+   del _numpy
 
-BUGS:
-- Graph reduction occurs for nodes that have more than one parent.
-  This does not consider the possibility that a single node may refer
-  to the same object several times.  This has to be examined so that
-  non-reducible nodes are not reduced (see the test case which fails).
-- _replace_rep() is stupid (it just does text replacements).  Make it
-  smart.  Maybe use a refactoring library like rope... If this is
-  hard, then the data-file might have to redefine the environment
-  locally before each rep.   This would be a pain but not impossible.
-- It would be nice to be able to use "import A.B" and then just use
-  the name "A.B.x", "A.B.y" etc.  However, the name A could clash with
-  other symbols, and it cannot be renamed (i.e. "import A_1.B" would
-  not work).  To avoid nameclases, we always use either "import A.B as
-  B" or the "from A.B import x" forms which can be renamed.
-- Maybe allow rep's to be suites for objects that require construction
-  and initialization.  (Could also allow a special method to be called
-  to restore the object such as restore().)
-
+.. todo::
+   - Graph reduction occurs for nodes that have more than one parent.
+     This does not consider the possibility that a single node may
+     refer to the same object several times.  This has to be examined
+     so that non-reducible nodes are not reduced (see the test case
+     which fails).
+   - :func:`_replace_rep` is stupid (it just does text replacements).
+     Make it smart.  Maybe use a refactoring library like :mod:`rope`...
+     If this is hard, then the data-file might have to redefine the
+     environment locally before each rep.   This would be a pain but
+     not impossible.
+   - It would be nice to be able to use `import A.B` and then just use
+     the name `A.B.x`, `A.B.y` etc.  However, the name `A` could clash with
+     other symbols, and it cannot be renamed (i.e. `import A_1.B` would
+     not work).  To avoid name clashes, we always use either `import A.B as
+     B` or the `from A.B import x` forms which can be renamed.
+   - Maybe allow rep's to be suites for objects that require construction
+     and initialization.  (Could also allow a special method to be called
+     to restore the object such as `restore()`.)
 """
 __all__  = ['Archive', 'restore', 'ArchiveError', 'DuplicateError']
 
 import sys
+import string
 import parser
 import compiler
 import token
@@ -67,19 +69,22 @@ import mmf.utils
 import mmf.interfaces as interfaces
 
 class ArchiveError(Exception):
-    """Archiving error."""
+    r"""Archiving error."""
 
 class DuplicateError(ArchiveError):
-    """Object already exists."""
+    r"""Object already exists."""
     def __init__(self, name):
         msg = "Object with name %r already exists in archive."%name
         ArchiveError.__init__(self, msg)
 
 def restore(archive, env={}):
-    """Return dictionary obtained by evaluating the string arch.
+    r"""Return dictionary obtained by evaluating the string arch.
     
     arch is typically returned by converting an Archive instance into
-    a string using str or repr:
+    a string using :func:`str` or :func:`repr`:
+
+    Examples
+    --------
     >>> a = Archive()
     >>> a.insert(a=1, b=2)
     ['a', 'b']
@@ -94,24 +99,35 @@ def restore(archive, env={}):
     return ld
 
 class Archive(object):
-    """Archival tool.
+    r"""Archival tool.
     
     Maintains a list of symbols to import in order to reconstruct the
     states of objects and contains methods to convert objects to
     strings for archival.
 
-    Members:
-        arch : List of (uname, obj, env) where obj is
-               the the object, which can be rescontructed from the
-               string rep evaluated in the contect of args, imports,
-               and env.
+    Attributes
+    ----------
+    arch : list
+       List of `(uname, obj, env)` where `obj` is the object, which
+       can be rescontructed from the string `rep` evaluated in the
+       context of `args`, `imports`, and `env`.
+    flat : bool, optional
+       If `True`, then
+    tostring : bool, optional
+       If `True`, then use :meth:`numpy.ndarray.tostring` to
+       format numpy strings.  This is more robust, but not
+       human-readable and may be larger.
+    check_in_insert : bool, optional
+       If `True`, then try to make string representation of each
+       object on insertion to allow for early catching of errors.
 
-        check_on_import : If True, then try generating the rep.
-
-    Invariants:
-        unames are unique
+    Notes
+    -----
+    A required invariant is that all `uname` be unique.
     """
-    def __init__(self, flat=True):
+    def __init__(self, flat=True, tostring=True,
+                 check_on_insert=False):
+        self.tostring = tostring
         self.flat = flat
         self.imports = []
         self.arch = []
@@ -123,15 +139,14 @@ class Archive(object):
                                     'edgeitems': 3,
                                     'precision': 16,
                                     'nanstr': 'NaN'}
-        self.check_on_insert = False
+        self.check_on_insert = check_on_insert
 
     def archive_1(self, obj, env):
-        """Return (rep, args, imports) where obj can be reconstructed
-        from the string rep evaluated in the context of args with the
-        specified imports = list of (module, iname, uiname) where one
-        has either "import module as uiname", "from module import
-        iname" or "from module import iname as uiname".
-        
+        r"""Return `(rep, args, imports)` where `obj` can be reconstructed
+        from the string `rep` evaluated in the context of `args` with the
+        specified `imports` = list of `(module, iname, uiname)` where one
+        has either `import module as uiname`, `from module import
+        iname` or `from module import iname as uiname`.
         """
         if isinstance(obj, interfaces.IArchivable):
             return obj.archive_1(env)
@@ -155,33 +170,43 @@ class Archive(object):
         return archive_1_repr(obj, env)
 
     def _archive_ndarray(self, obj, env):
-        popts = np.get_printoptions()
-        np.set_printoptions(**(self._numpy_printoptions))
-        rep = repr(obj)
-        np.set_printoptions(**popts)
+        if (self.tostring
+            and obj.__class__ is np.ndarray
+            and not obj.dtype.hasobject):
+            
+            rep = "numpy.fromstring(%r, dtype=%r)"%(
+                obj.tostring(), obj.dtype.str)
+            imports = [('numpy', None, 'numpy')]
+            args = {}
+        else:
+            popts = np.get_printoptions()
+            np.set_printoptions(**(self._numpy_printoptions))
+            rep = repr(obj)
+            np.set_printoptions(**popts)
 
-        module = inspect.getmodule(obj.__class__)
+            module = inspect.getmodule(obj.__class__)
 
-        # Import A.B.C as C
-        iname = module.__name__
-        mname = iname.rpartition('.')[-1]
+            # Import A.B.C as C
+            iname = module.__name__
+            mname = iname.rpartition('.')[-1]
         
-        constructor = rep.partition("(")[0]
-        if not constructor.startswith(mname):
-            rep = ".".join([mname, rep])
+            constructor = rep.partition("(")[0]
+            if not constructor.startswith(mname):
+                rep = ".".join([mname, rep])
         
-        imports = [(iname, None, mname),
-                   ('numpy', 'inf', 'inf'),
-                   ('numpy', 'inf', 'Infinity'),
-                   ('numpy', 'inf', 'Inf'),
-                   ('numpy', 'inf', 'infty'),
-                   ('numpy', 'nan', 'nan'),
-                   ('numpy', 'nan', 'NaN'),
-                   ('numpy', 'nan', 'NAN')]
-        return (rep, {}, imports)
+            imports = [(iname, None, mname),
+                       ('numpy', 'inf', 'inf'),
+                       ('numpy', 'inf', 'Infinity'),
+                       ('numpy', 'inf', 'Inf'),
+                       ('numpy', 'inf', 'infty'),
+                       ('numpy', 'nan', 'nan'),
+                       ('numpy', 'nan', 'NaN'),
+                       ('numpy', 'nan', 'NAN')]
+            args = {}
+        return (rep, args, imports)
 
     def _archive_func(self, obj, env):
-        """Attempt to archive the func."""
+        r"""Attempt to archive the func."""
         return archive_1_obj(obj, env)
 
     def _archive_list(self, obj, env):
@@ -207,38 +232,46 @@ class Archive(object):
         complex:_archive_float}
         
     def unique_name(self, name):
-        """Return a unique name not contained in the archive."""
+        r"""Return a unique name not contained in the archive."""
         names = _unzip(self.arch)[0]
         return _get_unique(name, names)
 
     def insert(self, env=None, **kwargs):
-        """insert(name=obj): Add the obj to archive with name.
+        r"""`res = insert(name=obj)` or `res = insert(obj)`: Add the `obj` to
+        archive and return a list of `(uname, obj)` pairs.
 
-        If self.check_on_insert, then try generating rep (may raise an
+        If `self.check_on_insert`, then try generating rep (may raise an
         exception).
 
         If name already exists in the archive, then a DuplicateError
         exception is thrown.
 
-        Parameters:
-            name=obj : Insert the obj with name into the ar
-            obj     : Object to be archived
-            name    : Desired name of object in the archive.  If name is
-                      None, then obj must be a dictionary of name:obj.
+        Parameters
+        ----------
+        <name> : obj
+           Insert `obj` with desired name into the archive.  Name
+           cannot be `'env'` and must not start with an underscore
+           (these are used for private variables.)
+        env : dict, optional
+           Dictionary used to resolve names found in repr strings
+           (using repr is the last resort option).
 
-                      Names must not start with an underscore (these
-                      are used for private variables.)
+        Returns
+        -------
+        uname : str
+           Unique name used to refer to the object.
+        obj : object
+           The object
 
-            env     : Dictionary used to resolve names found in repr
-                      strings (using repr is the last resort option).
-            
-        Returns (uname, obj) where uname is the unique name.
+        Raises
+        ------
+        DuplicateError
+           If unique is False and name is already in the archive.
+        ArchiveError
+           If there is a problem archiving an object.
 
-        Throws DuplicateError if unique is False and name is already
-        in the archive.
-
-        Throws ArchiveError if there is a problem.
-
+        Examples
+        --------
         >>> a = Archive()
         >>> a.insert(x=2)
         'x'
@@ -256,19 +289,20 @@ class Archive(object):
         'A'
         >>> print a
         import numpy as _numpy
-        from numpy import inf as _inf
-        from numpy import nan as _nan
         x = 2
         x_1 = 3
         a = 4
         b = 5
-        A = _numpy.array([1, 2, 3])
+        A = _numpy.fromstring('\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00', dtype='<i4')
         del _numpy
-        del _inf
-        del _nan
         try: del __builtins__
         except NameError: pass
-        >>> a = Archive()
+
+        The default :mod:`numpy` representation for arrays is not very
+        friendly, so we might want to use strings instead.  Be aware
+        that this might incur a performance hit.
+        
+        >>> a = Archive(tostring=False)
         >>> a.insert(x=2)
         'x'
         >>> a.insert(A=np.array([1, 2, 3]))
@@ -340,99 +374,113 @@ class Archive(object):
             return None
 
     def make_persistent(self):
-        """Return (imports, defs) representing the persistent version
-        of the archive.
+        r"""Return `(imports, defs)` representing the persistent
+        version of the archive.
+        
+        Returns
+        -------
+        imports : list
+           Elements are `(module, iname, uiname)` where one of the
+           following forms is uses::
+           
+              from module import iname as uiname
+              from module import iname
+              import module as uiname
 
-        imports : a list of (module, iname, uiname) where one of the
-                  following:
+           The second form is used if `iname` is `uiname`, and the
+           last form is used if `iname` is `None`.  `uiname` must not
+           be `None`.          
+        defs : list
+           Elements are `(uname, rep)` where `rep` is an expression
+           depending on the imports and the previously defined `uname`
+           elements.
 
-                  from module import iname as uiname
-                  from module import iname
-                  import module as uiname
+        Notes
+        -----
+        The core of the algorithm is a transformation that takes an
+        object `obj` and replaces that by a tuple `(rep, args,
+        imports)` where `rep` is a string representation of the object
+        that can be evaluated using `eval()` in the context provided by
+        `args` and `imports`.
 
-                  The second form is used if iname is uiname, and the
-                  last form is used if iname is None.  uiname must not
-                  be None.
-        defs : a list of (uname, rep) where rep is an expression
-               depending on the imports and the previously defined
-               unames.
+        The :meth:`archive_1` method provides this functionality,
+        effectively defining a suite describing the dependencies of
+        the object.
 
-        Algorithm:
-            The core of the algorithm is a transformation that takes
-            an object obj and replaces that by a tuple
-            (rep, args, imports) where rep is a string representation of
-            the object that can be evaluated using eval() in the
-            context provided by args and imports.
+        Typically, `rep` will be a call to the objects constructor
+        with the arguments in `args`.  The constructor is typically
+        defined by the imports.
 
-            The archive_1() method provides this functionality,
-            effectively defining a suite describing the dependencies
-            of the object.
-
-            Typically, rep will be a call to the objects constructor
-            with the arguments in args.  The constructor is typically
-            defined by the imports.
-
-            Objects are hierarchical in that one object will depend on
-            others.  Consider for example the following suite:
+        Objects are hierarchical in that one object will depend on
+        others.  Consider for example the following suite::
             
             a = [1, 2, 3]
             b = [4, 5, 6]
             c = dict(a=a, b=b)
 
-            The dictionary c could be represeted as this suite, or in
-            a single expression:
+        The dictionary `c` could be represeted as this suite, or in a
+        single expression::
 
             c = dict(a=[1, 2, 3], b=[4, 5, 6])
             
-            In some cases, one must use a suite: for example
+        In some cases, one must use a suite, for example::
 
             a = [1, 2, 3]
             b = [a, a]
             c = dict(a=a, b=b)
 
-            Since everything refers to a single list, one must
-            preserve this structure and we cannot expand anything.
+        Since everything refers to a single list, one must preserve
+        this structure and we cannot expand anything.
+        
+        These concepts can all be couched in the language of graph
+        theory.  The dependency structure forms a "directed graph"
+        (DG) and we are looking for an "evaluation order" or
+        "topological order", which is found using a "topological
+        sorting" algorithm.  We do not presently support cyclic
+        dependencies, so we will only archive directed acyclic
+        graphs (DAG), but the algorithm must determine if there is
+        a cycle and raise an exception in this case.
 
-            These concepts can all be couched in the language of graph
-            theory.  The dependency structure forms a "directed graph"
-            (DG) and we are looking for an "evaluation order" or
-            "topological order", which is found using a "topological
-            sorting" algorithm.  We do not presently support cyclic
-            dependencies, so we will only archive directed acyclic
-            graphs (DAG), but the algorithm must determine if there is
-            a cycle and raise an exception in this case.
+        We use the :mod:`topsort` library to do this.
 
-            We use the topsort library to do this.
+        We would also like to (optionally) perform reductions of
+        the graph in the sense that we remove a node from the
+        list of computed quantities, and include it directly in
+        the evaluation of another node.  This can only be done if
+        the node has less than two parents.  Two calgorithms can be
+        used as specified by :attr:`flat`:
 
-            We would also like to (optionally) perform reductions of
-            the graph in the sense that we remove a node from the
-            list of computed quantities, and include it directly in
-            the evaluation of another node.  This can only be done if
-            the node has less than two parents.
+           `'flat'`: The flat algorithm recursively processes the archive
+              in a depth first manner, adding each object with a
+              temporary name.
+           `'tree'`: The recursive algorithm leaves objects within their
+              recursive structures
 
-            flat: The flat algorithm recursively processes the archive
-                  in a depth first manner, adding each object with a
-                  temporary name.
-            tree: The recursive algorithm leaves objects within their
-                  recursive structures
-          
-       Example:
+        .. digraph:: example
+        
+           "A" -> "B" -> "F";
+           "A" -> "C" -> "D" -> "G";
+           "C" -> "E" -> "G";
+           "C" -> "F";
+
+        Example::
+        
                                 A
                                / \
                               B   C
                               |  /| \
                               | / D  E
                                F   \ /
-                                    G            
-G = 'G'
-F = 'F'
-D = [G]
-E = [G]
-C = [F, D, E]
-B = [F]
-A = [B, C]
-a = Archive()
-a.insert(A=A)
+                                    G
+           G = 'G'
+           F = 'F'
+           D = [G]
+           E = [G]
+           C = [F, D, E]
+           B = [F]
+           A = [B, C]
+           a = Archive()
+           a.insert(A=A)
         
         """
 
@@ -468,7 +516,7 @@ a.insert(A=A)
         return str(self)
 
     def __str__(self):
-        """Return a string representing the archive.
+        r"""Return a string representing the archive.
 
         This string can be saved to a file, and that file imported to
         define the required symbols.
@@ -506,13 +554,14 @@ a.insert(A=A)
         return res
    
 def get_imports(obj, env=None):
-    """Return imports = [(module, iname, uiname)] where
-    `iname` is the constructor of obj to be used and called as:
+    r"""Return `imports = [(module, iname, uiname)]` where
+    `iname` is the constructor of `obj` to be used and called as::
 
-    from module import iname as uiname
-    obj = uiname(...)
+       from module import iname as uiname
+       obj = uiname(...)
 
-    Example:
+    Examples
+    --------
     >>> a = np.array([1, 2, 3])
     >>> get_imports(a)
     [('numpy', 'ndarray', 'ndarray')]
@@ -527,13 +576,14 @@ def get_imports(obj, env=None):
     return [(module, iname, uiname)]
 
 def get_toplevel_imports(obj, env=None):
-    """Return (imports, uname) = [(module, name, uname)] where
+    r"""Return `(imports, uname) = [(module, name, uname)]` where
     `obj` is `module.name`::
 
        from module import name as uname
        obj = uname
 
-    Example:
+    Examples
+    --------
     >>> a = np.array
     >>> get_toplevel_imports(a)
     ([('numpy.core.multiarray', 'array', 'array')], 'array')
@@ -556,11 +606,13 @@ def get_toplevel_imports(obj, env=None):
     return ([(mname, name, name)], name)
 
 def repr_(obj):
-    """Return representation of obj.
+    r"""Return representation of `obj`.
 
-    Stand-in repr function for objects that support the archive_1
+    Stand-in `repr` function for objects that support the `archive_1`
     method.
 
+    Examples
+    --------
     >>> class A(object):
     ...     def __init__(self, x):
     ...         self.x = x
@@ -579,7 +631,7 @@ def repr_(obj):
     return rep
     
 def get_module(obj):
-    """Return module in which object is defined."""
+    r"""Return module in which object is defined."""
     module = inspect.getmodule(obj)
     if module is not __builtin__:
         return module
@@ -587,10 +639,12 @@ def get_module(obj):
         return None
     
 def archive_1_args(obj, args):
-    """Return (rep, args, imports).
+    r"""Return `(rep, args, imports)`.
 
-    Constructs rep and imports dynamically from obj and args.
+    Constructs `rep` and `imports` dynamically from `obj` and `args`.
 
+    Examples
+    --------
     >>> a = 1
     >>> b = 2
     >>> l = [a, b]
@@ -607,9 +661,9 @@ def archive_1_args(obj, args):
 
 
 def archive_1_repr(obj, env):
-    """Return (rep, args, imports).
+    r"""Return `(rep, args, imports)`.
     
-    This is the fallback: try to make a rep from the repr call.
+    This is the fallback: try to make a rep from the `repr` call.
     """
     imports = []
     args = []
@@ -634,10 +688,13 @@ def archive_1_repr(obj, env):
     return (rep, args, imports)
 
 def archive_1_float(obj, env):
-    """Deal with float types, including inf or nan.
+    r"""Deal with float types, including `inf` or `nan`.
 
-    These are floats, but the symbols require the import of numpy.
+    These are floats, but the symbols require the import of
+    :mod:`numpy`.
 
+    Examples
+    --------
     >>> archive_1_float(np.inf, {})
     ('inf', [], [('numpy', 'inf', 'inf')])
     """
@@ -648,13 +705,13 @@ def archive_1_float(obj, env):
     return (rep, args, imports)
 
 def archive_1_obj(obj, env):
-    """Archive objects at the top level of a module."""
+    r"""Archive objects at the top level of a module."""
     module = get_module(obj)
     imports, rep = get_toplevel_imports(obj, env)
     return (rep, {}, imports)
 
 def archive_1_method(obj, env):
-    """Archive methods."""
+    r"""Archive methods."""
     cls = obj.im_class
     instance = obj.im_self
     name = obj.__name__
@@ -671,8 +728,8 @@ def archive_1_method(obj, env):
 
 
 def _get_rep(obj, arg_rep):
-    """Return (rep, imports) where rep = "Class(args)" is a call to the
-    obj constructor.  This is used to represent derived instances of
+    r"""Return `(rep, imports)` where `rep` = 'Class(args)'` is a call to the
+    `obj` constructor.  This is used to represent derived instances of
     builtin types."""
     module = obj.__class__.__module__
     cname = obj.__class__.__name__
@@ -722,9 +779,11 @@ def archive_1_dict(d, env):
     return (rep, args, imports)
 
 def is_simple(obj):
-    """Return True if obj is a simple type defined only by its
+    r"""Return `True` if `obj` is a simple type defined only by its
     representation.
 
+    Examples
+    --------
     >>> map(is_simple,
     ...     [True, 1, 'Hi', 1.0, 1.0j, None, 123L])
     [True, True, True, True, True, True, True]
@@ -752,14 +811,21 @@ def is_simple(obj):
     return result
 
 class Node(object):
-    """Represents a Node in the tree as a tuple:
-    (obj, rep, args, name, parents)
-    obj : object the node represents
-    rep : string representation of obj.  This depends on the
-        names defined in args
-    args : list of (name, obj) pairs where the specified
-        object is referenced in rep by name.
-    parents : set of parent id's
+    r"""Represents a Node in the tree as a tuple:
+    `(obj, rep, args, name, parents)`
+
+    Attributes
+    ----------
+    obj : object
+       Object the node represents
+    rep : str
+       String representation of :attr:`obj`.  This depends on the
+       names defined in :attr:`args`
+    args : list
+       List of `(name, obj)` pairs where the specified
+       object is referenced in rep by name.
+    parents : set
+       Set of parent id's
     """
     def __init__(self, obj, rep, args, name, parents=set()):
         self.obj = obj
@@ -769,8 +835,10 @@ class Node(object):
         self.parents = set(parents)
 
     def __repr__(self):
-        """Return string representation of node.
+        r"""Return string representation of node.
 
+        Examples
+        --------
         >>> Node(obj=['A'], rep='[x]', args=[('x', 'A')], name='a')
         Node(obj=['A'], rep='[x]', args=[['x', 'A']], name='a', parents=set([]))
         """
@@ -778,7 +846,10 @@ class Node(object):
             self.obj, self.rep, self.args, self.name, self.parents)
 
     def __str__(self):
-        """Return string showing node.
+        r"""Return string showing node.
+
+        Examples
+        --------
         >>> print Node(obj=['A'], rep='[x]', args=[('x', 'A')], name='a')
         Node(a=[x])
         """
@@ -786,47 +857,50 @@ class Node(object):
 
     @property
     def id(self):
-        """id of node."""
+        r"""id of node."""
         return id(self.obj)
 
     @property
     def children(self):
-        """List of dependent ids"""
+        r"""List of dependent ids"""
         return [id(obj) for (name, obj) in self.args]
     
 
     def isreducible(self, roots):
-        """Return True if the node can be reduced.
+        r"""Return True if the node can be reduced.
 
         A node can be reduced if it is either a simple object with an
-        efficient representation (as defined by is_simple), or if it
-        has exactly one parent and is not a root node."""
+        efficient representation (as defined by :meth:`is_simple`), or
+        if it has exactly one parent and is not a root node."""
         reducible = (self.id not in roots and
                      (is_simple(self.obj) or 1 == len(self.parents)))
         return reducible
 
 
 class Graph(object):
-    """Dependency graph.  Also manages imports.
+    r"""Dependency graph.  Also manages imports.
 
     """
     def __init__(self, objects, archive_1):
-        """Initialize the dependency graph with some reserved
+        r"""Initialize the dependency graph with some reserved
         names.
 
-        Parameters:
-            roots : [(id, env)]
-            objects : list of top-level objects and names
-                [(name, obj, env)].  Generated names will be from these and
-                the graph will be generated from thes dependents of
-                these objects as determined by applying archive_1.
-            archive_1 : Function of (obj, env) that returns
-                (rep, args, imports) where rep is a representation of
-                objs descending a single level.  This representation
-                is a string expression and can refer to either names
-                in the list args = [[name, obj]] of dependents or the
-                uinames in the list imports = [(module, iname, uiname)]
-                which will be imported as
+        Parameters
+        ----------
+        roots : [(id, env)]
+        objects : list
+           List of top-level objects and names `[(name, obj, env)]`.
+           Generated names will be from these and the graph will be
+           generated from thes dependents of these objects as
+           determined by applying :attr:`archive_1`.
+        archive_1 : function
+           Function of `(obj, env)` that returns `(rep, args,
+           imports)` where `rep` is a representation of `objs`
+           descending a single level.  This representation is a string
+           expression and can refer to either `name` in the list `args
+           = [[name, obj]]` of dependents or the `uiname` in the list
+           `imports = [(module, iname, uiname)]` which will be
+           imported as::
 
                 from module import iname as uiname
         """
@@ -884,16 +958,16 @@ class Graph(object):
             node.rep = _replace_rep(node.rep, replacements)
 
     def _new_node(self, obj, env, name=None):
-        """Return a new node associated with obj and using the
-        specified name  If name is specified, then we assume
-        that the name is to be exported.  Also process the
+        r"""Return a new node associated with `obj` and using the
+        specified `name`  If `name` is specified, then we assume
+        that the `name` is to be exported.  Also process the
         imports of the node."""
         rep, args, imports = self.archive_1(obj, env)
         rep = self._process_imports(rep, args, imports)
         return Node(obj=obj, rep=rep, args=args, name=name)
 
     def _DFS(self, node, env):
-        """Visit all nodes in the directed subgraph specified by
+        r"""Visit all nodes in the directed subgraph specified by
         node, and insert them into nodes."""
         for (name, obj) in node.args:
             id_ = id(obj)
@@ -903,9 +977,9 @@ class Graph(object):
                 self._DFS(node, env)
 
     def _process_imports(self, rep, args, imports):
-        """Process imports and add them to self.imports,
+        r"""Process imports and add them to self.imports,
         changing names as needed so there are no conflicts
-        between args = [(name, obj)] and self.names."""
+        between `args = [(name, obj)]` and `self.names`."""
 
         arg_names = _unzip(args)[0]
         # Check for duplicate imports
@@ -936,14 +1010,14 @@ class Graph(object):
         return rep
 
     def edges(self):
-        """Return a list of edges (id1, id2) where object id1 depends
-        on object id2."""
+        r"""Return a list of edges `(id1, id2)` where object `id1` depends
+        on object `id2`."""
         return [(id_, id(obj))
                 for id_ in self.nodes
                 for (name, obj) in self.nodes[id_].args]
 
     def _topological_order(self):
-        """Return a list of the ids for all nodes in the graph in a
+        r"""Return a list of the ids for all nodes in the graph in a
         topological order."""
         order = topsort.topsort(self.edges())
         order.reverse()
@@ -952,7 +1026,7 @@ class Graph(object):
         return order
     
     def _reduce(self, id):
-        """Reduce the node."""
+        r"""Reduce the node."""
         node = self.nodes[id]
         if node.isreducible(roots=self.roots):
             replacements = {node.name:node.rep}
@@ -968,7 +1042,7 @@ class Graph(object):
                 cnode.parents.update(node.parents)
             del self.nodes[id]
     def check(self):
-        """Check integrity of graph."""
+        r"""Check integrity of graph."""
         for id in self.nodes:
             node = self.nodes[id]
             children = node.children
@@ -978,10 +1052,21 @@ class Graph(object):
                 assert id in cnode.parents
             
     def reduce(self):
-        """Reduce the graph once by combining representations for nodes
+        r"""Reduce the graph once by combining representations for nodes
         that have a single parent.
 
-       Example:
+       Examples
+       --------
+
+       .. digraph:: example
+        
+           "A" -> "B" -> "F";
+           "A" -> "C" -> "D" -> "G";
+           "C" -> "E" -> "G";
+           "C" -> "F";
+
+        ::
+       
                                 A
                                / \
                               B   C
@@ -1067,7 +1152,7 @@ class Graph(object):
         self.order = self._topological_order()
 
 def _unzip(q, n=3):
-    """Unzip q to lists.
+    r"""Unzip q to lists.
 
     If len(q) = 0, then assumes that q was zipped from n lists.
 
@@ -1086,7 +1171,7 @@ def _unzip(q, n=3):
         return map(list, zip(*q))
 
 def _get_unique(name, names, sep='_'):
-    """Return a unique name not in names starting with name.
+    r"""Return a unique name not in names starting with name.
     
     >>> names = ['a', 'a.1', 'b']
     >>> _get_unique('c', names)
@@ -1123,14 +1208,14 @@ def _get_unique(name, names, sep='_'):
     return uname
 
 class ReplacementError(Exception):
-    """Replacements not consistent with parse tree."""
+    r"""Replacements not consistent with parse tree."""
     def __init__(self, old, new, expected, actual):
         Exception.__init__(self,
             "Replacement %s->%s: Expected %i, replaced %i"%(
                 old, new, expected, actual))
 
-def _replace_rep(rep, replacements, check=True):
-    """Return rep with all replacements made.
+def _replace_rep(rep, replacements, check=False):
+    r"""Return rep with all replacements made.
 
     Inputs:
         rep : String expression to make replacements in
@@ -1147,47 +1232,85 @@ def _replace_rep(rep, replacements, check=True):
         ...
     ReplacementError: Replacement a->c: Expected 1, replaced 2
     """
-    check = False
     if check:
         rep_names = AST(rep).names
         counts = dict((n, rep_names.count(n)) for n in replacements)
 
+    identifier_tokens = string.letters + string.digits + "_"
     for old in replacements:
-        re_ = r'''(?P<a>        # Refer to the group by name <a>
-                   [^\w\.]      # Either NOT a valid identifier 
-                   | ^)         # OR the start of the string
-                  (%s)          # The literal to be matched
-                  (?P<b>[^\w=]  # Either NOT a valid identifer
-                   | $)'''      # OR the end.
-        regexp = re.compile(re_%(re.escape(old)), re.VERBOSE)
-        n = 0
-        while True: 
-            (rep, m) = regexp.subn(r"\g<a>%s\g<b>"%(replacements[old]), rep)
-            if m == 0: break
-            n += m
-        if check and not n == counts[old]:
-            raise ReplacementError(old, replacements[old], counts[old], n)
+        new = replacements[old]
+        l = len(old)
+        i = rep.find(old)
+        i_rep = []                  # Indices to replace
+        while 0 <= i:
+            prev = rep[i-1:i]
+            next = rep[i+l:i+l+1]
+            if ((not next or next not in identifier_tokens)
+                and
+                (not prev or prev not in identifier_tokens)):
+
+                # Now get previous and next non-whitespace characters
+                c = i+l
+                while c < len(rep) and rep[c] in string.whitespace:
+                    c = c + 1
+                next = rep[c:c+1]
+
+                c = i-1
+                while 0 <= c and rep[c] in string.whitespace:
+                    c = c - 1
+                prev = rep[c:c+1]
+                if (not next or next not in "="):
+                    # Test for keyword arguments
+                    i_rep.append(i)
+            i = rep.find(old, i+1)
+
+        n_rep = len(i_rep)
+
+        parts = []
+        i0 = 0
+        for i in i_rep:
+            parts.append(rep[i0:i])
+            i0 = i + l
+        parts.append(rep[i0:])
+        rep = new.join(parts)
+
+        if check and not n_rep == counts[old]:
+            raise ReplacementError(old, replacements[old], counts[old], n_rep)
     return rep
+    """
+            re_ = r'''(?P<a>        # Refer to the group by name <a>
+                       [^\w\.]      # Either NOT a valid identifier 
+                       | ^)         # OR the start of the string
+                      (%s)          # The literal to be matched
+                      (?P<b>[^\w=]  # Either NOT a valid identifer
+                       | $)'''      # OR the end.
+            regexp = re.compile(re_%(re.escape(old)), re.VERBOSE)
+            n_rep = 0
+            while True: 
+                (rep, m) = regexp.subn(r"\g<a>%s\g<b>"%(replacements[old]), rep)
+                if m == 0: break
+                n_rep += m
+   """
 
 class AST(object):
-    """Class to represent and explore the AST of expressions."""
+    r"""Class to represent and explore the AST of expressions."""
     def __init__(self, expr):
         self.__dict__['expr'] = expr
         self.__dict__['ast'] = compiler.parse(expr)
         self.__dict__['names'] = self._get_names()
     @property
     def expr(self):
-        """Expression"""
+        r"""Expression"""
         return self.__dict__['expr']
 
     @property
     def ast(self):
-        """AST for expression"""
+        r"""AST for expression"""
         return self.__dict__['ast']
         
     @property
     def names(self):
-        """Symbols references in expression."""
+        r"""Symbols references in expression."""
         return self.__dict__['names']
 
     def _get_names(self):        
