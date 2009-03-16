@@ -11,7 +11,8 @@ import mmf.utils.mmf_test
 
 import mmf.objects
 from mmf.objects import StateVars, Container, process_vars
-from mmf.objects import ClassVar, Required, Computed, NoCopy, Excluded
+from mmf.objects import ClassVar, Required, Computed, NoCopy
+from mmf.objects import Excluded, Delegate, Ref
 
 
 class A(mmf.objects.Archivable):
@@ -20,7 +21,7 @@ class A(mmf.objects.Archivable):
     def items(self):
         return self.__dict__.items()
 
-class WithProperty(mmf.objects.StateVars):
+class WithProperty(StateVars):
     """Test required attributes specified by proeprties."""
     _state_vars = [('x', Required),
                    ('_x', Computed)]
@@ -101,6 +102,7 @@ class TestStateVars(object):
 
     def test_replacement(self):
         """Test the replacement of _state_vars."""
+        mmf.objects.NameClashWarning.simplefilter('ignore')
         class A(StateVars):
             _state_vars = [('a', 5)]
             process_vars()
@@ -207,6 +209,7 @@ class TestStateVars(object):
 
     def test_Required2(self):
         """Test providing required keys with class variables"""
+        mmf.objects.NameClashWarning.simplefilter('ignore')
         class A(StateVars):
             _state_vars = [('x', mmf.objects.Required, 'Required')]
             process_vars()
@@ -330,6 +333,7 @@ class TestStateVars(object):
     def test_class_vars(self):
         """Test ClassVars attribute bug with __new__ overwriting with
         default values."""
+        mmf.objects.NameClashWarning.simplefilter('ignore')
         class F(StateVars):
             _state_vars = [('A', ClassVar(Required))]
             process_vars()
@@ -353,7 +357,7 @@ class TestStateVars(object):
         Normally a ClassVar would not be archived because it is a
         property of a class.  A subclass might want this property to
         become and instance var, so it might override this."""
-
+        mmf.objects.objects_.NameClashWarning.simplefilter('ignore')
         class A(StateVars):
             _state_vars = [('x', ClassVar(1))]
             process_vars()
@@ -368,6 +372,7 @@ class TestStateVars(object):
     def test_changing_defaults(self):
         """Test StateVars to see if changing default values preserves
         the documentation."""
+        mmf.objects.NameClashWarning.simplefilter('ignore')
         class A(StateVars):
             _state_vars = [('a', 1, "Documentation for A")]
             process_vars()
@@ -501,7 +506,72 @@ class TestStateVars2(object):
         nose.tools.assert_equal(b.a, 4)
         nose.tools.assert_equal(b.b, 16)
 
+class TestCoverage(object):
+    """Some tests of special cases to force code coverage."""
+    def setUp(self):
+        mmf.objects.NameClashWarning.simplefilter('error')
 
+    def tearDown(self):
+        mmf.objects.NameClashWarning.simplefilter('ignore')
+
+    def test_normalize_state_vars_1(self):
+        """Test state var `('a', )`."""
+        sv = mmf.objects.objects_._normalize_state_vars([('a',)])
+        nose.tools.assert_equal(sv, [
+                ('a', NotImplemented, mmf.objects.objects_._no_description)])
+
+    @nose.tools.raises(TypeError)
+    def test_normalize_state_vars_2(self):
+        """Test state var exception on ('a',,,,)."""
+        sv = mmf.objects.objects_._normalize_state_vars([
+                ('a',None, None, None)])
+        
+    @nose.tools.raises(ValueError)
+    def test_normalize_state_vars_3(self):
+        """Test state var exception on ('a',,,,)."""
+        sv = mmf.objects.objects_._normalize_state_vars([
+                ('a',1),
+                ('b=a', 2, 'doc b')])
+        
+    @nose.tools.raises(mmf.objects.NameClashWarning)
+    def test_gather_vars_1(self):
+        """Test state var exception on ('a',,,,)."""
+        class A(object):
+            _state_vars = ['a', 'a=a']
+        mmf.objects.objects_._gather_vars(A)
+        
+
+    def test_delegates_1(self):
+        """Test fetching of documentation from deep."""
+        class A(object):
+            _state_vars = [
+                ('x', None, 'var x'), 
+                ('y', None, 'var y')]
+            process_vars()
+
+        class B(object):
+            _state_vars = [
+                ('a', Delegate(A, ['x']))]
+            process_vars(archive_check=False)
+            j = 1
+
+        class C(object):
+            _state_vars = [
+                ('c', Delegate(B)),
+                ('h=c.a.x'),
+                ('j=c.j'),
+                ('d=c')]
+            process_vars(archive_check=False)
+
+        nose.tools.ok_('var x' in C.__doc__)
+
+    @nose.tools.raises(NameError)
+    def test_delegates_2(self):
+        """Test missing ref."""
+        class A(object):
+            _state_vars = ['x=y']
+            process_vars()
+        
 class Doctests(object):
     """Test the constructor semantics.
     
