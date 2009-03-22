@@ -1,15 +1,21 @@
 r"""Various Interfaces."""
-__all__ = ['Interface', 'IArchivable', 'implements']
+__all__ = ['Interface', 'Attribute', 'IArchivable', 'implements']
 
 try:
-    from zope.interface import Interface
+    from zope.interface import Interface, Attribute
     from zope.interface import implements
     
 except ImportError:
-    class Interface(zope.interface.Interface):        # pragma: no cover 
+    class Interface(object):        # pragma: no cover 
         """This is a stub allowing the insertion later of an interface
         class.  An interface defines some properties and methods but
         maintains no data and should not be instantiated."""
+    class Attribute(object):        # pragma: no cover 
+        """This is a stub allowing the insertion later of an interface
+        class.  An interface defines some properties and methods but
+        maintains no data and should not be instantiated."""
+        def __init__(self, doc):
+            self.doc = doc
     def implements(interface):          # pragma: no cover
         pass
 

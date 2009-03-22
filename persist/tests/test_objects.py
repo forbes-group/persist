@@ -506,6 +506,19 @@ class TestStateVars2(object):
         nose.tools.assert_equal(b.a, 4)
         nose.tools.assert_equal(b.b, 16)
 
+class TestStateVars3(object):
+    """Test new delegation functionality."""
+    class BB(StateVars):
+        _state_vars = [('a', Container(x=3)),
+                       'c=a.b']
+        process_vars()
+        
+    def test1(self):
+        """Testing setattr with chains."""
+        a = self.BB(a=Container())
+        a.c = 1
+        nose.tools.assert_equal(a.a.b, 1)
+
 class TestCoverage(object):
     """Some tests of special cases to force code coverage."""
     def setUp(self):
@@ -533,13 +546,44 @@ class TestCoverage(object):
                 ('a',1),
                 ('b=a', 2, 'doc b')])
         
+    @nose.tools.raises(TypeError)
+    def test_normalize_state_vars_4(self):
+        """Test state var exception on ('a',,,,)."""
+        sv = mmf.objects.objects_._normalize_state_vars([
+                ('a=b',1,1,1,1)])
+        
+    @nose.tools.raises(ValueError)
+    def test_normalize_state_vars_5(self):
+        """Coverage of ('a=b',1,'doc')"""
+        sv = mmf.objects.objects_._normalize_state_vars([
+                ('a=b',1,'doc')])
+        
+    @mmf.utils.mmf_test.dec.skipknownfailure
+    @nose.tools.raises(mmf.objects.NameClashWarning)
+    def test_normalize_state_vars_6(self):
+        """Test conflicting defaults
+
+        This should raise an exception because the defaults are different.
+        ."""
+        sv = mmf.objects.objects_._normalize_state_vars([
+                ('x=b.x', 1),
+                ('y=b.x', 1)])
+
+        
+
+    @nose.tools.raises(ValueError)
+    def test_normalize_state_vars_5(self):
+        """Test state var exception on ('a',,,,)."""
+        sv = mmf.objects.objects_._normalize_state_vars([
+                ('a=b',1,'doc')])
+        
     @nose.tools.raises(mmf.objects.NameClashWarning)
     def test_gather_vars_1(self):
         """Test state var exception on ('a',,,,)."""
         class A(object):
             _state_vars = ['a', 'a=a']
         mmf.objects.objects_._gather_vars(A)
-        
+
 
     def test_delegates_1(self):
         """Test fetching of documentation from deep."""
