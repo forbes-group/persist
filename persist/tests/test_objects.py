@@ -519,6 +519,21 @@ class TestStateVars3(object):
         a.c = 1
         nose.tools.assert_equal(a.a.b, 1)
 
+    def test2(self):
+        """Testing that setattr with refs calls `__init__`."""
+        class A(StateVars):
+            _state_vars = [('x', Container()),
+                           'y=x.y']
+            process_vars()
+            def __init__(self, *v, **kw):
+                if 'y' in kw:
+                    self.x.called = True
+        a = A(y=1)
+        a.x.called = False
+        a.y = 2
+        nose.tools.assert_equal(a.x.y, 2)
+        nose.tools.assert_equal(a.x.called, True)
+
 class TestCoverage(object):
     """Some tests of special cases to force code coverage."""
     def setUp(self):
