@@ -534,6 +534,19 @@ class TestStateVars3(object):
         nose.tools.assert_equal(a.x.y, 2)
         nose.tools.assert_equal(a.x.called, True)
 
+    def test3(self):
+        """Test that Excluded vars are not delegated."""
+        class A(StateVars):
+            _state_vars = [('x', Excluded(2))]
+            process_vars()
+
+        class B(StateVars):
+            _state_vars = [('a', Delegate(A))]
+            process_vars()
+
+        nose.tools.ok_('x' not in B._vars)
+
+
 class TestCoverage(object):
     """Some tests of special cases to force code coverage."""
     def setUp(self):
