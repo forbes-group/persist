@@ -1217,9 +1217,11 @@ class ReplacementError(Exception):
 def _replace_rep(rep, replacements, check=False):
     r"""Return rep with all replacements made.
 
-    Inputs:
-        rep : String expression to make replacements in
-        replacements : Dictionary of replacements.
+    Parameters:
+    rep : str
+       String expression to make replacements in
+    replacements : dict
+       Dictionary of replacements.
     
     >>> _replace_rep('n = array([1, 2, 3])', dict(array='array_1'))
     'n = array_1([1, 2, 3])'
