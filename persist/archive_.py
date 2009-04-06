@@ -68,7 +68,7 @@ import contrib.RADLogic.topsort as topsort
 import mmf.utils
 import mmf.interfaces as interfaces
 
-class ArchiveError(Exception):
+class ArchiveError(topsort.CycleError):
     r"""Archiving error."""
 
 class DuplicateError(ArchiveError):
@@ -498,10 +498,8 @@ class Archive(object):
             graph = Graph(objects=self.arch,
                           archive_1=self.archive_1)
         except topsort.CycleError, err:
-            new_err = ArchiveError(
-                "Archive contains cyclic dependencies.")
-            new_err.cycle_err = err
-            raise new_err
+            err.message = "Archive contains cyclic dependencies."
+            raise
 
         # Optionally: at this stage perform a graph reduction.
         graph.reduce()
@@ -1050,7 +1048,19 @@ class Graph(object):
             for child in children:
                 cnode = self.nodes[child]
                 assert id in cnode.parents
-            
+
+    def paths(self, node=None):
+        """Return a list of all paths through the graph starting from
+        `node`."""
+        paths = []
+        if node is None:
+            for r in self.roots:
+                paths.extend(self.paths(r))
+        else:
+            for c in node.children:
+                paths.extend([[node] + p for p in self.paths(c)])
+        return paths
+        
     def reduce(self):
         r"""Reduce the graph once by combining representations for nodes
         that have a single parent.
