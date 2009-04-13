@@ -147,6 +147,8 @@ class TestSuite(object):
         self._test_archiving((1,1))
         self._test_archiving(np.sin)
         self._test_archiving(math.sin)
+        self._test_archiving(None)
+        self._test_archiving(type(None))
 
     def test_derived_types(self):
         """Test archiving of simple derived types..."""
@@ -245,7 +247,7 @@ class TestSuite(object):
         arch.check_on_insert = True
         arch.insert(a=A())
 
-    @nose.tools.raises(archive.ArchiveError)
+    @nose.tools.raises(archive.CycleError)
     def test_cyclic_exception(self):
         """Make sure cyclic deps raise an error."""
         A = []

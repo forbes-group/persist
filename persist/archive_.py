@@ -68,9 +68,12 @@ import contrib.RADLogic.topsort as topsort
 import mmf.utils
 import mmf.interfaces as interfaces
 
-class ArchiveError(topsort.CycleError):
+class ArchiveError(Exception):
     r"""Archiving error."""
 
+class CycleError(ArchiveError):
+    r"""Cycle found in archive."""
+    
 class DuplicateError(ArchiveError):
     r"""Object already exists."""
     def __init__(self, name):
@@ -221,6 +224,9 @@ class Archive(object):
     def _archive_float(self, obj, env):
         return archive_1_float(obj, env)
 
+    def _archive_type(self, obj, env):
+        return archive_1_type(obj, env)
+        
     _dispatch = {
         np.ndarray:_archive_ndarray,
         np.ufunc:_archive_func,
@@ -229,7 +235,8 @@ class Archive(object):
         tuple:_archive_tuple,
         dict:_archive_dict,
         float:_archive_float,
-        complex:_archive_float}
+        complex:_archive_float,
+        type:_archive_type}
         
     def unique_name(self, name):
         r"""Return a unique name not contained in the archive."""
@@ -499,7 +506,7 @@ class Archive(object):
                           archive_1=self.archive_1)
         except topsort.CycleError, err:
             err.message = "Archive contains cyclic dependencies."
-            raise
+            raise CycleError, err, sys.exc_info()[-1]
 
         # Optionally: at this stage perform a graph reduction.
         graph.reduce()
@@ -685,6 +692,23 @@ def archive_1_repr(obj, env):
             
     return (rep, args, imports)
 
+def archive_1_type(obj, env):
+    name = None
+    args = {}
+    for module in [__builtin__, types]:
+        vals = module.__dict__.values()
+        if obj in vals:
+            name = module.__dict__.keys()[vals.index(obj)]
+            imports = [(module.__name__, name, name)]
+            rep = name
+            break
+    if name is None:
+        # default
+        return archive_1_obj(obj, env)
+    
+    return (rep, args, imports)
+        
+    
 def archive_1_float(obj, env):
     r"""Deal with float types, including `inf` or `nan`.
 
