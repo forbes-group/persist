@@ -55,7 +55,7 @@ def test_MyFloat():
     """Test the subclassing of a builtin as a StateVar."""
     f = MyFloat(3, min=2.0, max=4.0)
     nose.tools.assert_equals(f, 3)
-    
+
 class TestArchivable(object):
     """Test Archivable class."""
     def test_repr(self):
@@ -198,6 +198,24 @@ class TestStateVars(object):
         a.c[0][0] = 2
         nose.tools.assert_equal(a.c[0][0], 2)
         nose.tools.assert_equal(b.c[0][0], 1)
+
+    def test_copy4(self):
+        """Test copying and init."""
+        class A(StateVars):
+            _state_vars = [('x', 5),
+                           ('y', Computed)]
+            process_vars()
+            def __init__(self, *v, **kw):
+                self.y = 6
+        a = A()
+        l = [3]
+        a.__dict__['y'] = l
+        b = copy(a)
+        c = deepcopy(a)
+
+        nose.tools.assert_equal(id(b.y), id(l))
+        nose.tools.assert_equal(c.y, l)
+        nose.tools.assert_not_equal(id(c.y), id(l))
 
     @nose.tools.raises(ValueError)
     def test_Required(self):
