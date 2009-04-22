@@ -213,9 +213,23 @@ class TestStateVars(object):
         b = copy(a)
         c = deepcopy(a)
 
-        nose.tools.assert_equal(id(b.y), id(l))
+        nose.tools.assert_equal(b.y, l)
         nose.tools.assert_equal(c.y, l)
+        nose.tools.assert_equal(id(b.y), id(l))
         nose.tools.assert_not_equal(id(c.y), id(l))
+
+    def test_copy5(self):
+        """Rest bug with copy constructing not resetting
+        `_constructing` flag."""
+        class A(StateVars):
+            _state_vars = [('x', 5)]
+            process_vars()
+
+        a = A()
+        b = A(copy(a))
+
+        nose.tools.ok_('_constructing' not in a.__dict__)
+        nose.tools.ok_('_constructing' not in b.__dict__)
 
     @nose.tools.raises(ValueError)
     def test_Required(self):
