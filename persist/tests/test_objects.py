@@ -698,6 +698,27 @@ class Doctests(object):
     >>> a = A(b=2)
     'a' changed
     'b' changed
-    """
+
+    >>> class BD(StateVars):
+    ...     _state_vars = [('dyadic', False)]
+    ...     process_vars()
+
+    >>> class B(StateVars):
+    ...     _state_vars = [('bd', Delegate(BD, ['dyadic']))]
+    ...     process_vars()
+
+    >>> class _BD(StateVars):
+    ...     _state_vars = [('b', Delegate(B), "l"),
+    ...                    ('b.dyadic', True)]
+    ...     process_vars()
+
+    >>> class _B(StateVars):
+    ...     _state_vars = [('sd0', Delegate(_BD, ['dyadic']))]
+    ...     process_vars()
+
+    >>> b = _B(dyadic=False)
+    >>> b.dyadic
+    False
+    
         
         

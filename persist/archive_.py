@@ -73,6 +73,13 @@ class ArchiveError(Exception):
 
 class CycleError(ArchiveError):
     r"""Cycle found in archive."""
+    def __init__(self, *v):
+        if 0 < len(v):
+            self.message = v[0]
+    def __str__(self):
+        return self.message
+    def __repr__(self):
+        return repr(self.args)
     
 class DuplicateError(ArchiveError):
     r"""Object already exists."""
@@ -505,8 +512,8 @@ class Archive(object):
             graph = Graph(objects=self.arch,
                           archive_1=self.archive_1)
         except topsort.CycleError, err:
-            err.message = "Archive contains cyclic dependencies."
-            raise CycleError, err, sys.exc_info()[-1]
+            msg = "Archive contains cyclic dependencies."
+            raise CycleError, (msg,) + err.args , sys.exc_info()[-1]
 
         # Optionally: at this stage perform a graph reduction.
         graph.reduce()
