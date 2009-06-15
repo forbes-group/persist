@@ -25,6 +25,23 @@ The idea is to save state in a file that looks like the following::
    a = _numpy.array([1, 2, 3])
    del _numpy
 
+.. note::
+   When you want to execute the string, always pass an execution
+   context to unpack:
+
+   >>> a = Archive()
+   >>> a.insert(x=3)
+   'x'
+   >>> s = str(a)
+   >>> d = {}
+   >>> exec(s, d)
+   >>> d['x']
+   3
+
+   If you just execute the code, it will attempt to delete the
+   '__builtins__' module (so as not to clutter the dictionary) and may
+   render the interpreter unusable!
+   
 .. todo::
    - Graph reduction occurs for nodes that have more than one parent.
      This does not consider the possibility that a single node may
