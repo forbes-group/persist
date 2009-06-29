@@ -578,6 +578,23 @@ class TestStateVars3(object):
 
         nose.tools.ok_('x' not in B._vars)
 
+    def test4(self):
+        """Test that assignment works."""
+        class A(object):
+            def __init__(self):
+                raise Exception("Init Called!")
+
+        class B(A):
+            def __init__(self):
+                pass
+        
+        class C(StateVars):
+            _state_vars = [('a', Delegate(A))]
+            process_vars()
+
+        b = B()
+        c = C(a=b)
+
 
 class TestCoverage(object):
     """Some tests of special cases to force code coverage."""
@@ -719,6 +736,4 @@ class Doctests(object):
     >>> b = _B(dyadic=False)
     >>> b.dyadic
     False
-    
-        
-        
+    """
