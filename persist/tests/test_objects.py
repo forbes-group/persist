@@ -726,7 +726,7 @@ class Doctests(object):
 
     >>> class _BD(StateVars):
     ...     _state_vars = [('b', Delegate(B), "l"),
-    ...                    ('b.dyadic', True)]
+    ...                    ('dyadic', True)]
     ...     process_vars()
 
     >>> class _B(StateVars):
