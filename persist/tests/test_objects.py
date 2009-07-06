@@ -22,7 +22,8 @@ class A(mmf.objects.Archivable):
         return self.__dict__.items()
 
 class WithProperty(StateVars):
-    """Test required attributes specified by proeprties."""
+    """Test required attributes specified by proprties."""
+    _ignore_name_clash = ['x']
     _state_vars = [('x', Required),
                    ('_x', Computed)]
     process_vars()
@@ -127,6 +128,9 @@ class TestStateVars(object):
 
     def test_copy1(self):
         """Test copy=False"""
+        # This should not raise a warning but it does.  See
+        # test_local_scope
+        mmf.objects.NameClashWarning.simplefilter('ignore')        
         c = [1]
         class A(StateVars):
             _state_vars = [('c', c)]
@@ -139,8 +143,25 @@ class TestStateVars(object):
         nose.tools.assert_equal(a.c[0], 2)
         nose.tools.assert_equal(b.c[0], 2)
 
+    @mmf.utils.mmf_test.dec.skipknownfailure
+    @nose.tools.raises(AttributeError)
+    def test_local_scope(self):
+        """Test the spurious assignment of attributes."""
+        def f():
+            c = [1]
+            class A(StateVars):
+                _state_vars = [('a', c)]
+                process_vars(copy=False)
+            return A
+        A = f()
+        a = A()
+        a.c
+
     def test_copy1a(self):
         """Test NoCopy"""
+        # This should not raise a warning but it does.  See
+        # test_local_scope
+        mmf.objects.NameClashWarning.simplefilter('ignore')        
         c = [1]
         class A(StateVars):
             _state_vars = [('c', NoCopy(c))]
@@ -370,8 +391,8 @@ class TestStateVars(object):
             _state_vars = [('A', ClassVar(Required))]
             process_vars()
         class G(F):
+            _state_vars = [('A', ClassVar(1))]
             process_vars()
-            A = 1
         g = G()
         nose.tools.assert_equal(g.A, 1)
 
@@ -383,13 +404,27 @@ class TestStateVars(object):
             process_vars()
         g = F(A=3)
 
+    def test_ClassVar_overriding(self):
+        """Test that subclasses can properly override a ClassVar."""
+        mmf.objects.NameClashWarning.simplefilter('ignore')        
+        class A(StateVars):
+            _state_vars = [('a', ClassVar(0))]
+            process_vars()
+
+        class B(A):
+            _state_vars = [('a', ClassVar(1))]
+            process_vars()
+
+        b = B()
+        nose.tools.assert_equal(1, b.a)
+
     def test_overriding_ClassVar(self):
         """Test that overriding ClassVar works with archiving.
 
         Normally a ClassVar would not be archived because it is a
         property of a class.  A subclass might want this property to
         become and instance var, so it might override this."""
-        mmf.objects.objects_.NameClashWarning.simplefilter('ignore')
+        mmf.objects.NameClashWarning.simplefilter('ignore')
         class A(StateVars):
             _state_vars = [('x', ClassVar(1))]
             process_vars()
@@ -400,6 +435,7 @@ class TestStateVars(object):
         
         b = B(x=4)
         nose.tools.assert_equal(b.x, 4)
+
 
     def test_changing_defaults(self):
         """Test StateVars to see if changing default values preserves
@@ -478,6 +514,12 @@ class TestStateVars(object):
 class TestStateVars1(object):
     """Test StateVars processing without explicit calls to
     process_vars()"""
+    def setUp(self):
+        warnings.simplefilter('error', UserWarning)
+
+    def tearDown(self):
+        warnings.resetwarnings()
+    
     def test1(self):
         """Test StateVars without process_vars call."""
         class StateVars1(StateVars):
@@ -488,6 +530,9 @@ class TestStateVars1(object):
 
     def test2(self):
         """Test StateVars inheritance without process_vars call."""
+        # This triggers a warning... Not an appropriate message, but
+        # the warning is okay!
+        mmf.objects.NameClashWarning.simplefilter('ignore')
         class StateVars1(StateVars):
             _state_vars = [('a', 1)]
             process_vars()
@@ -515,6 +560,12 @@ class TestStateVars1(object):
 
 class TestStateVars2(object):
     """Test changing initialization format."""
+    def setUp(self):
+        warnings.simplefilter('error', UserWarning)
+
+    def tearDown(self):
+        warnings.resetwarnings()
+
     class AA(StateVars):
         _state_vars = [('a', Required),
                        ('b', Computed)]
@@ -523,6 +574,7 @@ class TestStateVars2(object):
             self.b = self.a*self.a
 
     class BB(AA):
+        _ignore_name_clash = ['a']
         _state_vars = [('x', Required),
                        ('a', Computed)]
         process_vars()
@@ -540,6 +592,12 @@ class TestStateVars2(object):
 
 class TestStateVars3(object):
     """Test new delegation functionality."""
+    def setUp(self):
+        warnings.simplefilter('error', UserWarning)
+
+    def tearDown(self):
+        warnings.resetwarnings()
+    
     class BB(StateVars):
         _state_vars = [('a', Container(x=3)),
                        'c=a.b']
@@ -594,7 +652,6 @@ class TestStateVars3(object):
 
         b = B()
         c = C(a=b)
-
 
 class TestCoverage(object):
     """Some tests of special cases to force code coverage."""
@@ -686,6 +743,15 @@ class TestCoverage(object):
 
         nose.tools.ok_('var x' in C.__doc__)
 
+    @nose.tools.raises(mmf.objects.NameClashWarning)
+    def test_nameclash(self):
+        class A(StateVars):
+            _state_vars = ['a']
+            process_vars()
+
+            def a(self):
+                """Clashes with state var."""
+
     @nose.tools.raises(NameError)
     def test_delegates_2(self):
         """Test missing ref."""
@@ -694,46 +760,50 @@ class TestCoverage(object):
             process_vars()
         
 class Doctests(object):
-    """Test the constructor semantics.
+    def test_1(self):
+        """Test the constructor semantics.
     
-    >>> class A(StateVars):
-    ...     _state_vars = [('a', 1),
-    ...                    ('b', NotImplemented),
-    ...                    ('c', Computed)]
-    ...     process_vars()
-    ...     def __init__(self, *varargin, **kwargs):
-    ...         if 'a' in kwargs:
-    ...             print "'a' changed"
-    ...         if 'b' in kwargs:
-    ...             print "'b' changed"
-    ...         if 'c' in kwargs:
-    ...             print "'c' changed"
-    >>> a = A()
-    'a' changed
-    >>> a.b = 2
-    'b' changed
-    >>> a = A(b=2)
-    'a' changed
-    'b' changed
+        >>> class A(StateVars):
+        ...     _state_vars = [('a', 1),
+        ...                    ('b', NotImplemented),
+        ...                    ('c', Computed)]
+        ...     process_vars()
+        ...     def __init__(self, *varargin, **kwargs):
+        ...         if 'a' in kwargs:
+        ...             print "'a' changed"
+        ...         if 'b' in kwargs:
+        ...             print "'b' changed"
+        ...         if 'c' in kwargs:
+        ...             print "'c' changed"
+        >>> a = A()
+        'a' changed
+        >>> a.b = 2
+        'b' changed
+        >>> a = A(b=2)
+        'a' changed
+        'b' changed
+        """
 
-    >>> class BD(StateVars):
-    ...     _state_vars = [('dyadic', False)]
-    ...     process_vars()
+    def test_delegate_hiding(self):
+        """
+        >>> class BD(StateVars):
+        ...     _state_vars = [('dyadic', False)]
+        ...     process_vars()
 
-    >>> class B(StateVars):
-    ...     _state_vars = [('bd', Delegate(BD, ['dyadic']))]
-    ...     process_vars()
+        >>> class B(StateVars):
+        ...     _state_vars = [('bd', Delegate(BD, ['dyadic']))]
+        ...     process_vars()
 
-    >>> class _BD(StateVars):
-    ...     _state_vars = [('b', Delegate(B), "l"),
-    ...                    ('dyadic', True)]
-    ...     process_vars()
+        >>> class _BD(StateVars):
+        ...     _state_vars = [('b', Delegate(B), "l"),
+        ...                    ('dyadic', True)]
+        ...     process_vars()
 
-    >>> class _B(StateVars):
-    ...     _state_vars = [('sd0', Delegate(_BD, ['dyadic']))]
-    ...     process_vars()
-
-    >>> b = _B(dyadic=False)
-    >>> b.dyadic
-    False
-    """
+        >>> class _B(StateVars):
+        ...     _state_vars = [('sd0', Delegate(_BD, ['dyadic']))]
+        ...     process_vars()
+        
+        >>> b = _B(dyadic=False)
+        >>> b.dyadic
+        False
+        """
