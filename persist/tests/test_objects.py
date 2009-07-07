@@ -510,6 +510,30 @@ class TestStateVars(object):
         values."""
         a = WithProperty()
         nose.tools.assert_equals(a.x, 1)
+
+    def test_inherited_properties(self):
+        """Make sure that __setattr__ finds inherited properties.
+
+        (These are not in the class __dict__ but rather the base
+        class's __dict__ and hence __setattr__ gets called by
+        mistake)."""
+
+        class A(StateVars):
+            _state_vars = [('_x', 1)]
+            process_vars()
+            def get_x(self):
+                return self._x
+            def set_x(self, x):
+                self._x = x
+            x = property(get_x, set_x)
+            
+        class B(A):
+            _state_vars = []
+            process_vars()
+
+        b = B()
+        b.x = 2
+        nose.tools.assert_equal(b._x, 2)
         
 class TestStateVars1(object):
     """Test StateVars processing without explicit calls to
