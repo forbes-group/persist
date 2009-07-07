@@ -534,6 +534,28 @@ class TestStateVars(object):
         b = B()
         b.x = 2
         nose.tools.assert_equal(b._x, 2)
+
+    def test_inherited_properties2(self):
+        """Regression test for a bug with properties and _dynamic
+        flag."""
+
+        class A(StateVars):
+            _state_vars = [('_x', 1)]
+            _dynamic = True
+            process_vars()
+            def get_x(self):
+                return self._x
+            def set_x(self, x):
+                self._x = x
+            x = property(get_x, set_x)
+            
+        class B(A):
+            _state_vars = []
+            process_vars()
+
+        b = B()
+        b.x = 2
+        nose.tools.assert_equal(b._x, 2)
         
 class TestStateVars1(object):
     """Test StateVars processing without explicit calls to
