@@ -678,9 +678,10 @@ class TestStateVarsDelegate(object):
         nose.tools.assert_equal(a.x.called, True)
 
     def test3(self):
-        """Test that Excluded vars are not delegated."""
+        """Test that Excluded and private vars are not delegated."""
         class A(StateVars):
-            _state_vars = [('x', Excluded(2))]
+            _state_vars = [('x', Excluded(2)),
+                           ('_y', 4)]
             process_vars()
 
         class B(StateVars):
@@ -688,6 +689,7 @@ class TestStateVarsDelegate(object):
             process_vars()
 
         nose.tools.ok_('x' not in B._vars)
+        nose.tools.ok_('_y' not in B._vars)
 
     def test4(self):
         """Test that assignment works."""
@@ -706,6 +708,25 @@ class TestStateVarsDelegate(object):
         b = B()
         c = C(a=b)
 
+    def test5(self):
+        """Test that copy construction works."""
+        class A(StateVars):
+            _state_vars = [
+                ('a', 3),
+                ('b', Computed)]
+            process_vars()
+            def __init__(self, *v, **kw):
+                self.b = self.a*2
+
+        class B(StateVars):
+            _state_vars = [
+                ('A_', Delegate(A))]
+            process_vars()
+
+        a1 = A()
+        a2 = A(a1)
+        b1 = B(a=6)
+        b2 = B(b1)
 
 class TestStateVarsDelete(object):
     """Test new deletion functionality."""
