@@ -11,7 +11,7 @@ import mmf.utils.mmf_test
 
 import mmf.objects
 from mmf.objects import StateVars, Container, process_vars
-from mmf.objects import ClassVar, Required, Computed, NoCopy
+from mmf.objects import ClassVar, Required, Computed, NoCopy, Deleted
 from mmf.objects import Excluded, Delegate, Ref
 
 
@@ -283,6 +283,13 @@ class TestStateVars(object):
         nose.tools.assert_equal(b1.x, 3)
         nose.tools.assert_equal(b.x, 2)
         nose.tools.assert_equal(B.x, 2)
+
+    @nose.tools.raises(ValueError)
+    def test_Required3(self):
+        """Test Required(arg) error."""
+        class A(StateVars):
+            _state_vars = [('x', mmf.objects.Required('Required'))]
+            process_vars()
 
     @nose.tools.raises(AttributeError)
     def test_NotImplemented(self):
@@ -636,7 +643,7 @@ class TestStateVars2(object):
         nose.tools.assert_equal(b.a, 4)
         nose.tools.assert_equal(b.b, 16)
 
-class TestStateVars3(object):
+class TestStateVarsDelegate(object):
     """Test new delegation functionality."""
     def setUp(self):
         warnings.simplefilter('error', UserWarning)
@@ -699,6 +706,41 @@ class TestStateVars3(object):
         b = B()
         c = C(a=b)
 
+
+class TestStateVarsDelete(object):
+    """Test new deletion functionality."""
+    def setUp(self):
+        warnings.simplefilter('error', UserWarning)
+
+    def tearDown(self):
+        warnings.resetwarnings()
+
+    def test_delete_1(self):
+        """Test deleting a variable"""
+        class A(StateVars):
+            _state_vars = [('a', ClassVar(1))]
+            process_vars()
+
+        class B(A):
+            _state_vars = [('a', Deleted)]
+            process_vars()
+
+        
+        nose.tools.ok_('a' in A._vars)
+        nose.tools.ok_('a' not in B._vars)
+
+    @nose.tools.raises(ValueError)
+    def test_delete_2(self):
+        """Test exception for deleting a non-existent variable"""
+        class A(StateVars):
+            _state_vars = [('a', ClassVar(1))]
+            process_vars()
+
+        class B(A):
+            _state_vars = [('b', Deleted)]
+            process_vars()
+
+    
 class TestCoverage(object):
     """Some tests of special cases to force code coverage."""
     def setUp(self):
@@ -749,8 +791,18 @@ class TestCoverage(object):
                 ('x=b.x', 1),
                 ('y=b.x', 1)])
 
-        
+    @nose.tools.raises(mmf.objects.NameClashWarning1)
+    def test_nameclash_1(self):
+        """Test nameclash error."""
+        class A(object):
+            a = 6
+        class B(StateVars, A):
+            _state_vars = [
+                ('a', 5)]
+            process_vars()
+        b = B()
 
+        
     @nose.tools.raises(ValueError)
     def test_normalize_state_vars_5(self):
         """Test state var exception on ('a',,,,)."""
@@ -764,6 +816,14 @@ class TestCoverage(object):
             _state_vars = ['a', 'a=a']
         mmf.objects.objects_._gather_vars(A)
 
+    @nose.tools.raises(mmf.objects.NameClashWarning2)
+    def test_local_hiding_1(self):
+        """Test hiding variables."""
+        class A(StateVars):
+            a = 4
+            _state_vars = [('a', ClassVar(3))]
+            process_vars()
+        
 
     def test_delegates_1(self):
         """Test fetching of documentation from deep."""
