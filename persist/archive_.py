@@ -1,4 +1,33 @@
 r"""This is an idea for a model of objects that save their state.
+Here is a typical usage:
+
+>>> a = Archive()
+>>> a.insert(x=3)
+'x'
+>>> a.insert(y=4)
+'y'
+>>> s = str(a)
+
+Here you could write to a file::
+
+   f = open('file.py', 'w')
+   f.write(s)
+   f.close()
+
+And after you could read from the file again:
+
+   f = open('file.py')
+   s = f.read()
+   f.close()
+
+Now we can restore the archive:
+   
+>>> d = {}
+>>> exec(s, d)
+>>> d['x']
+3
+>>> d['y']
+4
 
 Objects can aid this by implementing an archive method, for example::
 

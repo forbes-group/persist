@@ -728,6 +728,43 @@ class TestStateVarsDelegate(object):
         b1 = B(a=6)
         b2 = B(b1)
 
+class TestStateVarsCached(object):
+    r"""Test cached reference optimization functionality."""
+    def setUp(self):
+        warnings.simplefilter('error', UserWarning)
+
+    def tearDown(self):
+        warnings.resetwarnings()
+    
+    def test_cached(self):
+        r"""Test cached references."""
+        class A(StateVars):
+            _state_vars = [
+                ('a', 4),
+                ('b', 5)]
+            process_vars()
+
+        class B(StateVars):
+            _state_vars = [
+                ('A_', Delegate(A, cached=True))]
+            process_vars()
+
+        b = B(a=7, b=8)
+        nose.tools.assert_true('a' in b.__dict__)
+        nose.tools.assert_true('b' in b.__dict__)
+        nose.tools.assert_equal(b.a, 7)
+        nose.tools.assert_equal(b.b, 8)
+
+        b.a = 10
+        nose.tools.assert_equal(b.a, 10)
+        nose.tools.assert_equal(b.A_.a, 10)
+
+        b.A_ = A(a=0,b=1)
+
+        nose.tools.assert_equal(b.a, 0)
+        nose.tools.assert_equal(b.b, 1)
+
+
 class TestStateVarsDelete(object):
     """Test new deletion functionality."""
     def setUp(self):
