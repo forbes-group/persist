@@ -46,7 +46,7 @@ class MyFloat(StateVars, float):
     process_vars()
     def __new__(cls, *v, **kw):
         self = float.__new__(cls, v[0])
-        return StateVars.__new__(cls, self=self, *v, **kw)
+        return StateVars.__new__(cls, self=self, *v[1:], **kw)
     def __init__(self, *v, **kw):
         if self < self.min or self.max < self:
             raise ValueError(
@@ -240,7 +240,7 @@ class TestStateVars(object):
         nose.tools.assert_not_equal(id(c.y), id(l))
 
     def test_copy5(self):
-        """Rest bug with copy constructing not resetting
+        """Test bug with copy constructing not resetting
         `_constructing` flag."""
         class A(StateVars):
             _state_vars = [('x', 5)]
@@ -251,6 +251,20 @@ class TestStateVars(object):
 
         nose.tools.ok_('_constructing' not in a.__dict__)
         nose.tools.ok_('_constructing' not in b.__dict__)
+
+    def test_copy6(self):
+        """Test copy construction with new values."""
+        class A(StateVars):
+            _state_vars = [('a', 5),
+                           ('b', 6)]
+            process_vars()
+        a = A()
+        b = A(a)
+        c = A(a,b=7)
+        nose.tools.assert_equal(a.items(), b.items())
+        nose.tools.assert_equal(c.a, 5)
+        nose.tools.assert_equal(c.b, 7)
+        
 
     @nose.tools.raises(ValueError)
     def test_Required(self):
@@ -727,6 +741,24 @@ class TestStateVarsDelegate(object):
         a2 = A(a1)
         b1 = B(a=6)
         b2 = B(b1)
+
+    def test6(self):
+        """Test bug with defaults overwriting specified objects."""
+        class A(StateVars):
+            _state_vars = [('a', 5)]
+            process_vars()
+        class B(StateVars):
+            _state_vars = [('A_', Delegate(A))]
+            process_vars()
+        class C(StateVars):
+            _state_vars = [('A_', Delegate(A)), ('A_.a',8)]
+            process_vars()
+
+        A_ = A(a=10)
+        b = B(A_=A_)
+        c = C(A_=A_)
+        nose.tools.assert_equal(b.a, 10)
+        nose.tools.assert_equal(c.a, 10)
 
 class TestStateVarsCached(object):
     r"""Test cached reference optimization functionality."""
