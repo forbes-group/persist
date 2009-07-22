@@ -792,6 +792,19 @@ class TestStateVarsDelegate(object):
         nose.tools.assert_equal(c.a, 10)
         nose.tools.assert_equal(b2.a, 10)
 
+    def test8(self):
+        """Test copying semantics."""
+        class A(StateVars):
+            _state_vars = [('a', 5)]
+            process_vars()
+        class B(StateVars):
+            _state_vars = [('A_', Delegate(A))]
+            process_vars()
+
+        b = B(a=10)
+        b1 = B(b, a=1)
+
+        nose.tools.assert_equal(b1.a, 1)
 
 class TestStateVarsCached(object):
     r"""Test cached reference optimization functionality."""
