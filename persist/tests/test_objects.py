@@ -737,10 +737,21 @@ class TestStateVarsDelegate(object):
                 ('A_', Delegate(A))]
             process_vars()
 
+        class C(StateVars):
+            _state_vars = ['a', 'b', 'A_']
+            process_vars()
+
         a1 = A()
         a2 = A(a1)
         b1 = B(a=6)
         b2 = B(b1)
+        c2 = C(b2)
+        nose.tools.assert_equal(a2.a, a1.a)
+        nose.tools.assert_equal(a2.b, a1.b)
+        nose.tools.assert_equal(b2.a, b1.a)
+        nose.tools.assert_equal(b2.b, b1.b)
+        nose.tools.assert_equal(c2.a, b2.a)
+        nose.tools.assert_equal(c2.b, b2.b)
 
     def test6(self):
         """Test bug with defaults overwriting specified objects."""
@@ -759,6 +770,28 @@ class TestStateVarsDelegate(object):
         c = C(A_=A_)
         nose.tools.assert_equal(b.a, 10)
         nose.tools.assert_equal(c.a, 10)
+
+    def test7(self):
+        """Test copying semantics."""
+        class A(StateVars):
+            _state_vars = [('a', 5)]
+            process_vars()
+        class B(StateVars):
+            _state_vars = [('A_', Delegate(A))]
+            process_vars()
+        class C(B):
+            _state_vars = []
+            process_vars()
+
+        b1 = B(a=10)
+        b2 = B(b1)
+        c = C(b1)
+        
+        nose.tools.assert_not_equal(id(b2.A_), id(b1.A_))
+        nose.tools.assert_not_equal(id(c.A_), id(b1.A_))
+        nose.tools.assert_equal(c.a, 10)
+        nose.tools.assert_equal(b2.a, 10)
+
 
 class TestStateVarsCached(object):
     r"""Test cached reference optimization functionality."""
