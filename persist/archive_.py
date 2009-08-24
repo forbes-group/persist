@@ -108,6 +108,8 @@ import re
 import types
 
 import numpy as np
+import scipy as sp
+import scipy.sparse
 
 import contrib.RADLogic.topsort as topsort
 
@@ -230,10 +232,10 @@ class Archive(object):
             and obj.__class__ is np.ndarray
             and not obj.dtype.hasobject):
             
-            rep = "numpy.fromstring(%r, dtype=%r)"%(
-                obj.tostring(), obj.dtype.str)
+            rep = "numpy.fromstring(%r, dtype=%r).reshape(%s)" % (
+                obj.tostring(), obj.dtype.str, str(obj.shape))
             imports = [('numpy', None, 'numpy')]
-            args = {}
+            args = []
         else:
             popts = np.get_printoptions()
             np.set_printoptions(**(self._numpy_printoptions))
@@ -258,8 +260,23 @@ class Archive(object):
                        ('numpy', 'nan', 'nan'),
                        ('numpy', 'nan', 'NaN'),
                        ('numpy', 'nan', 'NAN')]
-            args = {}
+            args = []
         return (rep, args, imports)
+
+    def _archive_spmatrix(self, obj, env):
+        if (sp.sparse.isspmatrix_csc(obj) or
+            sp.sparse.isspmatrix_csr(obj) or
+            sp.sparse.isspmatrix_bsr(obj)):
+            args = (obj.data, obj.indices, obj.indptr)
+        elif sp.sparse.isspmatrix_dia(obj):
+            args = (obj.data, obj.offsets)
+        else:
+            raise NotImplementedError(obj.__class__.__name__)
+
+        class_name = obj.__class__.__name__
+        imports = [('scipy.sparse', class_name, class_name)]
+        rep = '%s(args, shape=%s)' % (class_name, str(obj.shape))
+        return (rep, [('args', args)], imports)
 
     def _archive_func(self, obj, env):
         r"""Attempt to archive the func."""
@@ -281,6 +298,7 @@ class Archive(object):
         return archive_1_type(obj, env)
         
     _dispatch = {
+        sp.sparse.base.spmatrix:_archive_spmatrix,
         np.ndarray:_archive_ndarray,
         np.ufunc:_archive_func,
         types.BuiltinFunctionType:_archive_func,
@@ -353,7 +371,7 @@ class Archive(object):
         x_1 = 3
         a = 4
         b = 5
-        A = _numpy.fromstring('\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00', dtype='<i4')
+        A = _numpy.fromstring('\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00', dtype='<i4').reshape((3,))
         del _numpy
         try: del __builtins__
         except NameError: pass

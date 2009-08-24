@@ -4,6 +4,8 @@ import math
 import nose.tools
 
 import numpy as np
+import scipy as sp
+import scipy.sparse
 
 import mmf.objects
 import mmf.interfaces as interfaces
@@ -173,6 +175,7 @@ class TestSuite(object):
                    neg_inf=-np.inf,
                    nan=np.nan,
                    array=np.array([1,np.inf,np.nan]),
+                   ndarray=np.array([[1,2],[3,4]]),
                    matrix=np.matrix([[1,2],[3,4]]))
 
         arch = archive.Archive()
@@ -191,6 +194,12 @@ class TestSuite(object):
         nose.tools.assert_equals(a0[0],a1[0])
         nose.tools.assert_equals(a0[1],a1[1])
         nose.tools.assert_true(np.isnan(a1[2]))
+
+        a0 = obj['ndarray']
+        a1 = ld['x']['ndarray']
+        
+        nose.tools.assert_true((a0 == a1).all())
+        nose.tools.assert_true(a0.shape == a1.shape)
 
     @mmf.utils.mmf_test.dec.skipknownfailure
     def test_numpy_types2(self):
@@ -216,6 +225,57 @@ class TestSuite(object):
         nose.tools.assert_equals(a0[0],a1[0])
         nose.tools.assert_equals(a0[1],a1[1])
         nose.tools.assert_true(np.isnan(a1[2]))
+
+    def test_spmatrix_types(self):
+        """Test archiving of scipy.sparse.spmatrix types"""
+        A = np.random.random((2,2))
+        
+        obj = dict(csr=sp.sparse.csr_matrix(A),
+                   csc=sp.sparse.csc_matrix(A),
+                   bsr=sp.sparse.bsr_matrix(A),
+                   dia=sp.sparse.dia_matrix(A))
+
+        arch = archive.Archive()
+        arch.insert(x=obj)
+        s = str(arch)
+        ld = {}
+        exec(s,ld)
+        nose.tools.assert_equals(1,len(ld))
+        x = ld['x']
+        nose.tools.assert_true(sp.sparse.isspmatrix_csr(x['csr']))
+        nose.tools.assert_true(sp.sparse.isspmatrix_csc(x['csc']))
+        nose.tools.assert_true(sp.sparse.isspmatrix_bsr(x['bsr']))
+        nose.tools.assert_true(sp.sparse.isspmatrix_dia(x['dia']))
+        
+        nose.tools.assert_true((A - x['csr'] == 0).all())
+        nose.tools.assert_true((A - x['csc'] == 0).all())
+        nose.tools.assert_true((A - x['bsr'] == 0).all())
+        nose.tools.assert_true((A - x['dia'] == 0).all())
+
+    @mmf.utils.mmf_test.dec.skipknownfailure
+    def test_spmatrix_types2(self):
+        """Test archiving of unsupported scipy.sparse.spmatrix
+        types."""
+        A = np.random.random((10,10))
+        
+        obj = dict(lil=sp.sparse.lil_matrix(A),
+                   dok=sp.sparse.dok_matrix(A),
+                   coo=sp.sparse.coo_matrix(A))
+
+        arch = archive.Archive()
+        arch.insert(x=obj)
+        s = str(arch)
+        ld = {}
+        exec(s,ld)
+        nose.tools.assert_equals(1,len(ld))
+        x = ld['x']
+        nose.tools.assert_true(sp.sparse.isspmatrix_lil(x['lil']))
+        nose.tools.assert_true(sp.sparse.isspmatrix_dok(x['dok']))
+        nose.tools.assert_true(sp.sparse.isspmatrix_coo(x['coo']))
+        
+        nose.tools.assert_true((A - x['lil'] == 0).all())
+        nose.tools.assert_true((A - x['dok'] == 0).all())
+        nose.tools.assert_true((A - x['coo'] == 0).all())
 
     @mmf.utils.mmf_test.dec.skipknownfailure
     def test_mutual_deps(self):
