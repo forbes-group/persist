@@ -14,7 +14,7 @@ Here you could write to a file::
    f.write(s)
    f.close()
 
-And after you could read from the file again:
+And after you could read from the file again::
 
    f = open('file.py')
    s = f.read()
@@ -1276,8 +1276,21 @@ def _unzip(q, n=3):
         return map(list, zip(*q))
 
 def _get_unique(name, names, sep='_'):
-    r"""Return a unique name not in names starting with name.
+    r"""Return a unique name not in `names` starting with `name`.
+
+    Parameters
+    ----------
+    name : str
+       Base name.  Resulting name will start with this.
+    names : [str]
+       List of previously defined names.  The new name will not be in
+       `names`.
+    sep : str
+       The new name will be something like `name + sep + str(i)` where
+       `i` is an integer.
     
+    Examples
+    --------
     >>> names = ['a', 'a.1', 'b']
     >>> _get_unique('c', names)
     'c'
@@ -1289,10 +1302,12 @@ def _get_unique(name, names, sep='_'):
     'b_1'
     >>> _get_unique('a.1', names, sep='.')
     'a.2'
+    >>> _get_unique('a_', ['a_'], sep='_')
+    'a__1'
     """
     # Matches extension for unique names so they can be incremented.
     
-    _extension_re = re.compile(r'(.*)%s(\d?)$'%re.escape(sep))
+    _extension_re = re.compile(r'(.*)%s(\d+)$'%re.escape(sep))
 
     if name not in names:
         uname = name
