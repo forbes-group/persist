@@ -239,6 +239,47 @@ class TestStateVars(object):
         nose.tools.assert_equal(id(b.y), id(l))
         nose.tools.assert_not_equal(id(c.y), id(l))
 
+    def test_copy4a(self):
+        """Test Computed.save."""
+        class A(StateVars):
+            _state_vars = [('a', Required),
+                           ('b', Computed),
+                           ('c', Computed(save=True)),
+                           ('_computed_c', ClassVar)]
+            process_vars()
+            def __init__(self, *v, **kw):
+                self.b = 2*self.a
+                if 'c' not in kw:
+                    self.c = self.a**2
+                    A._computed_c = True
+
+        A._computed_c = False
+        a = A(a=10)
+        nose.tools.ok_(A._computed_c)
+
+        A._computed_c = False
+        b = A(**dict(a.items(archive=True)))
+        nose.tools.ok_(not A._computed_c)
+
+        A._computed_c = False
+        b = copy(a)
+        nose.tools.ok_(not b._computed_c)
+
+        A._computed_c = False
+        rep, args, imps = a.archive_1('obj')
+        d = dict(args)
+        d['A'] = A
+        b = eval(rep, d)
+        nose.tools.ok_(not A._computed_c)
+
+        nose.tools.assert_equal(a.a, 10)
+        nose.tools.assert_equal(a.b, 20)
+        nose.tools.assert_equal(a.c, 100)
+        nose.tools.assert_equal(b.a, 10)
+        nose.tools.assert_equal(b.b, 20)
+        nose.tools.assert_equal(b.c, 100)        
+
+
     def test_copy5(self):
         """Test bug with copy constructing not resetting
         `_constructing` flag."""
