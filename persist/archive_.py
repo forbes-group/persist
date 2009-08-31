@@ -171,20 +171,31 @@ class Archive(object):
        context of `args`, `imports`, and `env`.
     flat : bool, optional
        If `True`, then
-    tostring : bool, optional
+    tostring : True, False, optional
        If `True`, then use :meth:`numpy.ndarray.tostring` to
        format numpy strings.  This is more robust, but not
        human-readable and may be larger.
-    check_in_insert : bool, optional
+    check_in_insert : False, True, optional
        If `True`, then try to make string representation of each
        object on insertion to allow for early catching of errors.
-
+    datafile : None, str, optional
+       If provided, then numpy arrays longer than `array_threshold`
+       are archived in binary to this file.  (See also `pytables`).
+    pytables : True, False, optional
+       If `True` and `datafile` is provided, then use PyTables to
+       store the binary data.
+    array_threshold : int, optional
+       If `datafile` is provided, then numpy arrays with more than
+       this many elements will be stored in the data file.
+       
     Notes
     -----
     A required invariant is that all `uname` be unique.
     """
     def __init__(self, flat=True, tostring=True,
-                 check_on_insert=False):
+                 check_on_insert=False,
+                 datafile=None, pytables=True,
+                 array_threshold=50):
         self.tostring = tostring
         self.flat = flat
         self.imports = []
@@ -198,6 +209,10 @@ class Archive(object):
                                     'precision': 16,
                                     'nanstr': 'NaN'}
         self.check_on_insert = check_on_insert
+        self.datafile = datafile
+        self.pytables = pytables
+        self.array_threshold = array_threshold
+        
 
     def archive_1(self, obj, env):
         r"""Return `(rep, args, imports)` where `obj` can be reconstructed
@@ -228,7 +243,28 @@ class Archive(object):
         return archive_1_repr(obj, env)
 
     def _archive_ndarray(self, obj, env):
-        if (self.tostring
+        """Archival of numpy arrays."""
+        if (self.datafile is not None
+            and self.array_threshold < np.prod(obj.shape)):
+            # Data should be archived to a data file.
+            if self.pytables:
+                import tables
+                f = tables.openFile(self.datafile, 'a')
+                name = 'array_%i'
+                i = 0
+                while (name % (i,)) in f.root._v_children.keys():
+                    i += 1
+                name = name %(i,)
+                f.createArray(f.root, name, obj)
+                f.close()
+                rep = (("(lambda t: (t.root.%s.read(), t.close())[0])"
+                        + "(tables.openFile(%r,'r'))") %
+                       (name, self.datafile))
+                imports = [('tables', None, 'tables')]
+                args = []
+            else:
+                raise NotImplementedError    
+        elif (self.tostring
             and obj.__class__ is np.ndarray
             and not obj.dtype.hasobject):
             
