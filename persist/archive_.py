@@ -91,8 +91,9 @@ The idea is to save state in a file that looks like the following::
      and initialization.  (Could also allow a special method to be called
      to restore the object such as `restore()`.)
 """
-__all__  = ['Archive', 'restore', 'ArchiveError', 'DuplicateError']
+__all__  = ['Archive', 'DataSet', 'restore', 'ArchiveError', 'DuplicateError']
 
+import os
 import sys
 import string
 import parser
@@ -214,6 +215,10 @@ class Archive(object):
         self.array_threshold = array_threshold
         
 
+    def names(self):
+        r"""Return list of unique names in the archive."""
+        return [k[0] for k in self.arch]
+    
     def archive_1(self, obj, env):
         r"""Return `(rep, args, imports)` where `obj` can be reconstructed
         from the string `rep` evaluated in the context of `args` with the
@@ -1340,12 +1345,17 @@ def _get_unique(name, names, sep='_'):
     'a.2'
     >>> _get_unique('a_', ['a_'], sep='_')
     'a__1'
+    >>> _get_unique('', [])
+    '_1'
+    >>> _get_unique('', ['_1', '_2'])
+    '_3'
     """
     # Matches extension for unique names so they can be incremented.
     
     _extension_re = re.compile(r'(.*)%s(\d+)$'%re.escape(sep))
 
-    if name not in names:
+    
+    if name and name not in names:
         uname = name
     else:
         match = _extension_re.match(name)
@@ -1483,6 +1493,131 @@ class AST(object):
 
         _descend(self.ast)
         return sorted(names)
+
+class DataSet(object):
+    r"""Stores data with associated keys in a module that can be
+    imported later to retrieve the data.  The keys are all loaded at
+    import but the data is only loaded when required.
+    
+    Examples
+    --------
+    >>> nxs = [10,20]
+    >>> mus = [1,2]
+    >>> dat = dict([((nx, mu), np.ones(nx)*mu)
+    ...             for mu in mus
+    ...             for nx in nxs])
+    >>> ds = DataSet('test1')
+    >>> for (nx, mu) in dat:
+    ...     ds.insert(dat[(nx, mu)], (nx, mu))
+
+    >>> import test1
+    >>> test1.keys
+    set(['x_1', 'x_2', 'x_3', 'x_4'])
+    >>> nx, mu = test1._1            # Get info: already loaded
+    >>> x = test1.load('_1')         # Data loaded only at this point.
+    >>> x.shape[0] == nx
+    True
+    >>> x[0] == mu
+    True
+    >>> del x                           # Data freed as soon as GC works.
+    >>> test1._dataset.insert()
+    """
+    _init__str = """
+import mmf.archive
+
+keys = %(keys)s
+__d = {}
+exec(%(info_arch)s, __d)
+%(assign)s
+dataset = mmf.archive.DataSet(%(args)s, _reload=True)
+dataset.info_arch = mmf.archive.Archive(datafile='data.hd5')
+dataset.info_arch.insert(**__d)
+dataset.data_reps = %(data_reps)s
+del __d
+del mmf
+
+load = dataset.load
+
+""" 
+    def __init__(self, module_name, path="",
+                 verbose=False, _reload=False):
+        self.verbose = verbose
+        if _reload:
+            self.module_name = module_name
+            self.path = path
+            return
+        
+        mod = None
+        try:
+            mod = __import__(module_name)
+        except ImportError:
+            pass
+
+        if mod is not None:
+            raise ValueError(
+                "Module module_name=%s already exists." % (module_name,) +
+                "Please choose a unique name.")
+
+        mod_dir = os.path.join(path, module_name)
+        if os.path.exists(mod_dir):
+            raise ValueError(
+                "Directory %s exists.  Please choose a unique location." % 
+                (mod_dir,))
+        else:
+            if self.verbose:
+                print("Making directory %s for output." % (mod_dir,))
+            os.makedirs(mod_dir)
+
+        self.module_name = module_name
+        self.path = path
+        self.info_arch = mmf.archive.Archive(
+            datafile=os.path.join(path, 'data.hd5'))
+        self.data_reps = {}
+
+        self._write()
+
+    def _write(self):
+        r"""Make the module `__init__.py` file."""
+        init_str = (self._init__str %
+                    dict(keys=repr(self.keys),
+                         args=",".join([repr(self.module_name),
+                                        "path=%r" % (self.path,),
+                                        "verbose=%r" % (self.verbose)]),
+                         info_arch=repr(str(self.info_arch)),
+                         assign="\n".join("%s = __d[%s]" % (name,
+                                                            repr(name))
+                                          for name in self.keys),
+                         data_reps=repr(self.data_reps)))
+
+        mod_dir = os.path.join(self.path, self.module_name)
+        f = open(os.path.join(mod_dir, '__init__.py'), 'w')
+        f.write(init_str)
+        f.close()
+
+    @property
+    def keys(self):
+        return self.info_arch.names()
+    
+    def insert(self, data, info=None, name="x_1"):
+        r"""Store `info` and `data` in the archive under `name`"""
+        name = mmf.archive.archive_._get_unique(name, self.keys)
+        name = self.info_arch.insert(**{name: info})
+        arch = mmf.archive.Archive(
+            datafile=os.path.join(
+            self.path, self.module_name, 'data_%s.hd5' % (name,)))
+
+        data_name = arch.insert(**{name: data})
+        self.data_reps[name] = (data_name, str(arch))
+        self._write()    
+
+    def load(self, name):
+        __d = {}
+        data_name, rep = self.data_reps[name]
+        exec(rep, __d)
+        res = __d[data_name]
+        del __d
+        return res
+
 
 # Testing
 from mmf.utils.mmf_test import run

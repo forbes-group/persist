@@ -339,6 +339,22 @@ class TestSuite(object):
         nose.tools.assert_equals(F.f(2), ld['f'](2))
         nose.tools.assert_equals(F.f(2), ld['g'](F, 2))
 
+class DocTests(object):    
+    def regression_1(self):
+        """Regression Test 1.
+        >>> a = archive.Archive()
+        >>> a.insert(x_1=None)
+        'x_1'
+        >>> a.insert(x_2=None)
+        'x_2'
+        >>> print a
+        x_1 = None
+        x_2 = None
+        try: del __builtins__
+        except NameError: pass
+        """
+        
+        
 class TestPerformance(object):
     """Tests that could illustrate bad performance."""
     def test_1(self):
