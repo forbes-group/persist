@@ -408,11 +408,11 @@ class Archive(object):
         'A'
         >>> print a
         import numpy as _numpy
-        x = 2
         x_1 = 3
         a = 4
-        b = 5
         A = _numpy.fromstring('\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00', dtype='<i4').reshape((3,))
+        x = 2
+        b = 5
         del _numpy
         try: del __builtins__
         except NameError: pass
@@ -437,8 +437,8 @@ class Archive(object):
           ('numpy', 'nan', '_nan')],
          [('c', '_numpy.array([ 1.+0.j,  2.+3.j,  3.+0.j])'),
           ('cc', '[c, c, [3]]'),
-          ('x', '2'),
-          ('A', '_numpy.array([1, 2, 3])')])
+          ('A', '_numpy.array([1, 2, 3])'),
+          ('x', '2')])
         """
         if env is None:
             env = {}
@@ -1014,6 +1014,8 @@ class Node(object):
 class Graph(object):
     r"""Dependency graph.  Also manages imports.
 
+    This is a graph of objects in memory: these are identified by
+    their python :func:`id`.
     """
     def __init__(self, objects, archive_1):
         r"""Initialize the dependency graph with some reserved
@@ -1039,7 +1041,7 @@ class Graph(object):
                 from module import iname as uiname
         """
         self.nodes = {}
-        self.roots = []
+        self.roots = set([])
         self.envs = {}
         self.imports = []
         self.names = [name for (name, obj, env) in objects]
@@ -1048,7 +1050,7 @@ class Graph(object):
         # First insert the root nodes
         for (name, obj, env) in objects:
             node = self._new_node(obj, env, name)
-            self.roots.append(node.id)
+            self.roots.add(node.id)
             self.envs[node.id] = env
             self.nodes[node.id] = node
 
@@ -1506,21 +1508,29 @@ class DataSet(object):
     >>> dat = dict([((nx, mu), np.ones(nx)*mu)
     ...             for mu in mus
     ...             for nx in nxs])
-    >>> ds = DataSet('test1')
+    >>> import tempfile                 # Make a unique temporary module
+    >>> t = tempfile.mkdtemp(dir='.')
+    >>> os.rmdir(t)
+    >>> modname = t[2:]
+    >>> ds = DataSet(modname)
     >>> for (nx, mu) in dat:
     ...     ds.insert(dat[(nx, mu)], (nx, mu))
 
-    >>> import test1
-    >>> test1.keys
-    set(['x_1', 'x_2', 'x_3', 'x_4'])
-    >>> nx, mu = test1._1            # Get info: already loaded
-    >>> x = test1.load('_1')         # Data loaded only at this point.
+    >>> mod1 = __import__(modname)
+    >>> mod1.keys
+    ['x_1', 'x_2', 'x_3', 'x_4']
+    >>> nx, mu = mod1.x_1            # Get info: already loaded
+    >>> x = mod1.load('x_1')         # Data loaded only at this point.
     >>> x.shape[0] == nx
     True
     >>> x[0] == mu
     True
     >>> del x                           # Data freed as soon as GC works.
-    >>> test1._dataset.insert()
+    >>> mod1.dataset.insert(np.ones(1000), name='y')
+    >>> mod1 = reload(mod1);
+    >>> mod1.keys
+    ['x_4', 'x_2', 'x_3', 'x_1', 'y']
+    >>> import shutil; shutil.rmtree('./' + modname)
     """
     _init__str = """
 import mmf.archive
