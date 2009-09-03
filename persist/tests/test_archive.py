@@ -348,8 +348,8 @@ class DocTests(object):
         >>> a.insert(x_2=None)
         'x_2'
         >>> print a
-        x_1 = None
         x_2 = None
+        x_1 = x_2
         try: del __builtins__
         except NameError: pass
         """

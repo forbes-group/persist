@@ -83,15 +83,17 @@ The idea is to save state in a file that looks like the following::
      environment locally before each rep.   This would be a pain but
      not impossible.
    - It would be nice to be able to use `import A.B` and then just use
-     the name `A.B.x`, `A.B.y` etc.  However, the name `A` could clash with
-     other symbols, and it cannot be renamed (i.e. `import A_1.B` would
-     not work).  To avoid name clashes, we always use either `import A.B as
-     B` or the `from A.B import x` forms which can be renamed.
+     the name `A.B.x`, `A.B.y` etc.  However, the name `A` could clash
+     with other symbols, and it cannot be renamed (i.e. `import A_1.B`
+     would not work).  To avoid name clashes, we always use either
+     `import A.B as B` or the `from A.B import x` forms which can be
+     renamed.
    - Maybe allow rep's to be suites for objects that require construction
      and initialization.  (Could also allow a special method to be called
      to restore the object such as `restore()`.)
 """
-__all__  = ['Archive', 'DataSet', 'restore', 'ArchiveError', 'DuplicateError']
+__all__  = ['Archive', 'DataSet', 'restore', 'ArchiveError',
+            'DuplicateError']
 
 import os
 import sys
@@ -170,6 +172,9 @@ class Archive(object):
        List of `(uname, obj, env)` where `obj` is the object, which
        can be rescontructed from the string `rep` evaluated in the
        context of `args`, `imports`, and `env`.
+    ids : dict
+       Dictionary mapping names to id's.  If the name corresponds to a
+       module, then this is `None`.
     flat : bool, optional
        If `True`, then
     tostring : True, False, optional
@@ -201,6 +206,8 @@ class Archive(object):
         self.flat = flat
         self.imports = []
         self.arch = []
+        self.ids = {}
+
         self._section_sep = ""  # string to separate the sections
         self._numpy_printoptions = {'infstr': 'Inf',
                                     'threshold': np.inf,
@@ -213,7 +220,6 @@ class Archive(object):
         self.datafile = datafile
         self.pytables = pytables
         self.array_threshold = array_threshold
-        
 
     def names(self):
         r"""Return list of unique names in the archive."""
@@ -356,11 +362,11 @@ class Archive(object):
         return _get_unique(name, names)
 
     def insert(self, env=None, **kwargs):
-        r"""`res = insert(name=obj)` or `res = insert(obj)`: Add the `obj` to
-        archive and return a list of `(uname, obj)` pairs.
+        r"""`res = insert(name=obj)` or `res = insert(obj)`: Add the
+        `obj` to archive and return a list of `(uname, obj)` pairs.
 
-        If `self.check_on_insert`, then try generating rep (may raise an
-        exception).
+        If `self.check_on_insert`, then try generating rep (may raise
+        an exception).
 
         If name already exists in the archive, then a DuplicateError
         exception is thrown.
@@ -483,7 +489,8 @@ class Archive(object):
                 
             assert(ind is not None)
             uname, obj, env = self.arch[ind]
-            names.append(uname)
+            names.append(uname)            
+            self.ids[uname] = id(obj)
 
         if 1 < len(names):
             return names
@@ -627,6 +634,13 @@ class Archive(object):
                       for id_ in graph.order
                       for node in [graph.nodes[id_]]]
 
+        # Add any leftover names (aliases):
+        names_reps.extend([
+            (name, node.name)
+            for name in self.ids
+            if name not in zip(*names_reps)[0]
+            for node in [graph.nodes[self.ids[name]]]])
+
         return (graph.imports, names_reps)
 
     def __repr__(self):
@@ -646,17 +660,22 @@ class Archive(object):
             if iname is None:
                 import_lines.append(
                     "import %s as %s"%(module, uiname))
-                del_lines.append("del %s"%uiname)
+                del_lines.append("del %s" % (uiname,))
             elif iname == uiname or uiname is None: # pragma: no cover
                 # Probably never happens because uinames start with _
                 import_lines.append(
                     "from %s import %s"%(module, uiname))
-                del_lines.append("del %s"%uiname)
+                del_lines.append("del %s" % (uiname,))
             else:
                 import_lines.append(
                     "from %s import %s as %s"%(module, iname, uiname))
-                del_lines.append("del %s"%uiname)
+                del_lines.append("del %s" % (uiname,))
 
+        temp_names = [name for (name, rep) in defs
+                      if name.startswith('_')]
+        if temp_names:
+            del_lines.append("del %s" % (",".join(temp_names),))
+                                     
         del_lines.extend([
                 "try: del __builtins__",
                 "except NameError: pass"])
@@ -1271,6 +1290,7 @@ class Graph(object):
        _l_1 = ['G']
        _l_5 = ['F']
        A = [[_l_5], [_l_5, [_l_1], [_l_1]]]
+       del _l_1,_l_5
        try: del __builtins__
        except NameError: pass
        
@@ -1288,6 +1308,7 @@ class Graph(object):
        _l_1 = ['G']
        B = [_l_5]
        A = [B, [_l_5, [_l_1], [_l_1]]]
+       del _l_5,_l_1
        try: del __builtins__
        except NameError: pass
        """
