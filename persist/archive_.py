@@ -1648,8 +1648,3 @@ load = dataset.load
         res = __d[data_name]
         del __d
         return res
-
-
-# Testing
-from mmf.utils.mmf_test import run
-run(__name__, __file__, locals())
