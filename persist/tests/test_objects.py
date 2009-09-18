@@ -930,7 +930,7 @@ class TestCoverage(object):
         """Test state var `('a', )`."""
         sv = mmf.objects.objects_._normalize_state_vars([('a',)])
         nose.tools.assert_equal(sv, [
-                ('a', NotImplemented, mmf.objects.objects_._no_description)])
+                ('a', NotImplemented, mmf.objects.objects_._NO_DESCRIPTION)])
 
     @nose.tools.raises(TypeError)
     def test_normalize_state_vars_2(self):
