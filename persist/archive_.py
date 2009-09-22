@@ -1263,7 +1263,7 @@ class Graph(object):
        except NameError: pass
 
        If we now make F and G not builtin, then we will not be able to
-       reduce them
+       reduce them::
 
                                 A
                                / \
@@ -1295,6 +1295,7 @@ class Graph(object):
        except NameError: pass
        
        If we explicitly add a node, then it can no longer be reduced:
+       
        >>> a.insert(B=B)
        'B'
        >>> g = Graph(a.arch, a.archive_1)

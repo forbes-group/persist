@@ -74,6 +74,8 @@ except NameError:
 def int2bin(i, n):
     """Convert decimal integer i to n-bit binary number (string).
 
+    Examples
+    --------
     >>> int2bin(0, 8)
     '00000000'
 
@@ -110,6 +112,8 @@ def bin2int(bin_string):
     
     Note: Python > v2 has int(bin_string, 2)
 
+    Examples
+    --------
     >>> bin2int('1111')
     15
 
@@ -133,6 +137,8 @@ def bin2int(bin_string):
 def reverse(input_string):
     """Reverse a string. Useful for strings of binary numbers.
 
+    Examples
+    --------
     >>> reverse('abc')
     'cba'
 
@@ -145,6 +151,8 @@ def reverse(input_string):
 def transpose(matrix):
     """Transpose a list of lists.
 
+    Examples
+    --------
     >>> transpose([['a', 'b', 'c'], ['d', 'e', 'f'], ['g', 'h', 'i']])
     [['a', 'd', 'g'], ['b', 'e', 'h'], ['c', 'f', 'i']]
 
@@ -168,11 +176,14 @@ def polygon_area(points_list, precision=100):
 
     Return the area of the polygon as a positive float. 
 
-    Arguments:
-    points_list -- list of point tuples [(x0, y0), (x1, y1), (x2, y2), ...]
+    Parameters
+    ----------
+    points_list : list of point tuples [(x0, y0), (x1, y1), (x2, y2), ...]
                    (Unclosed polygons will be closed automatically.
-    precision -- Internal arithmetic precision (integer arithmetic).
+    precision : Internal arithmetic precision (integer arithmetic).
 
+    Examples
+    --------
     >>> polygon_area([(0, 0), (0, 1), (1, 1), (1, 2), (2, 2), (2, 0), (0, 0)])
     3.0
 
@@ -213,6 +224,8 @@ def timestamp():
 def pt2str(point):
     """Return prettier string version of point tuple.
 
+    Examples
+    --------
     >>> pt2str((1.8, 1.9))
     '(1.8, 1.9)'
 
@@ -223,15 +236,17 @@ def pt2str(point):
 def gcf(a, b, epsilon=1e-16):
     """Return the greatest common factor of a and b, using Euclidean algorithm.
 
-    Arguments:
-    a, b -- two numbers
-            If both numbers are integers return an integer result, 
-            otherwise return a float result.
-    epsilon -- floats less than this magnitude are considered to be zero
-               (default: 1e-16)
+    Parameters
+    ----------
+    a, b : numbers
+       If both numbers are integers return an integer result, 
+       otherwise return a float result.
+    epsilon : float
+       Must be less than this magnitude are considered to be zero
+       (default: 1e-16)
 
-    Examples:
-
+    Examples
+    --------
     >>> gcf(12, 34)
     2
 
@@ -260,11 +275,16 @@ def gcf(a, b, epsilon=1e-16):
 def lcm(a, b, precision=None):
     """Return the least common multiple of a and b, using the gcf function.
 
-    Arguments:
-    a, b -- two numbers. If both are integers return an integer result, 
-            otherwise a return a float result.
-    precision -- scaling factor if a and/or b are floats.
+    Parameters
+    ----------
+    a, b : two numbers.
+       If both are integers return an integer result, 
+       otherwise a return a float result.
+    precision : float
+       scaling factor if a and/or b are floats.
 
+    Examples
+    --------
     >>> lcm(21, 6)
     42
 
@@ -295,6 +315,8 @@ def permutations(input_list):
 
     Note: This is a recursive function.
 
+    Examples
+    --------
     >>> perms = permutations(['a', 'b', 'c'])
     >>> perms.sort()
     >>> for perm in perms:
@@ -328,7 +350,9 @@ def permutations(input_list):
 
 def reduce_fraction(fraction):
     """Reduce fraction tuple to simplest form. fraction=(num, denom)
-    
+
+    Examples
+    --------
     >>> reduce_fraction((14, 7))
     (2, 1)
 
@@ -408,7 +432,8 @@ def nice_units(value, dp=0, sigfigs=None, suffix='', space=' ',
                use_extra_prefixes=False, use_full_name=False, mode='si'):
     """Return value converted to human readable units eg milli, micro, etc.
 
-    Arguments:
+    Parameters
+    ----------
     value -- number in base units
     dp -- number of decimal places to display (rounded)
     sigfigs -- number of significant figures to display (rounded)
@@ -429,6 +454,8 @@ def nice_units(value, dp=0, sigfigs=None, suffix='', space=' ',
     Binary prefixes based on:
     http://physics.nist.gov/cuu/Units/binary.html
 
+    Examples
+    --------
     >>> nice_units(2e-11)
     '20 p'
 
@@ -528,12 +555,15 @@ def uniquify(seq, preserve_order=False):
     seen = set()
     do_something(x for x in seq if x not in seen or seen.add(x))
 
-    Arguments:
+    Parameters
+    ----------
     seq -- sequence
     preserve_order -- if not set the order will be arbitrary
                       Using this option will incur a speed penalty.
                       (default: False)
 
+    Examples
+    --------
     Example showing order preservation:
 
     >>> uniquify(['a', 'aa', 'b', 'b', 'ccc', 'ccc', 'd'], preserve_order=True)
@@ -584,8 +614,10 @@ unique = uniquify
 def reverse_dict(d):
     """Reverse a dictionary so the items become the keys and vice-versa.
 
-    Note: The results will be arbitrary if the items are not unique.
+    .. note:: The results will be arbitrary if the items are not unique.
 
+    Examples
+    --------
     >>> d = reverse_dict({'a': 1, 'b': 2})
     >>> d_items = d.items()
     >>> d_items.sort()
@@ -691,6 +723,8 @@ def float_range(start, stop=None, step=None):
 def find_common_fixes(s1, s2):
     """Find common (prefix, suffix) of two strings.
 
+    Examples
+    --------
     >>> find_common_fixes('abc', 'def')
     ('', '')
 
@@ -735,6 +769,8 @@ def find_common_fixes(s1, s2):
 def is_rotated(seq1, seq2):
     """Return true if the first sequence is a rotation of the second sequence.
 
+    Examples
+    --------
     >>> seq1 = ['A', 'B', 'C', 'D']
     >>> seq2 = ['C', 'D', 'A', 'B']
     >>> int(is_rotated(seq1, seq2))
@@ -779,10 +815,13 @@ def getmodule(obj):
 
     Note: Use inspect.getmodule instead.
 
-    Arguments:
-    obj -- python obj, generally a class or a function
+    Parameters
+    ----------
+    obj : python obj
+       generally a class or a function
 
-    Examples:
+    Examples
+    --------
     
     A function:
     >>> module = getmodule(random.choice)
@@ -842,13 +881,14 @@ def getmodule(obj):
 def round_grid(value, grid, mode=0):
     """Round off the given value to the given grid size.
 
-    Arguments:
-    value -- value to be roudne
-    grid -- result must be a multiple of this
-    mode -- 0 nearest, 1 up, -1 down
+    Parameters
+    ----------
+    value : value to be roudne
+    grid : result must be a multiple of this
+    mode : 0 nearest, 1 up, -1 down
 
-    Examples:
-    
+    Examples
+    --------
     >>> round_grid(7.5, 5)
     10
 
