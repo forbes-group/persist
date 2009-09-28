@@ -541,6 +541,45 @@ class TestStateVars(object):
                 raise self_.HookException()
         a = A()
 
+    def test__pre_post_hook_process_vars(self_):
+        """Test _pre_hook_process_vars and _post_hook_process_vars.
+
+        This might be used to set class variables based on the defined
+        class properties.
+        """
+        class A(StateVars):
+            _state_vars = [
+                ('has_F', ClassVar(False), "True if F is redefined.")]
+            process_vars()
+
+            def F(self):
+                raise NotImplementedError
+
+            @classmethod
+            def _pre_hook_process_vars(cls):
+                # This is called before the vars are processed.
+                nose.tools.assert_false('has_F' in cls.__dict__)
+
+            @classmethod
+            def _post_hook_process_vars(cls, results, _F=F):
+                # This is called before the vars are processed.
+                nose.tools.ok_('has_F' in results)
+                if cls.F.im_func is not _F:
+                    results['has_F'] = True
+
+        class B(A):
+            process_vars()
+            pass
+
+        class C(A):
+            process_vars()            
+            def F(self):
+                return 1
+
+        nose.tools.assert_false(A.has_F)
+        nose.tools.assert_false(B.has_F)
+        nose.tools.assert_true(C.has_F)
+
     @mmf.utils.mmf_test.dec.skipknownfailure
     def test_get(self):
         """Test for uneeded getattr calls."""
@@ -979,6 +1018,15 @@ class TestCoverage(object):
             process_vars()
         b = B()
 
+    def test_no_nameclash_1(self):
+        """This should not raise a name-clash error but did because of
+        a bug."""
+        class A(StateVars):
+            _state_vars = [('a', ClassVar(1))]
+            process_vars()
+        class B(A):
+            process_vars()
+        
         
     @nose.tools.raises(ValueError)
     def test_normalize_state_vars_5(self):
