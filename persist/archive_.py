@@ -119,6 +119,11 @@ import contrib.RADLogic.topsort as topsort
 import mmf.utils
 import mmf.interfaces as interfaces
 
+try:
+    import tables
+except ImportError:
+    from __builtin__ import NotImplemented as tables
+
 class ArchiveError(Exception):
     r"""Archiving error."""
 
@@ -221,6 +226,11 @@ class Archive(object):
         self.pytables = pytables
         self.array_threshold = array_threshold
 
+        if pytables and tables is NotImplemented:
+            raise ArchiveError(
+                "PyTables requested but could not be imported.")
+        
+
     def names(self):
         r"""Return list of unique names in the archive."""
         return [k[0] for k in self.arch]
@@ -258,8 +268,7 @@ class Archive(object):
         if (self.datafile is not None
             and self.array_threshold < np.prod(obj.shape)):
             # Data should be archived to a data file.
-            if self.pytables:
-                import tables
+            if self.pytables and tables is not NotImplemented:
                 f = tables.openFile(self.datafile, 'a')
                 name = 'array_%i'
                 i = 0
