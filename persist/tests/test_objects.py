@@ -23,7 +23,7 @@ class A(mmf.objects.Archivable):
 
 class WithProperty(StateVars):
     """Test required attributes specified by proprties."""
-    _ignore_name_clash = ['x']
+    _ignore_name_clash = set(['x'])
     _state_vars = [('x', Required),
                    ('_x', Computed)]
     process_vars()
@@ -657,6 +657,21 @@ class TestStateVars(object):
         b = B()
         b.x = 2
         nose.tools.assert_equal(b._x, 2)
+
+    @nose.tools.raises(ValueError)
+    def test_invalid_nodeps1(self):
+        """Test invalid _nodeps."""
+        class A(StateVars):
+            _nodeps = [('x', 1)]
+            process_vars()
+
+    @nose.tools.raises(ValueError)
+    def test_invalid_nodeps2(self):
+        """Test _nodeps missing in _vars."""
+        class A(StateVars):
+            _state_vars = []
+            _nodeps = ['x']
+            process_vars()
         
 class TestStateVars1(object):
     """Test StateVars processing without explicit calls to
@@ -721,7 +736,7 @@ class TestStateVars2(object):
             self.b = self.a*self.a
 
     class BB(AA):
-        _ignore_name_clash = ['a']
+        _ignore_name_clash = set(['a'])
         _state_vars = [('x', Required),
                        ('a', Computed)]
         process_vars()
