@@ -77,6 +77,9 @@ class MyTuple(tuple):
 
 class TestSuite(object):
     """Test the functionality of the archive module."""
+    def setUp(self):
+        np.random.seed(3)
+        
     def _test_archiving(self,obj):
         """Fail if obj does not acrhive properly."""
         arch = archive.Archive()
@@ -282,7 +285,7 @@ class TestSuite(object):
         """Test non-reduction of non-simple mutual dependence."""
         x = [1]
         y = [2]
-        z = [x,y,x]
+        z = [x, y, x]
         arch = archive.Archive()
         arch.insert(z=z)
         s = str(arch)
@@ -353,7 +356,17 @@ class DocTests(object):
         try: del __builtins__
         except NameError: pass
         """
+    def regression_2(self):
+        r"""Here is a regression test for an old bug.  Sometimes the member
+        `_` of the `__builtins__` model can have an array in it which
+        causes tests like `if obj in vals` to fail.  Fix is to use
+        `id()`.
         
+        >>> import __builtin__
+        >>> __builtin__._ = np.array([1,2])
+        >>> archive.archive_1_type(type(None), {})
+        ('NoneType', [], [('types', 'NoneType', 'NoneType')])
+        """
         
 class TestPerformance(object):
     """Tests that could illustrate bad performance."""

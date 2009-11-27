@@ -70,7 +70,17 @@ The idea is to save state in a file that looks like the following::
    If you just execute the code, it will attempt to delete the
    '__builtins__' module (so as not to clutter the dictionary) and may
    render the interpreter unusable!
-   
+
+Large Archives
+--------------
+For small amounts of data, the string representation of
+:class:`Archive` is usually sufficient.  For large amounts of binary
+data, however, this
+
+is extremely inefficient.  In this case, a separate archive format is
+used where the archive is turned into a module that contains a binary
+data-file.  
+
 .. todo::
    - Graph reduction occurs for nodes that have more than one parent.
      This does not consider the possibility that a single node may
@@ -92,6 +102,7 @@ The idea is to save state in a file that looks like the following::
      and initialization.  (Could also allow a special method to be called
      to restore the object such as `restore()`.)
 """
+from __future__ import division
 __all__  = ['Archive', 'DataSet', 'restore', 'ArchiveError',
             'DuplicateError']
 
@@ -171,6 +182,12 @@ class Archive(object):
     states of objects and contains methods to convert objects to
     strings for archival.
 
+    A set of options is provided that allow large pieces of data to be
+    stored externally.  These pieces of data (:mod:`numpy` arrays)
+    will need to be stored at the time of archival and restored prior
+    to executing the archival string.  (See :attr:`array_threshold`
+    and :attr:`data`).
+
     Attributes
     ----------
     arch : list
@@ -189,24 +206,116 @@ class Archive(object):
     check_in_insert : False, True, optional
        If `True`, then try to make string representation of each
        object on insertion to allow for early catching of errors.
+    data : dict
+       This is a dictionary of objects that need to be explicitly
+       stored outside of the string archive.  The archival string
+       returned by :meth:`__str__` should be evaluated in an
+       environment with a dictionary-like object with the name
+       :attr:`data_name`  containing this dictionary.
+    array_threshold : int, optional
+       Numpy arrays with more than this many elements will not be
+       archived.  Instead, they will be stored in :attr:`data` and
+       will need to be stored externally.  (If this is `inf`, then all
+       data will be stored the string representation of the archive.)
+    data_name : str, optional
+       This is the name of the dictionary-like object containing
+       external objects.  This need not be provided, but it will not
+       be allowed as a valid name for other data in the archive.
     datafile : None, str, optional
-       If provided, then numpy arrays longer than `array_threshold`
-       are archived in binary to this file.  (See also `pytables`).
+       If provided, then numpy arrays longer than
+       :attr:`array_threshold` are archived in binary to this file.
+       (See also `pytables`).  Otherwise, they will be stored in
+       :attr:`data` which must be manually archived and restored
+       externally.  The data will be written when
+       :meth:`make_persistent` is called.
     pytables : True, False, optional
        If `True` and `datafile` is provided, then use PyTables to
        store the binary data.
-    array_threshold : int, optional
-       If `datafile` is provided, then numpy arrays with more than
-       this many elements will be stored in the data file.
+    backup_data : bool
+       If `True` and :attr:`datafile` already exists, then a backup of
+       the data will first be made with an extension `'.bak'` or
+       `'_#.bak'` if backups already exists.  Otherwise, the file will
+       be overwritten.  (Actually, a backup will always be made, but
+       if the creation of the new file is successful, then the backup
+       will be deleted if this is `False`.)
        
     Notes
     -----
     A required invariant is that all `uname` be unique.
+
+    Examples
+    --------
+    First we make a simple archive as a string (no external storage)
+    and then restore it.
+
+    >>> arch = Archive()
+    >>> arch.insert(x=4)
+    'x'
+
+    We can include functions and classes: These are stored by their
+    names and imports.
+    
+    >>> arch.insert(f=np.sin)
+    'f'
+    
+    Here we include a list and a dictionary containing that list.  The
+    resulting archive will only have one copy of the list since it is
+    referenced.
+
+    >>> l0 = ['a', 'b']
+    >>> l = [1, 2, 3, l0]
+    >>> d = dict(l0=l0, l=l, s='hi')    
+    >>> arch.insert(d=d, l=l)
+    ['d', 'l']
+
+    Presently the archive is just a graph of objects and string
+    representations of the objects that have been directly inserted.
+    For instance, `l0` above has not been directly included, so if it
+    were to change at this point, this would affect the archive.
+
+    To make the archive persistent so there is no dependence on
+    external objects, we call :meth:`make_persistent`.  This would
+    also save any external data as we shall see later.
+
+    >>> _tmp = arch.make_persistent()
+    
+    This is not strictly needed as it will be called implicitly by the
+    following call to :meth:`__str__` which returns the string
+    representation.  (Note also that this will thus be called whenever
+    the archive is printed.)
+
+    >>> s = str(arch)
+    >>> print s
+    from numpy import sin as _sin
+    from __builtin__ import dict as _dict
+    _l_2 = ['a', 'b']
+    l = [1, 2, 3, _l_2]
+    d = _dict([('s', 'hi'), ('l', l), ('l0', _l_2)])
+    f = _sin
+    x = 4
+    del _sin
+    del _dict
+    del _l_2
+    try: del __builtins__
+    except NameError: pass
+
+    Now we can restore this by executing the string.  This should be
+    done in a dictionary environment.
+
+    >>> res = {}
+    >>> exec(s, res)
+    >>> res['l']
+    [1, 2, 3, ['a', 'b']]
+    >>> res['d']['l0']
+    ['a', 'b']
+
+    Note that the shared list here is the same list:
+    >>> id(res['l'][3]) == id(res['d']['l0'])
+    True
     """
     def __init__(self, flat=True, tostring=True,
-                 check_on_insert=False,
-                 datafile=None, pytables=True,
-                 array_threshold=50):
+                 check_on_insert=False, array_threshold=np.inf,
+                 datafile=None, pytables=True):
         self.tostring = tostring
         self.flat = flat
         self.imports = []
@@ -222,6 +331,7 @@ class Archive(object):
                                     'precision': 16,
                                     'nanstr': 'NaN'}
         self.check_on_insert = check_on_insert
+        self.data = {}
         self.datafile = datafile
         self.pytables = pytables
         self.array_threshold = array_threshold
@@ -229,7 +339,6 @@ class Archive(object):
         if pytables and tables is NotImplemented:
             raise ArchiveError(
                 "PyTables requested but could not be imported.")
-        
 
     def names(self):
         r"""Return list of unique names in the archive."""
@@ -265,25 +374,17 @@ class Archive(object):
 
     def _archive_ndarray(self, obj, env):
         """Archival of numpy arrays."""
-        if (self.datafile is not None
-            and self.array_threshold < np.prod(obj.shape)):
+        if self.array_threshold < np.prod(obj.shape):
             # Data should be archived to a data file.
-            if self.pytables and tables is not NotImplemented:
-                f = tables.openFile(self.datafile, 'a')
-                name = 'array_%i'
-                i = 0
-                while (name % (i,)) in f.root._v_children.keys():
-                    i += 1
-                name = name %(i,)
-                f.createArray(f.root, name, obj)
-                f.close()
-                rep = (("(lambda t: (t.root.%s.read(), t.close())[0])"
-                        + "(tables.openFile(%r,'r'))") %
-                       (name, self.datafile))
-                imports = [('tables', None, 'tables')]
-                args = []
-            else:
-                raise NotImplementedError    
+            array_name = 'array_%i'
+            i = 0
+            while (array_name % (i,)) in self.data:
+                i += 1
+            array_name = array_name % (i,)
+            self.data[array_name] = obj
+            rep = "%s['%s']" % (self.data_name, array_name)
+            args = []
+            imports = []            
         elif (self.tostring
             and obj.__class__ is np.ndarray
             and not obj.dtype.hasobject):
@@ -421,16 +522,28 @@ class Archive(object):
         ['a', 'b']
         >>> a.insert(A=np.array([1, 2, 3]))
         'A'
-        >>> print a
+        >>> print a                     # doctest: +SKIP
         import numpy as _numpy
         x_1 = 3
         a = 4
-        A = _numpy.fromstring('\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00', dtype='<i4').reshape((3,))
         x = 2
         b = 5
+        A = _numpy.fromstring('\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00', dtype='<i4').reshape((3,))
         del _numpy
         try: del __builtins__
         except NameError: pass
+
+        For testing purposes we have to sort the lines of the output:
+        >>> print "\n".join(sorted(str(a).splitlines()))
+        A = _numpy.fromstring('\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00', dtype='<i4').reshape((3,))
+        a = 4
+        b = 5
+        del _numpy
+        except NameError: pass
+        import numpy as _numpy
+        try: del __builtins__
+        x = 2
+        x_1 = 3
 
         The default :mod:`numpy` representation for arrays is not very
         friendly, so we might want to use strings instead.  Be aware
@@ -510,7 +623,9 @@ class Archive(object):
 
     def make_persistent(self):
         r"""Return `(imports, defs)` representing the persistent
-        version of the archive.
+        version of the archive.  If :attr:`datafile` is specified and
+        there is data in :attr:`data` (large arrays), then these are
+        also stored (requires :attr:`pytables`) at this time.
         
         Returns
         -------
@@ -625,7 +740,6 @@ class Archive(object):
         # children are specified by the "args" and parents is a set of
         # the parent ids.  The nodes dictionary also acts as the
         # "visited" list to prevent cycles.
-
         names = _unzip(self.arch)[0]
         
         # Generate dependency graph
@@ -649,6 +763,28 @@ class Archive(object):
             for name in self.ids
             if name not in zip(*names_reps)[0]
             for node in [graph.nodes[self.ids[name]]]])
+
+        # Archive the data to file if requested.
+        if self.data and self.datafile is not None:
+            if self.pytables and tables is not NotImplemented:
+                backup_name = None
+                if os.path.exists(self.datafile):
+                    backup_name = self.datafile + ".bak"
+                    n = 1
+                    while os.path.exists(backup_name):
+                        backup_name = self.datafile + "_%i.bak" % (n)
+                        n += 1
+                    os.rename(self.datafile, backup_name)
+                f = tables.openFile(self.datafile, 'w')
+                for name in self.data:
+                    f.createArray(f.root, name, self.data[name])
+                f.close()
+                if backup_name and not self.backup_data:
+                    # Remove backup of data
+                    os.remove(backup_name)
+            else:
+                raise NotImplementedError(
+                    "Data can presently only be saved with pytables")
 
         return (graph.imports, names_reps)
 
@@ -834,11 +970,12 @@ def archive_1_repr(obj, env):
 
 def archive_1_type(obj, env):
     name = None
-    args = {}
+    args = []
     for module in [__builtin__, types]:
-        vals = module.__dict__.values()
-        if obj in vals:
-            name = module.__dict__.keys()[vals.index(obj)]
+        obj_id = id(obj)
+        val_ids = map(id, module.__dict__.values())
+        if obj_id in val_ids:
+            name = module.__dict__.keys()[val_ids.index(obj_id)]
             imports = [(module.__name__, name, name)]
             rep = name
             break
@@ -870,7 +1007,7 @@ def archive_1_obj(obj, env):
     r"""Archive objects at the top level of a module."""
     module = get_module(obj)
     imports, rep = get_toplevel_imports(obj, env)
-    return (rep, {}, imports)
+    return (rep, [], imports)
 
 def archive_1_method(obj, env):
     r"""Archive methods."""
@@ -1416,12 +1553,15 @@ class ReplacementError(Exception):
 def _replace_rep(rep, replacements, check=False):
     r"""Return rep with all replacements made.
 
-    Parameters:
+    Parameters
+    ----------
     rep : str
        String expression to make replacements in
     replacements : dict
        Dictionary of replacements.
-    
+
+    Examples
+    --------
     >>> _replace_rep('n = array([1, 2, 3])', dict(array='array_1'))
     'n = array_1([1, 2, 3])'
     >>> _replace_rep('a + aa', dict(a='c'))
@@ -1432,14 +1572,27 @@ def _replace_rep(rep, replacements, check=False):
     Traceback (most recent call last):
         ...
     ReplacementError: Replacement a->c: Expected 1, replaced 2
+
+    Notes
+    -----
+    In order to improve the replacements and eliminate the possibility
+    of a replacement overwriting a previous replacement, we first
+    construct a string with % style replacements and the effect the
+    replacements.
     """
     if check:
         rep_names = AST(rep).names
         counts = dict((n, rep_names.count(n)) for n in replacements)
 
     identifier_tokens = string.letters + string.digits + "_"
+
+    if replacements: 
+        # Replace all % characters so they are not interpreted as
+        # format specifiers in the final replacement
+        rep = rep.replace("%", "%%")
+       
     for old in replacements:
-        new = replacements[old]
+        replacement_str = "%(" + old + ")s"
         l = len(old)
         i = rep.find(old)
         i_rep = []                  # Indices to replace
@@ -1473,10 +1626,16 @@ def _replace_rep(rep, replacements, check=False):
             parts.append(rep[i0:i])
             i0 = i + l
         parts.append(rep[i0:])
-        rep = new.join(parts)
 
+        rep = replacement_str.join(parts)
+    
         if check and not n_rep == counts[old]:
             raise ReplacementError(old, replacements[old], counts[old], n_rep)
+
+    # Now do all the replacements en mass
+    if replacements:
+        rep = rep % replacements
+
     return rep
     """
             re_ = r'''(?P<a>        # Refer to the group by name <a>
@@ -1527,11 +1686,192 @@ class AST(object):
         _descend(self.ast)
         return sorted(names)
 
+
+class Arch(object):
+    r"""Maintains a collection of objects and provides a mechanism for
+    storing them on disk.
+
+    Attributes
+    ----------
+    archive_name : str
+       Special name of the archive in the imported module.  Variables
+       of this name are not permitted in the archive.
+    archive_prefix : str
+       Private variables used to store unnamed objects start with
+       this.  Variables names starting with this prefix are not
+       permitted in the archive.
+    autoname_prefix : str
+       Variables inserted without a name are given an automatically
+       generated name that starts with this.
+    data : dict
+       This is the dictionary of `(info, data, rep)` pairs where `info` is
+       metadata.  If `data` is `NotImplemented` then it has not yet
+       been loaded, and it should be loaded by executing the string
+       `rep` which specifies where the data is stored.
+    """
+    def __init__(self, module_name=None, path = '.',
+                 archive_prefix='_', archive_name='archive',
+                 autoname_prefix='x_'):
+        self.path = path
+        self.module_name = module_name
+        self.archive_name = archive_name
+        self.archive_prefix = archive_prefix
+        self.autoname_prefix = autoname_prefix
+        self.data = {}
+
+    def _check_name_okay(self, name):
+        r"""Raise :exc:`ValueError` if `name` clashes with
+        :attr:`archive_prefix` or :attr:`archive_name`."""
+        if (name == self.archive_name
+            or name.startswith(self.archive_prefix)):
+            raise ValueError(
+                "Variable name must not be archive_name = %s or start "
+                "with archive_prefix = %s.  Got name=%s." %
+                (self.archive_name, self.archive_prefix, name))
+     
+    def insert(self, data=None, name=None, info=None):
+        r"""Insert `data` into :attr:`data_dict` with name `name` and
+        add the metadata `info` to :attr:`info_dict`.
+        """
+        self._check_name(name)
+        self.data[name] = (info, data)
+
+    def __setitem__(self, name, data):
+        r"""Add the entry to :attr:`data`.  Note that this does not
+        allow metadata to be specified."""
+        self.insert(data=data, name=name)
+
+    def __getitem__(self, name):
+        r"""Return the data associated with `name`.  If the data has
+        not yet been loaded from disk, then this triggers the load."""
+
+        (info, data) = self.data[name]
+        if data is NotImplemented:
+            return self.load(name)
+        else:
+            return data
+
+    def write(self, module_name=None, path=None):
+        r"""Write the archive to disk."""
+        if path is None:
+            path = self.path
+        if module_name is None:
+            module_name = self.module_name
+        if module_name is None:
+            raise ValueError(
+                "Need to specify module_name before calling write.")
+        
+        arch = mmf.archive.Archive(datafile=os.path.join(path, 'data.hd5'))
+        for name in self.data:
+            arch.insert(name=data)
+
+        mod_dir = os.path.join(path, module_name)
+        if os.path.exists(mod_dir):
+            if not os.path.isdir(mod_dir):
+                raise ValueError(
+                    "Module directory %s exists as a file!"
+                    % mod_dir)
+
+            # Directory already exists.  Update it.
+        else:                
+            os.mkdirs(mod_dir)
+            
+        
+        f = open(os.path.join(mod_dir, '__init__.py'), 'w')
+        f.write(init_str)
+        f.close()
+
+            
+
+    def load(self, name):
+        r"""Load the data associated with `name` into :attr:`data` and
+        return this."""
+        
+    
 class DataSet(object):
     r"""Stores data with associated keys in a module that can be
     imported later to retrieve the data.  The keys are all loaded at
     import but the data is only loaded when required.
+
+    The module can be loaded in one of two ways: either import the
+    module, or explicitly execute the `'__init__.py'` file with
+    :func:`execfile`.  The latter method is useful when the module is
+    not stored on the load path.
+
+    .. warn:: This archive allows you to modify data, however, in
+       order to compress the archive, multiple copies of a single
+       object are referenced rather than stored independently.  Change
+       a single item will change all references in the database, not
+       just the specified reference.
+    """
+    r"""
+    Examples
+    --------
+    First we make the directory that will hold the data.  Here we use
+    the :mod:`tempfile` module to make a unique name.
     
+    >>> import tempfile                 # Make a unique temporary module
+    >>> t = tempfile.mkdtemp(dir='.')
+    >>> os.rmdir(t)
+    >>> modname = t[2:]
+
+    Now, make the data set.
+
+    >>> ds = DataSet(modname)
+
+    Here is the data we are going to store.
+
+    >>> nxs = [10, 20]
+    >>> mus = [1.1, 2.2]
+    >>> dat = dict([((nx, mu), np.ones(nx)*mu)
+    ...             for mu in mus
+    ...             for nx in nxs])
+
+    Store the data just like you would in a `dict`, except the keys
+    must be valid names.  Note, internally object are also stored with
+    the prefix :attr:`_prefix`.  Variable names starting with this
+    prefix may not be used.
+
+    >>> ds['nxs'] = nxs
+    >>> ds['mus'] = mus
+
+    If you want to include information about each point, then you can
+    do that with the :meth:`insert`.
+    >>> for (nx, mu) in dat:
+    ...     ds.insert(dat[(nx, mu)], info=(nx, mu))
+
+    This information is store in the archives :attr:`info` dictionary.
+
+    >>> ds.info
+    {'x_1': (10, 1.1),
+     'x_2': (10, 2.2),
+     'x_3': (20, 1.1),
+     'x_4': (20, 2.2)}
+
+    Of course, the main utility is that the data can be stored on
+    disk.  This is only done when the :meth:`write` method is called:
+
+    >>> ds.write()
+
+    To load the archive, you can import it as a module:
+    >>> mod1 = __import__(modname)
+    >>> mod1.keys
+    ['x_1', 'x_2', 'x_3', 'x_4']
+    >>> nx, mu = mod1.x_1            # Get info: already loaded
+    >>> x = mod1.load('x_1')         # Data loaded only at this point.
+    >>> x.shape[0] == nx
+    True
+    >>> x[0] == mu
+    True
+    >>> del x                           # Data freed as soon as GC works.
+    >>> os.remove('./' + modname + '/__init__.pyc')
+    >>> mod1.dataset.insert(np.ones(1000), name='y')
+    >>> mod1 = reload(mod1)
+    >>> mod1.keys
+    ['x_4', 'x_2', 'x_3', 'x_1', 'y']
+    >>> import shutil; shutil.rmtree('./' + modname)
+    
+
     Examples
     --------
     >>> nxs = [10,20]
@@ -1557,8 +1897,9 @@ class DataSet(object):
     >>> x[0] == mu
     True
     >>> del x                           # Data freed as soon as GC works.
+    >>> os.remove('./' + modname + '/__init__.pyc')
     >>> mod1.dataset.insert(np.ones(1000), name='y')
-    >>> mod1 = reload(mod1);
+    >>> mod1 = reload(mod1)
     >>> mod1.keys
     ['x_4', 'x_2', 'x_3', 'x_1', 'y']
     >>> import shutil; shutil.rmtree('./' + modname)
