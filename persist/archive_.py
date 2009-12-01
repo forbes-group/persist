@@ -1922,8 +1922,10 @@ load = dataset.load
 
 """ 
     def __init__(self, module_name, path="",
-                 verbose=False, _reload=False):
+                 verbose=False, _reload=False,
+                 array_threshold=100):
         self.verbose = verbose
+        self.array_threshold = array_threshold
         if _reload:
             self.module_name = module_name
             self.path = path
@@ -1953,7 +1955,8 @@ load = dataset.load
         self.module_name = module_name
         self.path = path
         self.info_arch = mmf.archive.Archive(
-            datafile=os.path.join(path, 'data.hd5'))
+            datafile=os.path.join(path, 'data.hd5'),
+            array_threshold=self.array_threshold)
         self.data_reps = {}
 
         self._write()
@@ -1986,7 +1989,8 @@ load = dataset.load
         name = self.info_arch.insert(**{name: info})
         arch = mmf.archive.Archive(
             datafile=os.path.join(
-            self.path, self.module_name, 'data_%s.hd5' % (name,)))
+            self.path, self.module_name, 'data_%s.hd5' % (name,)),
+            array_threshold=self.array_threshold)
 
         data_name = arch.insert(**{name: data})
         self.data_reps[name] = (data_name, str(arch))
