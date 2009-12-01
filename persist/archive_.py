@@ -217,7 +217,7 @@ class Archive(object):
        archived.  Instead, they will be stored in :attr:`data` and
        will need to be stored externally.  (If this is `inf`, then all
        data will be stored the string representation of the archive.)
-    data_name : str, optional
+    data_name : str
        This is the name of the dictionary-like object containing
        external objects.  This need not be provided, but it will not
        be allowed as a valid name for other data in the archive.
@@ -313,6 +313,7 @@ class Archive(object):
     >>> id(res['l'][3]) == id(res['d']['l0'])
     True
     """
+    data_name = '_arrays'
     def __init__(self, flat=True, tostring=True,
                  check_on_insert=False, array_threshold=np.inf,
                  datafile=None, pytables=True):
@@ -1781,36 +1782,195 @@ class Arch(object):
         f.write(init_str)
         f.close()
 
-            
-
     def load(self, name):
         r"""Load the data associated with `name` into :attr:`data` and
         return this."""
-        
+
+class _Record(object):
+    r"""Represent some stored data.  The data is stored as a
+    representation of an archive `rep` and the data is stored in a
+    file `'path/data_%s.hd5' % name`.
+
+    Examples
+    --------
+    >>> import tempfile, shutil       # Make a unique temporary module
+    >>> t = tempfile.mkdtemp(dir='.')
+    >>> modname = t[2:]
+    >>> a = np.random.random(1000)
+
+    This will create a file 'data_a.hd5' and store a in this file
+
+    >>> r_a = _Record(info=5, obj=a, name='a', path=t)
+
+    This can be archived:
+
+    >>> arch = Archive()
+    >>> arch.insert(r_a=r_a)
+    'r_a'
+    >>> rep = str(arch)
+    >>> d = {}
+    >>> exec(rep, d)
+    >>> print(d['r_a'])
+    _Record(info=5, rep=a = _arrays['array_0']
+    try: del __builtins__
+    except NameError: pass, name=a, path=./...,
+       array_threshold=10, backup_data=False)
     
-class DataSet(object):
-    r"""Stores data with associated keys in a module that can be
-    imported later to retrieve the data.  The keys are all loaded at
-    import but the data is only loaded when required.
+    Now we can load this from the rep.
+    >>> b = d['r_a'].load()
+    >>> abs(b - a).max()
+    0.0
 
-    The module can be loaded in one of two ways: either import the
-    module, or explicitly execute the `'__init__.py'` file with
-    :func:`execfile`.  The latter method is useful when the module is
-    not stored on the load path.
-
-    .. warn:: This archive allows you to modify data, however, in
-       order to compress the archive, multiple copies of a single
-       object are referenced rather than stored independently.  Change
-       a single item will change all references in the database, not
-       just the specified reference.
+    >>> shutil.rmtree(t)
     """
-    r"""
+    interfaces.implements(interfaces.IArchivable)
+    def __init__(self, info, name, obj=None, rep=None, array_threshold=10,
+                 path='.', backup_data=False):
+        r"""When evaluated with `eval(rep, d)`, `rep` must leave an
+        item with `name `in the dictionary `d` representing the
+        object."""
+        self.info = info
+        self.name = name
+        self.array_threshold = 10
+        self.path = path
+        self.backup_data = backup_data
+        if rep is None:
+            self.store(obj)
+        else:
+            self.rep = rep
+
+    def load(self):
+        r"""Load the object and return the object."""
+        d ={}
+        __d = {Archive.data_name:d}
+
+        datafile = os.path.join(self.path, "data_%s.hd5" %
+                                (self.name,))
+        f = None
+        if os.path.exists(datafile):
+            f = tables.openFile(datafile, 'r')
+            for k in f.root:
+                d[k.name] = k.read()
+
+            f.close()
+
+        try:
+            exec(self.rep, __d)
+        except KeyError, err:
+            if f is None:
+                raise
+            else:
+                msg = "\n".join([
+                    "No datafile %s found to load.",
+                    str(err)])
+                raise KeyError(msg)
+
+        res = __d[self.name]
+        del d
+        del __d
+        return res
+    
+    def store(self, obj):
+        r"""Save a new object over the old data."""
+        # Archive the data to file if requested.
+        if tables is not NotImplemented:
+            arch = Archive(array_threshold=self.array_threshold)
+            arch.insert(**{self.name: obj})
+            self.rep = str(arch)
+            datafile = os.path.join(self.path, "data_%s.hd5" %
+                                    (self.name,))
+            backup_name = None
+            if os.path.exists(datafile):
+                backup_name = datafile + ".bak"
+                n = 1
+                while os.path.exists(backup_name):
+                    backup_name = datafile + "_%i.bak" % (n)
+                    n += 1
+                os.rename(datafile, backup_name)
+            if arch.data:                
+                f = tables.openFile(datafile, 'w')
+                for name in arch.data:
+                    f.createArray(f.root, name, arch.data[name])
+                f.close()
+
+            if backup_name and not self.backup_data:
+                # Remove backup of data
+                os.remove(backup_name)
+        else:
+            raise NotImplementedError(
+                "Data can presently only be saved with pytables")
+
+    def archive_1(self):
+        r"""Return `(rep, args, imports)`"""
+        rep, args, imports = archive_1_args(self, self.items())
+        imports = [('mmf.archive',) + imports[0][1:]]
+        return rep, args, imports
+
+    def items(self):
+        return [('info', self.info),
+                ('rep', self.rep),
+                ('name', self.name),
+                ('path', self.path),
+                ('array_threshold', self.array_threshold),
+                ('backup_data', self.backup_data)]
+
+    def __str__(self):
+        r"""Return string representation."""
+        return "%s(%s)" % (self.__class__.__name__,
+                           ", ".join(["%s=%s" % (k, v)
+                                     for (k, v) in self.items()]))
+    def __repr__(self):
+        r"""Return string representation."""
+        return "%s(%s)" % (self.__class__.__name__,
+                           ", ".join(["%s=%r" % (k, v)
+                                     for (k, v) in self.items()]))
+
+class DataSet(object):
+    r"""Creates a module `module_name` in the directory
+    `path`. Importing this module or executing the `__init__.py` file
+    will result in an `info_dict` dictionary that contains a :class:`_Record`
+    associated with each key.  The record contains `info` which is
+    information about the object as well as methods `load` and `store`
+    which can be used to load and save the object associated with the
+    info.
+
+    Attributes
+    ----------
+    module_name : str
+       This is the name of the module under `path` where the data set
+       will be stored.
+    path : str
+       Directory to make data set module.
+    name_prefix : str
+       This -- appended with an integer -- is used to form unique
+       names when :meth:`insert` is called without specifying a name.
+    verbose : bool
+       If `True`, then report actions.
+    array_threshold : int
+       Threshold size above which arrays are stored as hd5 files.
+    backup_data : bool
+       If `True`, then backup copies of overwritten data will be
+       saved.
+    info_dict : dict
+       This is a dictionary of all the :class:`_Records` stored in the
+       dataset.
+
+    .. warning:: Although you can change entries by using the `store`
+       method of the records, this will not write the "__init__.py"
+       file until :meth:`close` or :meth:`write` are called.  As a
+       safeguard, these are called when the object is deleted, but the
+       user should explicitly call these when new data is added.
+
+    .. warning:: No locking mechanism is in place.  Accessing and
+       modifying the same data set from two different processes may
+       cause problems.
+       
     Examples
     --------
     First we make the directory that will hold the data.  Here we use
     the :mod:`tempfile` module to make a unique name.
     
-    >>> import tempfile                 # Make a unique temporary module
+    >>> import tempfile, shutil       # Make a unique temporary module
     >>> t = tempfile.mkdtemp(dir='.')
     >>> os.rmdir(t)
     >>> modname = t[2:]
@@ -1827,50 +1987,214 @@ class DataSet(object):
     ...             for mu in mus
     ...             for nx in nxs])
 
-    Store the data just like you would in a `dict`, except the keys
-    must be valid names.  Note, internally object are also stored with
-    the prefix :attr:`_prefix`.  Variable names starting with this
-    prefix may not be used.
+    Now we add the data, and make sure the data set is written
 
-    >>> ds['nxs'] = nxs
-    >>> ds['mus'] = mus
-
-    If you want to include information about each point, then you can
-    do that with the :meth:`insert`.
-    >>> for (nx, mu) in dat:
-    ...     ds.insert(dat[(nx, mu)], info=(nx, mu))
-
-    This information is store in the archives :attr:`info` dictionary.
-
-    >>> ds.info
-    {'x_1': (10, 1.1),
-     'x_2': (10, 2.2),
-     'x_3': (20, 1.1),
-     'x_4': (20, 2.2)}
-
-    Of course, the main utility is that the data can be stored on
-    disk.  This is only done when the :meth:`write` method is called:
-
+    >>> ds.insert(nxs=nxs, mus=mus)
     >>> ds.write()
 
-    To load the archive, you can import it as a module:
-    >>> mod1 = __import__(modname)
-    >>> mod1.keys
-    ['x_1', 'x_2', 'x_3', 'x_4']
-    >>> nx, mu = mod1.x_1            # Get info: already loaded
-    >>> x = mod1.load('x_1')         # Data loaded only at this point.
-    >>> x.shape[0] == nx
-    True
-    >>> x[0] == mu
-    True
-    >>> del x                           # Data freed as soon as GC works.
-    >>> os.remove('./' + modname + '/__init__.pyc')
-    >>> mod1.dataset.insert(np.ones(1000), name='y')
-    >>> mod1 = reload(mod1)
-    >>> mod1.keys
-    ['x_4', 'x_2', 'x_3', 'x_1', 'y']
-    >>> import shutil; shutil.rmtree('./' + modname)
+    If you want to include information about each point, then you can
+    do that with the :meth:`insert`.  Here we do not provide a name,
+    so one is generated
     
+    >>> for (nx, mu) in dat:
+    ...     ds.insert(dat[(nx, mu)], info=(nx, mu))
+    >>> ds.write()
+    
+    This information is stored in the :attr:`info_dict` dictionary as
+    a set of records.  You can see the keys by printing:
+
+    >>> print(ds)
+    DataSet './...' containing ['mus', 'nxs', 'x_2', 'x_3', 'x_0', 'x_1']
+
+    Here is the complete set of info:
+
+    >>> [(k, v.info) for (k, v) in sorted(ds.info_dict.items())]
+    [('mus', None),
+     ('nxs', None),
+     ('x_0', (20, 2.2...)),
+     ('x_1', (10, 1.1...)),
+     ('x_2', (20, 1.1...)),
+     ('x_3', (10, 2.2...))]
+    >>> ds.close()                      # Good practise
+
+    Of course, the main utility is that the data can be stored on
+    disk.  This has been done each time the :meth:`write` method was
+    called. To load the archive, you can import it as a module:
+    
+    >>> mod1 = __import__(modname)
+
+    The info is again available in `info_dict` and the actual data
+    can be loaded using the `load()` method.  This allows for the data
+    set to include large amounts of data, only loading what is needed.
+
+    >>> mod1.info_dict['x_0'].info
+    (20, 2.2...)
+    >>> mod1.info_dict['x_0'].load()
+    array([ 2.2,  2.2,  2.2,  2.2,  2.2,  2.2,  2.2,  2.2,  2.2,  2.2,
+            2.2,  2.2,  2.2,  2.2,  2.2,  2.2,  2.2,  2.2,  2.2,  2.2])
+
+    If you want to modify the data set, then create a new data set
+    object pointing to the same place:
+
+    >>> ds1 = DataSet(modname)
+    >>> print(ds1)
+    DataSet './...' containing ['mus', 'nxs', 'x_2', 'x_3', 'x_0', 'x_1']
+
+    This may be modified, but see the warnings above.
+
+    >>> ds1.info_dict['x_0'].store(np.ones(5))
+
+    Be sure to call :meth:`write`!
+
+    >>> ds1.write()
+    >>> ds1.close()                     # Good practise
+    
+    This should work, but fails within doctests.  Don't know why...
+
+    >>> reload(mod1)                    # doctest: +SKIP
+    <module '...' from '.../mmf/archive/.../__init__.py'>
+
+    >>> ds2 = DataSet(modname)
+    >>> ds2.info_dict['x_0'].load()
+    array([ 1.,  1.,  1.,  1.,  1.])
+
+    >>> ds2.close()                     # Good practise
+    >>> shutil.rmtree(t)
+    
+    .. todo:: Add locks.
+    """
+    def __init__(self, module_name, path=".",
+                 verbose=False, _reload=False,
+                 array_threshold=100, backup_data=False,
+                 name_prefix='x_'):
+        self.verbose = verbose
+        self.array_threshold = array_threshold
+        self.module_name = module_name
+        self.path = path
+        self.backup_data = backup_data
+        self.name_prefix = name_prefix
+        self.info_dict = {}
+
+        mod_dir = os.path.join(path, module_name)
+        key_file = os.path.join(mod_dir, '_this_dir_is_a_DataSet')
+        if os.path.exists(mod_dir):
+            if not os.path.exists(key_file):
+                raise ValueError(
+            ("Directory %s exists and is not a DataSet repository. "
+             "Please choose a unique location. ") % (mod_dir,))
+
+            self._load()
+        else:
+            if self.verbose:
+                print("Making directory %s for output." % (mod_dir,))
+            os.makedirs(mod_dir)
+            open(key_file, 'w').close()
+            
+    def _load(self):
+        r"""Create the data set from an existing repository."""
+        curdir = os.path.abspath(os.curdir)
+        os.chdir(self.path)
+        d = {}
+        execfile(os.path.join(self.module_name, '__init__.py'), d)
+        self.info_dict = d['info_dict']
+        del d
+        os.chdir(curdir)
+        
+    def write(self):
+        r"""Make the module `__init__.py` file."""
+        if self.module_name:
+            arch = Archive()
+            arch.insert(info_dict=self.info_dict)
+            init_file = os.path.join(self.path, self.module_name, '__init__.py')
+            f = open(init_file, 'w')
+            f.write(str(arch))
+            f.close()
+
+    def keys(self):
+        return self.info_dict.keys()
+
+    def __getitem__(self, key):
+        return self.info_dict[key]
+
+    def __str__(self):
+        return ("DataSet %r containing %s" % (
+            os.path.join(self.path, self.module_name),
+            str(self.keys())))
+
+    def __repr__(self):
+        return ("DataSet(%s)" %
+                ", ".join(["%s=%s" % (k, repr(getattr(self, k)))
+                           for k in ['module_name', 'path', 'verbose',
+                                     'array_threshold', 'backup_data',
+                                     'name_prefix']]))
+
+    def insert(self, *v, **kw):
+        r"""Store object and info in the archive under `name`.
+
+        Call as `insert(name=obj, info=info)` or `insert(obj,
+        info=info)`.   The latter form will generate a unique name.
+
+        When the data set is imported, the `info` will be restored as
+        `info_dict[name].info` but the actual data `obj` will not be
+        restored until `info_dict[name].load()` is called.
+        """
+        if 'info' in kw:
+            info = kw.pop('info')
+        else:
+            info = None
+        mod_dir = os.path.join(self.path, self.module_name)
+        for name in kw:
+            self.info_dict[name] = _Record(
+                info=info, obj=kw[name], name=name,
+                array_threshold=self.array_threshold,
+                path=mod_dir, backup_data=self.backup_data)
+
+        for obj in v:
+            i = 0
+            name = self.name_prefix + str(i)
+            while name in self.info_dict:
+                i += 1
+                name = self.name_prefix + str(i)
+            
+            self.info_dict[name] = _Record(
+                info=info, obj=obj, name=name,
+                array_threshold=self.array_threshold,
+                path=mod_dir, backup_data=self.backup_data)
+
+        self.write()    
+
+    def load(self, name):
+        __d = {}
+        data_name, rep = self.data_reps[name]
+        exec(rep, __d)
+        res = __d[data_name]
+        del __d
+        return res
+
+    def close(self):
+        self.write()
+        self.module_name = ""
+
+    def __del__(self):
+        self.close()
+
+class DataSet_(object):
+    r"""Stores data with associated keys in a module that can be
+    imported later to retrieve the data.  The keys are all loaded at
+    import but the data is only loaded when required.
+
+    The module can be loaded in one of two ways: either import the
+    module, or explicitly execute the `'__init__.py'` file with
+    :func:`execfile`.  The latter method is useful when the module is
+    not stored on the load path.
+
+    .. warn:: This archive allows you to modify data, however, in
+       order to compress the archive, multiple copies of a single
+       object are referenced rather than stored independently.  Change
+       a single item will change all references in the database, not
+       just the specified reference.
+    """
+    r"""
 
     Examples
     --------
