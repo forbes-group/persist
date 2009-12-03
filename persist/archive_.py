@@ -352,7 +352,8 @@ class Archive(object):
         has either `import module as uiname`, `from module import
         iname` or `from module import iname as uiname`.
         """
-        if isinstance(obj, interfaces.IArchivable):
+        if (interfaces.IArchivable.providedBy(obj) or
+            isinstance(obj, interfaces.IArchivable)):
             return obj.archive_1(env)
 
         for class_ in self._dispatch:
@@ -1900,7 +1901,7 @@ class _Record(object):
             raise NotImplementedError(
                 "Data can presently only be saved with pytables")
 
-    def archive_1(self):
+    def archive_1(self, env):
         r"""Return `(rep, args, imports)`"""
         rep, args, imports = archive_1_args(self, self.items())
         imports = [('mmf.archive',) + imports[0][1:]]
