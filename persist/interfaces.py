@@ -21,15 +21,15 @@ except ImportError:
 
 class IArchivable(Interface):   # pragma: no cover 
     """Interface for objects that suport archiving."""
-    def archive_1(self,env=None):
-        """Return (rep,args,imports).
+    def archive_1(self, env=None):
+        """Return `(rep, args, imports)`.
         
         Defines a representation rep of the instance self where the
         instance can be reconstructed from the string rep evaluated in
         the context of args with the specified imports = list of
-        (module,iname,uiname) where one has either "import module as
-        uiname", "from module import iname" or "from module import
-        iname as uiname".
+        (module,iname,uiname) where one has either `import module as
+        uiname`, `from module import iname` or `from module import
+        iname as uiname`.
         """
         raise NotImplementedError
 

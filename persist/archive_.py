@@ -103,8 +103,8 @@ data-file.
      to restore the object such as `restore()`.)
 """
 from __future__ import division
-__all__  = ['Archive', 'DataSet', 'restore', 'ArchiveError',
-            'DuplicateError']
+__all__  = ['Archive', 'DataSet', 'DataSet_Record', 'restore',
+            'ArchiveError', 'DuplicateError']
 
 import os
 import sys
@@ -1787,7 +1787,7 @@ class Arch(object):
         r"""Load the data associated with `name` into :attr:`data` and
         return this."""
 
-class _Record(object):
+class DataSet_Record(object):
     r"""Represent some stored data.  The data is stored as a
     representation of an archive `rep` and the data is stored in a
     file `'path/data_%s.hd5' % name`.
@@ -1801,7 +1801,7 @@ class _Record(object):
 
     This will create a file 'data_a.hd5' and store a in this file
 
-    >>> r_a = _Record(info=5, obj=a, name='a', path=t)
+    >>> r_a = DataSet_Record(info=5, obj=a, name='a', path=t)
 
     This can be archived:
 
@@ -1812,7 +1812,7 @@ class _Record(object):
     >>> d = {}
     >>> exec(rep, d)
     >>> print(d['r_a'])
-    _Record(info=5, rep=a = _arrays['array_0']
+    DataSet_Record(info=5, rep=a = _arrays['array_0']
     try: del __builtins__
     except NameError: pass, name=a, path=./...,
        array_threshold=10, backup_data=False)
@@ -1929,7 +1929,7 @@ class _Record(object):
 class DataSet(object):
     r"""Creates a module `module_name` in the directory
     `path`. Importing this module or executing the `__init__.py` file
-    will result in an `info_dict` dictionary that contains a :class:`_Record`
+    will result in an `info_dict` dictionary that contains a :class:`DataSet_Record`
     associated with each key.  The record contains `info` which is
     information about the object as well as methods `load` and `store`
     which can be used to load and save the object associated with the
@@ -1953,7 +1953,7 @@ class DataSet(object):
        If `True`, then backup copies of overwritten data will be
        saved.
     info_dict : dict
-       This is a dictionary of all the :class:`_Records` stored in the
+       This is a dictionary of all the :class:`DataSet_Record` stored in the
        dataset.
 
     .. warning:: Although you can change entries by using the `store`
@@ -2145,7 +2145,7 @@ class DataSet(object):
             info = None
         mod_dir = os.path.join(self.path, self.module_name)
         for name in kw:
-            self.info_dict[name] = _Record(
+            self.info_dict[name] = DataSet_Record(
                 info=info, obj=kw[name], name=name,
                 array_threshold=self.array_threshold,
                 path=mod_dir, backup_data=self.backup_data)
@@ -2157,7 +2157,7 @@ class DataSet(object):
                 i += 1
                 name = self.name_prefix + str(i)
             
-            self.info_dict[name] = _Record(
+            self.info_dict[name] = DataSet_Record(
                 info=info, obj=obj, name=name,
                 array_threshold=self.array_threshold,
                 path=mod_dir, backup_data=self.backup_data)
