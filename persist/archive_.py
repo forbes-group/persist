@@ -1940,6 +1940,8 @@ class DataSet(object):
     module_name : str
        This is the name of the module under `path` where the data set
        will be stored.
+    mode : 'r', 'w'
+       Read only or read/write.
     path : str
        Directory to make data set module.
     name_prefix : str
@@ -1978,7 +1980,7 @@ class DataSet(object):
 
     Now, make the data set.
 
-    >>> ds = DataSet(modname)
+    >>> ds = DataSet(modname, 'w')
 
     Here is the data we are going to store.
 
@@ -2037,7 +2039,7 @@ class DataSet(object):
     If you want to modify the data set, then create a new data set
     object pointing to the same place:
 
-    >>> ds1 = DataSet(modname)
+    >>> ds1 = DataSet(modname, 'w')
     >>> print(ds1)
     DataSet './...' containing ['mus', 'nxs', 'x_2', 'x_3', 'x_0', 'x_1']
 
@@ -2055,19 +2057,25 @@ class DataSet(object):
     >>> reload(mod1)                    # doctest: +SKIP
     <module '...' from '.../mmf/archive/.../__init__.py'>
 
+    Here we open a read-only copy:
+    
     >>> ds2 = DataSet(modname)
     >>> ds2.info_dict['x_0'].load()
     array([ 1.,  1.,  1.,  1.,  1.])
-
+    >>> ds2.write()
+    Traceback (most recent call last):
+       ...
+    ValueError: DataSet opened in read-only mode.
     >>> ds2.close()                     # Good practise
     >>> shutil.rmtree(t)
     
     .. todo:: Add locks.
     """
-    def __init__(self, module_name, path=".",
+    def __init__(self, module_name, mode='r', path=".",
                  verbose=False, _reload=False,
                  array_threshold=100, backup_data=False,
                  name_prefix='x_'):
+        self.mode = mode
         self.verbose = verbose
         self.array_threshold = array_threshold
         self.module_name = module_name
@@ -2085,11 +2093,15 @@ class DataSet(object):
              "Please choose a unique location. ") % (mod_dir,))
 
             self._load()
-        else:
+        elif mode == 'w':
             if self.verbose:
                 print("Making directory %s for output." % (mod_dir,))
             os.makedirs(mod_dir)
             open(key_file, 'w').close()
+        else:
+            raise ValueError(
+                ("Directory %s does not exist. Please choose an "
+                 "existing data set for read-only mode. ") % (mod_dir,))
             
     def _load(self):
         r"""Create the data set from an existing repository."""
@@ -2103,6 +2115,8 @@ class DataSet(object):
         
     def write(self):
         r"""Make the module `__init__.py` file."""
+        if self.mode == 'r':
+            raise ValueError("DataSet opened in read-only mode.")
         if self.module_name:
             arch = Archive()
             arch.insert(info_dict=self.info_dict)
@@ -2139,6 +2153,8 @@ class DataSet(object):
         `info_dict[name].info` but the actual data `obj` will not be
         restored until `info_dict[name].load()` is called.
         """
+        if self.mode == 'r':
+            raise ValueError("DataSet opened in read-only mode.")
         if 'info' in kw:
             info = kw.pop('info')
         else:
@@ -2173,7 +2189,8 @@ class DataSet(object):
         return res
 
     def close(self):
-        self.write()
+        if self.mode == 'w':
+            self.write()
         self.module_name = ""
 
     def __del__(self):
