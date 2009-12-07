@@ -102,13 +102,14 @@ data-file.
      and initialization.  (Could also allow a special method to be called
      to restore the object such as `restore()`.)
 """
-from __future__ import division
-__all__  = ['Archive', 'DataSet', 'DataSet_Record', 'restore',
+from __future__ import division, with_statement
+__all__  = ['Archive', 'DataSet', 'restore',
             'ArchiveError', 'DuplicateError']
 
 import os
 import sys
 import string
+import time
 import parser
 import compiler
 import token
@@ -117,6 +118,8 @@ import functools
 import inspect
 import copy
 import textwrap
+from contextlib import contextmanager
+import warnings
 import __builtin__
 import re
 import types
@@ -238,6 +241,10 @@ class Archive(object):
        be overwritten.  (Actually, a backup will always be made, but
        if the creation of the new file is successful, then the backup
        will be deleted if this is `False`.)
+    allowed_names : [str], optional
+       If provided, then these names will be considered acceptable.
+       This allows for 'private' names to be used by specialized
+       structures.
        
     Notes
     -----
@@ -316,12 +323,15 @@ class Archive(object):
     data_name = '_arrays'
     def __init__(self, flat=True, tostring=True,
                  check_on_insert=False, array_threshold=np.inf,
-                 datafile=None, pytables=True):
+                 datafile=None, pytables=True, allowed_names=None):
         self.tostring = tostring
         self.flat = flat
         self.imports = []
         self.arch = []
         self.ids = {}
+        if not allowed_names:
+            allowed_names = []
+        self.allowed_names = allowed_names
 
         self._section_sep = ""  # string to separate the sections
         self._numpy_printoptions = {'infstr': 'Inf',
@@ -569,6 +579,28 @@ class Archive(object):
           ('cc', '[c, c, [3]]'),
           ('A', '_numpy.array([1, 2, 3])'),
           ('x', '2')])
+
+        Names must not start with an underscore:
+
+        >>> a.insert(_x=5)
+        Traceback (most recent call last):
+           ...
+        ValueError: name must not start with '_'
+
+        This can be overridden by using :attr:`allowed_names`:
+
+        >>> a.allowed_names.append('_x')
+        >>> a.insert(_x=5)
+        '_x'
+        >>> a.make_persistent() # doctest: +NORMALIZE_WHITESPACE
+        ([('numpy', None, '_numpy'),
+          ('numpy', 'inf', '_inf'),
+          ('numpy', 'nan', '_nan')],
+         [('c', '_numpy.array([ 1.+0.j,  2.+3.j,  3.+0.j])'),
+          ('cc', '[c, c, [3]]'),
+          ('A', '_numpy.array([1, 2, 3])'),
+          ('x', '2'),
+          ('_x', '5')])        
         """
         if env is None:
             env = {}
@@ -576,7 +608,8 @@ class Archive(object):
         names = []
         for name in kwargs:
             obj = kwargs[name]
-            if name.startswith('_'):
+            if (name.startswith('_')
+                and name not in self.allowed_names):
                 raise ValueError("name must not start with '_'")
 
             # First check to see if object is already in archive:
@@ -819,7 +852,8 @@ class Archive(object):
                 del_lines.append("del %s" % (uiname,))
 
         temp_names = [name for (name, rep) in defs
-                      if name.startswith('_')]
+                      if (name.startswith('_')
+                          and name not in self.allowed_names)]
         if temp_names:
             del_lines.append("del %s" % (",".join(temp_names),))
                                      
@@ -1787,187 +1821,44 @@ class Arch(object):
         r"""Load the data associated with `name` into :attr:`data` and
         return this."""
 
-class DataSet_Record(object):
-    r"""Represent some stored data.  The data is stored as a
-    representation of an archive `rep` and the data is stored in a
-    file `'path/data_%s.hd5' % name`.
-
-    Examples
-    --------
-    >>> import tempfile, shutil       # Make a unique temporary module
-    >>> t = tempfile.mkdtemp(dir='.')
-    >>> modname = t[2:]
-    >>> a = np.random.random(1000)
-
-    This will create a file 'data_a.hd5' and store a in this file
-
-    >>> r_a = DataSet_Record(info=5, obj=a, name='a', path=t)
-
-    This can be archived:
-
-    >>> arch = Archive()
-    >>> arch.insert(r_a=r_a)
-    'r_a'
-    >>> rep = str(arch)
-    >>> d = {}
-    >>> exec(rep, d)
-    >>> print(d['r_a'])
-    DataSet_Record(info=5, rep=a = _arrays['array_0']
-    try: del __builtins__
-    except NameError: pass, name=a, path=./...,
-       array_threshold=10, backup_data=False)
-    
-    Now we can load this from the rep.
-    >>> b = d['r_a'].load()
-    >>> abs(b - a).max()
-    0.0
-
-    >>> shutil.rmtree(t)
-    """
-    interfaces.implements(interfaces.IArchivable)
-    def __init__(self, info, name, obj=None, rep=None, array_threshold=10,
-                 path='.', backup_data=False):
-        r"""When evaluated with `eval(rep, d)`, `rep` must leave an
-        item with `name `in the dictionary `d` representing the
-        object."""
-        self.info = info
-        self.name = name
-        self.array_threshold = 10
-        self.path = path
-        self.backup_data = backup_data
-        if rep is None:
-            self.store(obj)
-        else:
-            self.rep = rep
-
-    def load(self):
-        r"""Load the object and return the object."""
-        d ={}
-        __d = {Archive.data_name:d}
-
-        datafile = os.path.join(self.path, "data_%s.hd5" %
-                                (self.name,))
-        f = None
-        if os.path.exists(datafile):
-            f = tables.openFile(datafile, 'r')
-            for k in f.root:
-                d[k.name] = k.read()
-
-            f.close()
-
-        try:
-            exec(self.rep, __d)
-        except KeyError, err:
-            if f is None:
-                raise
-            else:
-                msg = "\n".join([
-                    "No datafile %s found to load.",
-                    str(err)])
-                raise KeyError(msg)
-
-        res = __d[self.name]
-        del d
-        del __d
-        return res
-    
-    def store(self, obj):
-        r"""Save a new object over the old data."""
-        # Archive the data to file if requested.
-        if tables is not NotImplemented:
-            arch = Archive(array_threshold=self.array_threshold)
-            arch.insert(**{self.name: obj})
-            self.rep = str(arch)
-            datafile = os.path.join(self.path, "data_%s.hd5" %
-                                    (self.name,))
-            backup_name = None
-            if os.path.exists(datafile):
-                backup_name = datafile + ".bak"
-                n = 1
-                while os.path.exists(backup_name):
-                    backup_name = datafile + "_%i.bak" % (n)
-                    n += 1
-                os.rename(datafile, backup_name)
-            if arch.data:                
-                f = tables.openFile(datafile, 'w')
-                for name in arch.data:
-                    f.createArray(f.root, name, arch.data[name])
-                f.close()
-
-            if backup_name and not self.backup_data:
-                # Remove backup of data
-                os.remove(backup_name)
-        else:
-            raise NotImplementedError(
-                "Data can presently only be saved with pytables")
-
-    def archive_1(self, env):
-        r"""Return `(rep, args, imports)`"""
-        rep, args, imports = archive_1_args(self, self.items())
-        imports = [('mmf.archive',) + imports[0][1:]]
-        return rep, args, imports
-
-    def items(self):
-        return [('info', self.info),
-                ('rep', self.rep),
-                ('name', self.name),
-                ('path', self.path),
-                ('array_threshold', self.array_threshold),
-                ('backup_data', self.backup_data)]
-
-    def __str__(self):
-        r"""Return string representation."""
-        return "%s(%s)" % (self.__class__.__name__,
-                           ", ".join(["%s=%s" % (k, v)
-                                     for (k, v) in self.items()]))
-    def __repr__(self):
-        r"""Return string representation."""
-        return "%s(%s)" % (self.__class__.__name__,
-                           ", ".join(["%s=%r" % (k, v)
-                                     for (k, v) in self.items()]))
-
 class DataSet(object):
-    r"""Creates a module `module_name` in the directory
-    `path`. Importing this module or executing the `__init__.py` file
-    will result in an `info_dict` dictionary that contains a :class:`DataSet_Record`
+    r"""Creates a module `module_name` in the directory `path`
+    representing a set of data.
+
+    The data set consists of a set of names other not starting with an
+    underscore `'_'`.  Accessing (using :meth:`__getattr__` or equivalent)
+    any of these names will trigger a dynamic load of the data
+    associated with that name.  This data will not be cached, so if
+    the returned object is deleted, the memory should be freed,
+    allowing for the use of data sets larger than available
+    memory. Assigning (using :meth:`__setattr__` or equivalent) these will
+    immediately store the corresponding data to disk.
+
+    In addition to the data proper, some information can be associated
+    with each object that will be loaded each time the archive is
+    opened.  This information is accessed using :meth:`__getitem__`
+    and :meth:`__setitem__` and will be stored in the `__init__.py`
+    file of the module.
+
+    .. note:: A potential problem with writable archives is one of
+       concurrency: two open instances of the archive might have
+       conflicting updates.  We have two mechanisms for dealing with
+       this as specified by the `synchronize` flag.
+
+    . Importing this
+    module or executing the `__init__.py` file will result in an
+    `info_dict` dictionary that contains a :class:`_DataSet_Record`
     associated with each key.  The record contains `info` which is
     information about the object as well as methods `load` and `store`
     which can be used to load and save the object associated with the
     info.
 
-    Attributes
-    ----------
-    module_name : str
-       This is the name of the module under `path` where the data set
-       will be stored.
-    mode : 'r', 'w'
-       Read only or read/write.
-    path : str
-       Directory to make data set module.
-    name_prefix : str
-       This -- appended with an integer -- is used to form unique
-       names when :meth:`insert` is called without specifying a name.
-    verbose : bool
-       If `True`, then report actions.
-    array_threshold : int
-       Threshold size above which arrays are stored as hd5 files.
-    backup_data : bool
-       If `True`, then backup copies of overwritten data will be
-       saved.
-    info_dict : dict
-       This is a dictionary of all the :class:`DataSet_Record` stored in the
-       dataset.
-
-    .. warning:: Although you can change entries by using the `store`
-       method of the records, this will not write the "__init__.py"
-       file until :meth:`close` or :meth:`write` are called.  As a
-       safeguard, these are called when the object is deleted, but the
-       user should explicitly call these when new data is added.
-
-    .. warning:: No locking mechanism is in place.  Accessing and
-       modifying the same data set from two different processes may
-       cause problems.
-       
+    Each object is stored in an independent file named `*.py` and
+    associated binary data is stored in `data_*.hd5` using the
+    PyTables module :mod:`tables`.  Each object can be imported
+    independently and will have two members `info` and `data`
+    containing the information and data.
+    
     Examples
     --------
     First we make the directory that will hold the data.  Here we use
@@ -1985,56 +1876,75 @@ class DataSet(object):
     Here is the data we are going to store.
 
     >>> nxs = [10, 20]
-    >>> mus = [1.1, 2.2]
+    >>> mus = [1.2, 2.5]
     >>> dat = dict([((nx, mu), np.ones(nx)*mu)
     ...             for mu in mus
     ...             for nx in nxs])
 
-    Now we add the data, and make sure the data set is written
+    Now we add the data.  It is written upon insertion:
 
-    >>> ds.insert(nxs=nxs, mus=mus)
-    >>> ds.write()
+    >>> ds.nxs = nxs
+    >>> ds.mus = mus
 
     If you want to include information about each point, then you can
-    do that with the :meth:`insert`.  Here we do not provide a name,
-    so one is generated
-    
-    >>> for (nx, mu) in dat:
-    ...     ds.insert(dat[(nx, mu)], info=(nx, mu))
-    >>> ds.write()
-    
-    This information is stored in the :attr:`info_dict` dictionary as
-    a set of records.  You can see the keys by printing:
+    do that with the dictionary interface:
 
+    >>> ds['nxs'] = 'Particle numbers'
+    >>> ds['mus'] = 'Chemical potentials'
+
+    This information will be loaded every time, but the data will only
+    be loaded when requested.
+
+    Here is a typical usage, storing data with some associated
+    metadata in one shot using :meth:`_insert`.  This a public member,
+    but we still use an underscore so that there is no chance of a
+    name conflict with a data member called 'insert' should a user
+    want one...
+
+    >>> for (nx, mu) in dat:
+    ...     ds._insert(dat[(nx, mu)], info=(nx, mu))
+    
     >>> print(ds)
     DataSet './...' containing ['mus', 'nxs', 'x_2', 'x_3', 'x_0', 'x_1']
 
     Here is the complete set of info:
 
-    >>> [(k, v.info) for (k, v) in sorted(ds.info_dict.items())]
-    [('mus', None),
-     ('nxs', None),
-     ('x_0', (20, 2.2...)),
-     ('x_1', (10, 1.1...)),
-     ('x_2', (20, 1.1...)),
-     ('x_3', (10, 2.2...))]
-    >>> ds.close()                      # Good practise
+    This information is stored in the :attr:`_info_dict` dictionary as
+    a set of records.  Don't modify this directly though as this will
+    not properly write the data...
 
-    Of course, the main utility is that the data can be stored on
-    disk.  This has been done each time the :meth:`write` method was
-    called. To load the archive, you can import it as a module:
+    >>> [(k, ds[k]) for k in sorted(ds)]
+    [('mus', 'Chemical potentials'),
+     ('nxs', 'Particle numbers'),
+     ('x_0', (10, 2.5)),
+     ('x_1', (20, 1.2)),
+     ('x_2', (10, 1.2)),
+     ('x_3', (20, 2.5))]
+    >>> [(k, getattr(ds, k)) for k in sorted(ds)]     
+    [('mus', [1.2, 2.5]),
+     ('nxs', [10, 20]),
+     ('x_0', array([ 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5])),
+     ('x_1', array([ 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2,
+                     1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])),
+     ('x_2', array([ 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])),
+     ('x_3', array([ 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5,
+                     2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5]))]
+
+    .. todo:: Fix module interface...
     
-    >>> mod1 = __import__(modname)
+    To load the archive, you can import it as a module:
+    
+    >> mod1 = __import__(modname)
 
     The info is again available in `info_dict` and the actual data
     can be loaded using the `load()` method.  This allows for the data
     set to include large amounts of data, only loading what is needed.
 
-    >>> mod1.info_dict['x_0'].info
-    (20, 2.2...)
-    >>> mod1.info_dict['x_0'].load()
-    array([ 2.2,  2.2,  2.2,  2.2,  2.2,  2.2,  2.2,  2.2,  2.2,  2.2,
-            2.2,  2.2,  2.2,  2.2,  2.2,  2.2,  2.2,  2.2,  2.2,  2.2])
+    >> mod1._info_dict['x_0'].info
+    (20, 2.5)
+    >> mod1._info_dict['x_0'].load()
+    array([ 2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,
+            2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5])
 
     If you want to modify the data set, then create a new data set
     object pointing to the same place:
@@ -2045,45 +1955,102 @@ class DataSet(object):
 
     This may be modified, but see the warnings above.
 
-    >>> ds1.info_dict['x_0'].store(np.ones(5))
+    >>> ds1.x_0 = np.ones(5)
 
-    Be sure to call :meth:`write`!
-
-    >>> ds1.write()
-    >>> ds1.close()                     # Good practise
-    
     This should work, but fails within doctests.  Don't know why...
 
-    >>> reload(mod1)                    # doctest: +SKIP
+    >> reload(mod1)                    # doctest: +SKIP
     <module '...' from '.../mmf/archive/.../__init__.py'>
 
     Here we open a read-only copy:
     
     >>> ds2 = DataSet(modname)
-    >>> ds2.info_dict['x_0'].load()
+    >>> ds2.x_0
     array([ 1.,  1.,  1.,  1.,  1.])
-    >>> ds2.write()
+    >>> ds2.x_0 = 6
     Traceback (most recent call last):
        ...
     ValueError: DataSet opened in read-only mode.
-    >>> ds2.close()                     # Good practise
     >>> shutil.rmtree(t)
-    
-    .. todo:: Add locks.
+
     """
+    _lock_file_name = "_locked"
     def __init__(self, module_name, mode='r', path=".",
+                 synchronize=True,
                  verbose=False, _reload=False,
                  array_threshold=100, backup_data=False,
-                 name_prefix='x_'):
-        self.mode = mode
-        self.verbose = verbose
-        self.array_threshold = array_threshold
-        self.module_name = module_name
-        self.path = path
-        self.backup_data = backup_data
-        self.name_prefix = name_prefix
-        self.info_dict = {}
+                 name_prefix='x_',
+                 timeout=60):
+        r"""Constructor.  Note that all of the parameters are stored
+        as attributes with a leading underscore appended to the name.
 
+        Parameters
+        ----------
+        synchronize : bool, optional
+           If this is `True` (default), then before any read or write,
+           the data set will refresh all variables from their current
+           state on disk.  The resulting data set (with the new
+           changes) will then be saved on disk.  During the write, the
+           archive will be locked so that only one :class:`DataSet`
+           and write at a time.
+
+           If it is `False`, then locking is performed once a writable
+           :class:`DataSet` is opened and only one writable instance
+           will be able to be created at a time.
+        module_name : str
+           This is the name of the module under `path` where the data set
+           will be stored.
+        mode : 'r', 'w'
+           Read only or read/write.
+        path : str
+           Directory to make data set module.
+        name_prefix : str
+           This -- appended with an integer -- is used to form unique
+           names when :meth:`insert` is called without specifying a name.
+        verbose : bool
+           If `True`, then report actions.
+        array_threshold : int
+           Threshold size above which arrays are stored as hd5 files.
+        backup_data : bool
+           If `True`, then backup copies of overwritten data will be
+           saved.
+        timeout : int, optional
+           Time (in seconds) to wait for a writing lock to be released
+           before raising an :exc:`IOException` exception.  (Default
+           is 60s.)
+           
+        .. warning:: Although you can change entries by using the `store`
+           method of the records, this will not write the "__init__.py"
+           file until :meth:`close` or :meth:`write` are called.  As a
+           safeguard, these are called when the object is deleted, but the
+           user should explicitly call these when new data is added.
+
+        .. warning:: The locking mechanism is to prevent two archives
+           from clobbering upon writing.  It is not designed to
+           prevent reading invalid information from a partially
+           written archive (the reading mechanism does not use the
+           locks).
+        """
+        self._synchronize = synchronize
+        self._mode = mode
+        self._verbose = verbose
+        self._array_threshold = array_threshold
+        self._module_name = module_name
+        self._path = path
+        self._backup_data = backup_data
+        self._name_prefix = name_prefix
+        self._info_dict = {}
+        self._timeout = timeout
+
+        # If a writing lock is established, then the name of the lock
+        # file will be set here.  This serves as a flag.  Locking is
+        # implemented through the with mechanism.
+        if synchronize:
+            self._lock_file = ""
+        else:
+            # Establish lock now or fail...
+            self._lock_file = self._lock()
+                
         mod_dir = os.path.join(path, module_name)
         key_file = os.path.join(mod_dir, '_this_dir_is_a_DataSet')
         if os.path.exists(mod_dir):
@@ -2094,105 +2061,277 @@ class DataSet(object):
 
             self._load()
         elif mode == 'w':
-            if self.verbose:
+            if self._verbose:
                 print("Making directory %s for output." % (mod_dir,))
             os.makedirs(mod_dir)
             open(key_file, 'w').close()
         else:
             raise ValueError(
-                ("Directory %s does not exist. Please choose an "
-                 "existing data set for read-only mode. ") % (mod_dir,))
+                ("Default mode is read-only but directory %s does "
+                 "not exist. Please choose an existing DataSet or "
+                 "specify write mode with mode='w'.") % (mod_dir,))
             
     def _load(self):
         r"""Create the data set from an existing repository."""
         curdir = os.path.abspath(os.curdir)
-        os.chdir(self.path)
+        os.chdir(self._path)
         d = {}
-        execfile(os.path.join(self.module_name, '__init__.py'), d)
-        self.info_dict = d['info_dict']
+        init_file = os.path.join(self._module_name, '__init__.py')
+        if os.path.exists(init_file):
+            execfile(init_file, d)
+            self._info_dict = d['_info_dict']
+        else:
+            self._info_dict = {}            
         del d
         os.chdir(curdir)
+
+    def _lock(self):
+        r"""Actually write the lock file, waiting for timeout if
+        needed.  Return the lock file name on success"""
+        lock_file = os.path.join(self._path, self._module_name,
+                                 self._lock_file_name)
         
-    def write(self):
-        r"""Make the module `__init__.py` file."""
-        if self.mode == 'r':
+        if os.path.exists(lock_file):
+            tic = time.time()
+            # Archive locked
+            while tic + self._timeout < time.time():
+                if not os.path.exists(lock_file):
+                    # Lock release, so make lock-file
+                    open(lock_file, 'w').close()
+                    return lock_file
+                time.sleep(0.5)
+            # Timeout
+            raise IOError(
+                "DataSet locked.  Please close or remove lock '%s'" %
+                (lock_file,))
+        else:
+            open(lock_file, 'w').close()
+            return lock_file
+        
+    def _unlock(self):
+        r"""Actually remove the lock file."""
+        if self._lock_file:
+            if os.path.exists(self._lock_file):
+                os.remove(self._lock_file)
+                self._lock_file = ""
+            else:
+                warnings.warn("Lock file %s lost or missing!" %
+                              (self._lock_file,))
+
+    @contextmanager
+    def _ds_lock(self):
+        r"""Lock the data set for writing."""
+        try:
+            if self._synchronize:
+                if self._lock_file:
+                    raise NotImplementedError(
+                        "Lock already established! "
+                        "(Reentry not supported)")
+                else:
+                    self._lock_file = self._lock()
+            else:
+                # Lock should have been established upon construction
+                if (not self._lock_file
+                    or not os.path.exists(self._lock_file)):
+                    raise IOError("Lost lock on %s!" % self._lock_file)
+            yield
+        except:
+            raise
+        finally:
+            r"""Reset the data set writing lock."""
+            if self._synchronize:
+                self._unlock()
+
+    def __iter__(self):
+        return self._info_dict.__iter__()
+    
+    def __getattr__(self, name):
+        r"""Load the specified attribute from disk."""
+        if name.startswith('_') or not name in self:
+            # Provide access to state variables. 
+            raise AttributeError(
+                "'%s' object has no attribute '%s'" %
+                (self.__class__.__name__, name))
+        
+        archive_file = os.path.join(self._path,
+                                    self._module_name,
+                                    "%s.py" % (name,))
+        if os.path.exists(archive_file):
+            d ={}
+            __d = {Archive.data_name:d}
+
+            datafile = os.path.join(self._path,
+                                    self._module_name,
+                                    "data_%s.hd5" % (name,))
+            f = None
+            if os.path.exists(datafile):
+                f = tables.openFile(datafile, 'r')
+                for k in f.root:
+                    d[k.name] = k.read()
+
+                f.close()
+
+            try:
+                execfile(archive_file, __d)
+            except KeyError, err:
+                if f is None:
+                    raise
+                else:
+                    msg = "\n".join([
+                        "No datafile '%s' found to load '%s'.",
+                        (datafile, name)])
+                    raise KeyError(msg)
+            res = __d[name]
+            del d
+            del __d
+        else:
+            res = None
+        return res
+
+    def __setattr__(self, name, value):
+        r"""Store the specified attribute to disk."""
+        if name.startswith('_'):
+            # Provide access to state variables. 
+            return object.__setattr__(self, name, value)
+            
+        if self._mode == 'r':
+            raise ValueError("DataSet opened in read-only mode.")        
+
+        with self._ds_lock():              # Establish lock
+            if tables is not NotImplemented:
+                arch = Archive(array_threshold=self._array_threshold)
+                arch.insert(**{name: value})
+                archive_file = os.path.join(self._path,
+                                            self._module_name,
+                                            "%s.py" % (name,))
+
+                backup_name = None
+                if os.path.exists(archive_file):
+                    backup_name = archive_file + ".bak"
+                    n = 1
+                    while os.path.exists(backup_name):
+                        backup_name = archive_file + "_%i.bak" % (n)
+                        n += 1
+                    os.rename(archive_file, backup_name)
+
+                f = open(archive_file, 'w')
+                f.write(str(arch))
+                f.close()
+
+                if backup_name and not self._backup_data:
+                    # Remove backup of data
+                    os.remove(backup_name)
+                    
+                datafile = os.path.join(self._path,
+                                        self._module_name,
+                                        "data_%s.hd5" % (name,))
+                backup_name = None
+                if os.path.exists(datafile):
+                    backup_name = datafile + ".bak"
+                    n = 1
+                    while os.path.exists(backup_name):
+                        backup_name = datafile + "_%i.bak" % (n)
+                        n += 1
+                    os.rename(datafile, backup_name)
+                
+                if arch.data:                
+                    f = tables.openFile(datafile, 'w')
+                    for name in arch.data:
+                        f.createArray(f.root, name, arch.data[name])
+                    f.close()
+
+                if backup_name and not self._backup_data:
+                    # Remove backup of data
+                    os.remove(backup_name)
+            else:
+                raise NotImplementedError(
+                    "Data can presently only be saved with pytables")
+
+        if name not in self._info_dict:
+            # Set default info to None.
+            self[name] = None
+
+    def __contains__(self, name):
+        r"""Fast containment test."""
+        if self._synchronize:
+            self._load()        
+        return name in self._info_dict
+
+    def __getitem__(self, name):
+        r"""Return the info associate with `name`."""
+        if self._synchronize:
+            self._load()
+        return self._info_dict[name]
+
+    def __setitem__(self, name, info):
+        r"""Set the info associate with `name` and write the module
+        `__init__.py` file."""
+        if self._mode == 'r':
             raise ValueError("DataSet opened in read-only mode.")
-        if self.module_name:
-            arch = Archive()
-            arch.insert(info_dict=self.info_dict)
-            init_file = os.path.join(self.path, self.module_name, '__init__.py')
-            f = open(init_file, 'w')
-            f.write(str(arch))
-            f.close()
 
-    def keys(self):
-        return self.info_dict.keys()
+        with self._ds_lock():
+            if self._synchronize:
+                self._load()
 
-    def __getitem__(self, key):
-        return self.info_dict[key]
+            self._info_dict[name] = info
+            
+            if self._module_name:
+                arch = Archive(allowed_names=['_info_dict'])
+                arch.insert(_info_dict=self._info_dict)
+                init_file = os.path.join(
+                    self._path, self._module_name, '__init__.py')
+                f = open(init_file, 'w')
+                f.write(str(arch))
+                f.close()
 
     def __str__(self):
+        if self._synchronize:
+            self._load()
         return ("DataSet %r containing %s" % (
-            os.path.join(self.path, self.module_name),
-            str(self.keys())))
+            os.path.join(self._path, self._module_name),
+            str(self._info_dict.keys())))
 
     def __repr__(self):
         return ("DataSet(%s)" %
-                ", ".join(["%s=%s" % (k, repr(getattr(self, k)))
-                           for k in ['module_name', 'path', 'verbose',
+                ", ".join(["%s=%s" % (k, repr(getattr(self, '_' + k)))
+                           for k in ['module_name', 'path',
+                                     'synchronize',
+                                     'verbose',
                                      'array_threshold', 'backup_data',
-                                     'name_prefix']]))
+                                     'name_prefix', ]]))
 
-    def insert(self, *v, **kw):
+    def _insert(self, *v, **kw):
         r"""Store object and info in the archive under `name`.
 
-        Call as `insert(name=obj, info=info)` or `insert(obj,
+        Call as `_insert(name=obj, info=info)` or `insert(obj,
         info=info)`.   The latter form will generate a unique name.
 
         When the data set is imported, the `info` will be restored as
         `info_dict[name].info` but the actual data `obj` will not be
         restored until `info_dict[name].load()` is called.
         """
-        if self.mode == 'r':
+        if self._mode == 'r':
             raise ValueError("DataSet opened in read-only mode.")
         if 'info' in kw:
             info = kw.pop('info')
         else:
             info = None
-        mod_dir = os.path.join(self.path, self.module_name)
+        mod_dir = os.path.join(self._path, self._module_name)
         for name in kw:
-            self.info_dict[name] = DataSet_Record(
-                info=info, obj=kw[name], name=name,
-                array_threshold=self.array_threshold,
-                path=mod_dir, backup_data=self.backup_data)
-
+            self[name] = info
+            self.__setattr__(name, kw[name])
+            
         for obj in v:
             i = 0
-            name = self.name_prefix + str(i)
-            while name in self.info_dict:
+            name = self._name_prefix + str(i)
+            while name in self._info_dict:
                 i += 1
-                name = self.name_prefix + str(i)
+                name = self._name_prefix + str(i)
             
-            self.info_dict[name] = DataSet_Record(
-                info=info, obj=obj, name=name,
-                array_threshold=self.array_threshold,
-                path=mod_dir, backup_data=self.backup_data)
-
-        self.write()    
-
-    def load(self, name):
-        __d = {}
-        data_name, rep = self.data_reps[name]
-        exec(rep, __d)
-        res = __d[data_name]
-        del __d
-        return res
-
-    def close(self):
-        if self.mode == 'w':
-            self.write()
-        self.module_name = ""
+            self[name] = info
+            self.__setattr__(name, obj)
 
     def __del__(self):
-        self.close()
+        r"""Make sure we unlock archive."""
+        self._unlock()
 
