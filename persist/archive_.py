@@ -1845,20 +1845,38 @@ class DataSet(object):
        conflicting updates.  We have two mechanisms for dealing with
        this as specified by the `synchronize` flag.
 
-    . Importing this
-    module or executing the `__init__.py` file will result in an
-    `info_dict` dictionary that contains a :class:`_DataSet_Record`
-    associated with each key.  The record contains `info` which is
-    information about the object as well as methods `load` and `store`
-    which can be used to load and save the object associated with the
-    info.
+    .. warning:: The mechanism for saving is dependent on
+       :meth:`__setattr__` and :meth:`__setitem__` being called.  This
+       means that you must not rely on mutating members.  This will
+       not trigger a save. For example, the following will not behave
+       as expected:
 
-    Each object is stored in an independent file named `*.py` and
-    associated binary data is stored in `data_*.hd5` using the
-    PyTables module :mod:`tables`.  Each object can be imported
-    independently and will have two members `info` and `data`
-    containing the information and data.
-    
+       >>> import tempfile, shutil       # Make a unique temporary module
+       >>> t = tempfile.mkdtemp(dir='.')
+       >>> os.rmdir(t)
+       >>> modname = t[2:]
+       >>> ds = DataSet(modname, 'w')
+       >>> ds.d = dict(a=1, b=2)        # Will write to disk
+       >>> ds1 = DataSet(modname, 'r')
+       >>> ds1.d                        # See?
+       {'a': 1, 'b': 2}
+
+       This is dangerous... Do not do this.
+
+       >>> ds.d['a'] = 6                # No write!
+       >>> ds1.d['a']                   # This was not updated
+       1
+
+       Instead, do something like this: Store the mutable object in a
+       local variable, manipulate it, then reassign it:
+       
+       >>> d = ds.d
+       >>> d['a'] = 6
+       >>> ds.d = d                     # This assignment will write
+       >>> ds1.d['a']
+       6
+       >>> shutil.rmtree(t)       
+           
     Examples
     --------
     First we make the directory that will hold the data.  Here we use
@@ -2145,6 +2163,9 @@ class DataSet(object):
     def __iter__(self):
         return self._info_dict.__iter__()
     
+    def __dir__(self):
+        r"""Provides :func:`get` support fr tab completion etc."""
+        return [k for k in self]
     def __getattr__(self, name):
         r"""Load the specified attribute from disk."""
         if name.startswith('_') or not name in self:
