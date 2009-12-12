@@ -2257,8 +2257,8 @@ class DataSet(object):
                 
                 if arch.data:                
                     f = tables.openFile(datafile, 'w')
-                    for name in arch.data:
-                        f.createArray(f.root, name, arch.data[name])
+                    for _name in arch.data:
+                        f.createArray(f.root, _name, arch.data[_name])
                     f.close()
 
                 if backup_name and not self._backup_data:
