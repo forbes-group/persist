@@ -2088,6 +2088,11 @@ class DataSet(object):
                 ("Default mode is read-only but directory %s does "
                  "not exist. Please choose an existing DataSet or "
                  "specify write mode with mode='w'.") % (mod_dir,))
+
+        # Needed for pre 2.6 python version to support tab completion
+        if sys.version < "2.6":
+            self.__members__ = self._info_dict.keys()
+
             
     def _load(self):
         r"""Create the data set from an existing repository."""
@@ -2267,6 +2272,10 @@ class DataSet(object):
             else:
                 raise NotImplementedError(
                     "Data can presently only be saved with pytables")
+
+        # Needed for pre 2.6 python version to support tab completion
+        if sys.version < "2.6":
+            self.__members__.append(name)
 
         if name not in self._info_dict:
             # Set default info to None.
