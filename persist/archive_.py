@@ -2310,9 +2310,23 @@ class DataSet(object):
                 arch.insert(_info_dict=self._info_dict)
                 init_file = os.path.join(
                     self._path, self._module_name, '__init__.py')
+
+                backup_name = None
+                if os.path.exists(init_file):
+                    backup_name = init_file + ".bak"
+                    n = 1
+                    while os.path.exists(backup_name):
+                        backup_name = init_file + "_%i.bak" % (n)
+                        n += 1
+                    os.rename(init_file, backup_name)
+
                 f = open(init_file, 'w')
                 f.write(str(arch))
                 f.close()
+
+                if backup_name and not self._backup_data:
+                    # Remove backup of data
+                    os.remove(backup_name)
 
     def __str__(self):
         if self._synchronize:
