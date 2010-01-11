@@ -2346,6 +2346,7 @@ class DataSet(object):
 
     def _insert(self, *v, **kw):
         r"""Store object and info in the archive under `name`.
+        Returns a list of the names added.
 
         Call as `_insert(name=obj, info=info)` or `insert(obj,
         info=info)`.   The latter form will generate a unique name.
@@ -2354,6 +2355,7 @@ class DataSet(object):
         `info_dict[name].info` but the actual data `obj` will not be
         restored until `info_dict[name].load()` is called.
         """
+        names = set()
         if self._mode == 'r':
             raise ValueError("DataSet opened in read-only mode.")
         if 'info' in kw:
@@ -2364,7 +2366,8 @@ class DataSet(object):
         for name in kw:
             self[name] = info
             self.__setattr__(name, kw[name])
-            
+            names.add(name)
+
         for obj in v:
             i = 0
             name = self._name_prefix + str(i)
@@ -2374,6 +2377,8 @@ class DataSet(object):
             
             self[name] = info
             self.__setattr__(name, obj)
+            names.add(name)
+        return list(names)
 
     def __del__(self):
         r"""Make sure we unlock archive."""
