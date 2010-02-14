@@ -195,7 +195,7 @@ class Archive(object):
     ----------
     arch : list
        List of `(uname, obj, env)` where `obj` is the object, which
-       can be rescontructed from the string `rep` evaluated in the
+       can be reconstructed from the string `rep` evaluated in the
        context of `args`, `imports`, and `env`.
     ids : dict
        Dictionary mapping names to id's.  If the name corresponds to a
@@ -317,6 +317,7 @@ class Archive(object):
     ['a', 'b']
 
     Note that the shared list here is the same list:
+    
     >>> id(res['l'][3]) == id(res['d']['l0'])
     True
     """
