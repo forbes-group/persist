@@ -104,7 +104,7 @@ data-file.
 """
 from __future__ import division, with_statement
 __all__  = ['Archive', 'DataSet', 'restore',
-            'ArchiveError', 'DuplicateError']
+            'ArchiveError', 'DuplicateError', 'repr_']
 
 import os
 import sys
