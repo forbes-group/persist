@@ -1,5 +1,5 @@
 r"""Various Interfaces."""
-__all__ = ['Interface', 'Attribute', 'IArchivable', 'implements']
+__all__ = ['IArchivable', 'Attribute', 'Interface', 'implements']
 
 try:
     from zope.interface import Interface, Attribute
