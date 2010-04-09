@@ -82,6 +82,10 @@ used where the archive is turned into a module that contains a binary
 data-file.  
 
 .. todo::
+   - Make sure that numpy arrays from tostring() are *NOT* subject to
+     replacement somehow.  Not exactly sure how to reproduce the
+     problem, but it is quite common for these to have things like
+     '_x' in the string.
    - Graph reduction occurs for nodes that have more than one parent.
      This does not consider the possibility that a single node may
      refer to the same object several times.  This has to be examined
