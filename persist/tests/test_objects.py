@@ -1,4 +1,3 @@
-import inspect
 import warnings
 
 from copy import copy, deepcopy
@@ -7,13 +6,16 @@ import nose
 
 import numpy as np
 
+# Include the actual module for testing.
+import mmf.utils.init
+mmf.utils.init._INCLUDE_PRIVATE_MODS = True
+
 import mmf.utils.mmf_test
 
 import mmf.objects
 from mmf.objects import StateVars, Container, process_vars
 from mmf.objects import ClassVar, Required, Computed, NoCopy, Deleted
-from mmf.objects import Excluded, Delegate, Ref
-
+from mmf.objects import Excluded, Delegate
 
 class A(mmf.objects.Archivable):
     def __init__(self, x):
@@ -982,33 +984,33 @@ class TestCoverage(object):
 
     def test_normalize_state_vars_1(self):
         """Test state var `('a', )`."""
-        sv = mmf.objects.objects_._normalize_state_vars([('a',)])
+        sv = mmf.objects._objects._normalize_state_vars([('a',)])
         nose.tools.assert_equal(sv, [
-                ('a', NotImplemented, mmf.objects.objects_._NO_DESCRIPTION)])
+                ('a', NotImplemented, mmf.objects._objects._NO_DESCRIPTION)])
 
     @nose.tools.raises(TypeError)
     def test_normalize_state_vars_2(self):
         """Test state var exception on ('a',,,,)."""
-        sv = mmf.objects.objects_._normalize_state_vars([
+        sv = mmf.objects._objects._normalize_state_vars([
                 ('a',None, None, None)])
         
     @nose.tools.raises(ValueError)
     def test_normalize_state_vars_3(self):
         """Test state var exception on ('a',,,,)."""
-        sv = mmf.objects.objects_._normalize_state_vars([
+        sv = mmf.objects._objects._normalize_state_vars([
                 ('a',1),
                 ('b=a', 2, 'doc b')])
         
     @nose.tools.raises(TypeError)
     def test_normalize_state_vars_4(self):
         """Test state var exception on ('a',,,,)."""
-        sv = mmf.objects.objects_._normalize_state_vars([
+        sv = mmf.objects._objects._normalize_state_vars([
                 ('a=b',1,1,1,1)])
         
     @nose.tools.raises(ValueError)
     def test_normalize_state_vars_5(self):
         """Coverage of ('a=b',1,'doc')"""
-        sv = mmf.objects.objects_._normalize_state_vars([
+        sv = mmf.objects._objects._normalize_state_vars([
                 ('a=b',1,'doc')])
         
     @mmf.utils.mmf_test.dec.skipknownfailure
@@ -1018,7 +1020,7 @@ class TestCoverage(object):
 
         This should raise an exception because the defaults are different.
         ."""
-        sv = mmf.objects.objects_._normalize_state_vars([
+        sv = mmf.objects._objects._normalize_state_vars([
                 ('x=b.x', 1),
                 ('y=b.x', 1)])
 
@@ -1046,7 +1048,7 @@ class TestCoverage(object):
     @nose.tools.raises(ValueError)
     def test_normalize_state_vars_5(self):
         """Test state var exception on ('a',,,,)."""
-        sv = mmf.objects.objects_._normalize_state_vars([
+        sv = mmf.objects._objects._normalize_state_vars([
                 ('a=b',1,'doc')])
         
     @nose.tools.raises(mmf.objects.NameClashWarning)
@@ -1054,7 +1056,7 @@ class TestCoverage(object):
         """Test state var exception on ('a',,,,)."""
         class A(object):
             _state_vars = ['a', 'a=a']
-        mmf.objects.objects_._gather_vars(A)
+        mmf.objects._objects._gather_vars(A)
 
     @nose.tools.raises(mmf.objects.NameClashWarning2)
     def test_local_hiding_1(self):

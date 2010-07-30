@@ -551,6 +551,7 @@ class Archive(object):
         except NameError: pass
 
         For testing purposes we have to sort the lines of the output:
+
         >>> print "\n".join(sorted(str(a).splitlines()))
         A = _numpy.fromstring('\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00', dtype='<i4').reshape((3,))
         a = 4
