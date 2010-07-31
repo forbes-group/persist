@@ -1,3 +1,4 @@
+import sys
 import warnings
 
 from copy import copy, deepcopy
@@ -6,13 +7,15 @@ import nose
 
 import numpy as np
 
-# Include the actual module for testing.
-import mmf.utils.init
-mmf.utils.init._INCLUDE_PRIVATE_MODS = True
+# Include the actual module for testing.  FAILS!
+#import mmf.utils.init
+#mmf.utils.init._INCLUDE_PRIVATE_MODS = True
 
 import mmf.utils.mmf_test
 
 import mmf.objects
+mmf.objects._objects = sys.modules['mmf.objects._objects']
+
 from mmf.objects import StateVars, Container, process_vars
 from mmf.objects import ClassVar, Required, Computed, NoCopy, Deleted
 from mmf.objects import Excluded, Delegate

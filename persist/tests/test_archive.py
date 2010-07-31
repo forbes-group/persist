@@ -1,3 +1,5 @@
+import sys
+
 import inspect
 import math
 
@@ -9,7 +11,8 @@ import scipy.sparse
 
 import mmf.objects
 import mmf.interfaces as interfaces
-import mmf.archive.archive_ as archive
+
+archive = sys.modules['mmf.archive._archive']
 
 import mmf.utils.mmf_test
 

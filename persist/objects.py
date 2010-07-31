@@ -4104,7 +4104,7 @@ class CalcObject(CopyConstruct, Archivable):
 
         >>> c = CalcObject(a=1, b=2)
         >>> print c.archive('c') # doctest: +NORMALIZE_WHITESPACE +ELLIPSIS
-        from ...objects_ import CalcObject as _CalcObject
+        from ..._objects import CalcObject as _CalcObject
         c = _CalcObject(a=1, b=2)
         del _CalcObject
         try: del __builtins__
