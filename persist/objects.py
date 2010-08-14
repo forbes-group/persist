@@ -14,7 +14,7 @@ Attention has been given to making getting attributes as efficient as
 if they were standard attributes.  Setting attributes is not so
 efficient, however, as many checks are done at this stage.  This
 reflects the common usage of attributes such as parameters that are
-set only once in a while but accessed frequently/
+set only once in a while but accessed frequently.
 
 .. note:: Getting attributes is somewhat inefficient for references as
    lookup must generally be performed.  This penalty can be overcome
@@ -24,6 +24,99 @@ set only once in a while but accessed frequently/
 
 StateVars
 ---------
+
+.. _init_semantics:
+
+:meth:`__init__` Semantics
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In the :class:`StateVars` and its descendants, the role of
+:meth:`StateVars.__init__` and the inherited :meth:`__init__` method
+changes slightly from the usual role as an initializer.  The semantics
+are that of an initializer that ensures the class is in a consistent
+state after initialization \emph{and} after variable changes.  The
+following changes have been made:
+
+1) :meth:`StateVars.__setattr__` calls :meth:`__init__` whenever a
+   variable is assigned.  The name of the change variable is passed as
+   a keyword argument so that a clever :meth:`__init__` can avoid
+   performing unnecessary computations.  (See also
+   :meth:`StateVars.suspend`, :meth:`StateVars.resume`, and
+   :meth:`StateVars.initialize`).
+
+   .. warning:: During construction, all default values are also
+      assigned, and these assignments are included as keyword
+      arguments to :meth:`__init__`.  Thus, there is no way of knowing
+      exactly what arguments were specified by the user.  This is
+      intentional so that code to compute :class:`Computed` variables
+      can simply check for all values that have been set -- default or
+      otherwise -- and compute what is needed.
+
+      The workaround is to set a special default value (such as `None`
+      or defining a special object containing the value) so that you
+      can differentiate from a significant value.  Of course, if the
+      user provides exactly this value, you are in the same boat.
+      (Consider using a private class for example to prevent this.)
+
+:meth:`StateVars.__new__` also wraps the :meth:`StateVars.__init__`
+method defined by the class to provide the following behaviour.  (This
+is defined in :func:`_get_processed_vars`.)
+
+2) All assignments of named arguments to the instance attributes takes
+   place before :meth:`StateVars.__init__` is called, so this usual
+   ``self.a = a`` statements may be omitted.
+
+3) The base class :meth:`__init__` methods are called if
+   :attr:`StateVars._call_base__init__` is `True`, otherwise the user
+   should call them as usual.
+
+Thus, the main purpose of :meth:`__init__` is to compute all
+:class:`Computed` variables from the changed (or initialized) values
+of the other class parameters.  Here is a skeleton::
+
+    def __init__(self, *varargin, **kwargs):
+        if (1 == len(varargin) and not kwargs):
+            # Called as a copy constructor.  State has been copied from
+            # other by __new__.  You do not need to copy the
+            # attributes here, but may need to copy calculated
+            # parameters that are cached.  If kwargs is not empty,
+            # then additional values have been specified and need to
+            # be processed, so we exclude that case here
+            _other = varargin[0]
+        elif 1 < len(varargin):
+            # Another argument passed without kw.  Error here.
+            raise ValueError("StateVars accepts only keyword arguments.")
+        else:
+            # Process the changed variables as specified in kwargs
+            # Call the base __init__ methods unless you explicitly set
+            # _call_base__init__ is set
+            <BaseClass>.__init__(self, *varagin, **kwargs)
+
+            # For all computed vars, if a dependent variable is in
+            # kwargs, then recompute it.
+
+Property Semantics
+~~~~~~~~~~~~~~~~~~
+Properties can have three roles:
+
+1) As a way of defining dynamically computed data.  In this case the
+   property should have no `fset` method and will be stored as a
+   :class:`Computed` state var with no storage.
+2) As a way of getting and setting other attributes.  These types of
+   properties have `fset` but should not be archived, stored etc.  The
+   data will be archived and restored when the other data are stored.
+   Such properties should *not* be included in `_state_vars`: They
+   will instead be listed in the `_settable_properties` attribute.
+3) As the preferred way of getting and setting other attributes in a
+   way that the data should be stored and archived.  In this case, the
+   data attributes used by the property should be directly set in the
+   dictionary.  These properties should be included in `_state_vars`
+   (which will generate a name clash error, so be sure to add the
+   appropriate name to `_ignore_name_clash`).
+
+The first two roles will be deduced automatically if a property exists
+but is not in `_state_vars`.  The last role requires both the
+existence of the property and an entry in `_state_vars`.
 
 Copy Semantics
 ~~~~~~~~~~~~~~
@@ -60,61 +153,8 @@ following semantics:
    be included here as they should be recomputed by the
    initialization routines, but references will be.
 
-`__init__` Semantics
-~~~~~~~~~~~~~~~~~~~~
-The role of `__init__` changes slightly in the :class:`StateVars`.
-The semantics are that of an initializer that ensures the class is in
-a consistent state after initialization \emph{and} after variable
-changes.  The following changes have been made:
-
-1) :meth:`StateVars.__setattr__` calls `__init__` whenever a variable
-   is assigned.  The name of the change variable is passed as an
-   argument so that a clever `__init__` can avoid performing
-   unnecessary computations.  (See also :meth:`StateVars.suspend`,
-   :meth:`StateVars.resume`, and :meth:`StateVars.initialize`).
-   
-:meth:`StateVars.__new__` also wraps the `__init__` method defined by
-the class to provide the following behaviour.  (This is defined in
-:func:`_get_processed_vars`.)
-
-2) All assignments of named arguments to the instance attributes takes
-   place before `__init__` is called, so this usual ``self.a = a``
-   statements may be omitted.
-3) The base class `__init__` methods are called if
-   :attr:`StateVars._call_base__init__` is `True`, otherwise the user
-   should call them as usual.
-
-Thus, the main purpose of `__init__` is to compute all
-:class:`Computed` variables from the changed (or initialized) values
-of the other class parameters.
-
-Property Semantics
-~~~~~~~~~~~~~~~~~~
-Properties can have three roles:
-
-1) As a way of defining dynamically computed data.  In this case the
-   property should have no `fset` method and will be stored as a
-   :class:`Computed` state var with no storage.
-2) As a way of getting and setting other attributes.  These types of
-   properties have `fset` but should not be archived, stored etc.  The
-   data will be archived and restored when the other data are stored.
-   Such properties should *not* be included in `_state_vars`: They
-   will instead be listed in the `_settable_properties` attribute.
-3) As the preferred way of getting and setting other attributes in a
-   way that the data should be stored and archived.  In this case, the
-   data attributes used by the property should be directly set in the
-   dictionary.  These properties should be included in `_state_vars`
-   (which will generate a name clash error, so be sure to add the
-   appropriate name to `_ignore_name_clash`).
-
-The first two roles will be deduced automatically if a property exists
-but is not in `_state_vars`.  The last role requires both the
-existence of the property and an entry in `_state_vars`.
-
 To Do
 -----
-.. todolist::
-
 .. todo:: Add support for nicely printing: i.e. flags or something to
    indicate how the object should print.
 .. todo:: Add :class:`Dependent` like :class:`Required` so that some values can
@@ -466,7 +506,7 @@ class Attr(Archivable):
     def items(self):
         r"""Return all items to make object archivable.  The attribute
         names are determined by inspecting the arguments to the
-        constructor `__init__`."""
+        constructor :meth:`__init__`."""
         items = []
         func_code = self.__init__.im_func.func_code # pylint: disable-msg=E1101
         nargs = func_code.co_argcount
@@ -1082,10 +1122,10 @@ def _gather_vars(cls):
     settable_properties : set
         Set of settable properties not included in vars.
     cached : set
-        Set of cached attributes.  In the `__init__` wrapper (defined
-        by :func:`_get_processed_vars`), these variables should be set
-        in `__dict__` with the values they reference for fast
-        retrieval.
+        Set of cached attributes.  In the :meth:`__init__` wrapper
+        (defined by :func:`_get_processed_vars`), these variables
+        should be set in `__dict__` with the values they reference for
+        fast retrieval.
     ignore_name_clash : set
         This is a set of names for which name clashes between
         `cls.__dict__` and `cls._vars`.  This method adds properties
@@ -1852,7 +1892,7 @@ def _get_processed_vars(cls, copy, archive_check, with_docs=None):
         does processing."""        
         cls._original__init__ = cls.__init__
         def __init__(self, *varargin, **kwargs):
-            r"""Wrapper for `__init__` to set _initializing flag."""
+            r"""Wrapper for :meth:`__init__` to set _initializing flag."""
             # pass, pylint: disable-msg=W0212            
             if '_no_init' in self.__dict__:
                 # Short circuit for copy construction:
@@ -1924,7 +1964,7 @@ def process_vars(cls, copy=copy.deepcopy, archive_check=None,
     results : dict
        New class dictionary including `'__doc__'`
     wrap__init__ : function
-       This function should be used to wrap the original `__init__`
+       This function should be used to wrap the original :meth:`__init__`
        method to perform the assignments etc.
        
     Examples
@@ -1998,7 +2038,7 @@ def _vars_processed(cls):
 def _start_initializing(self):
     r"""Set the _initializing semaphore in self and return.
 
-    Use before calling `__init__` to prevent recursion.  Pass the
+    Use before calling :meth:`__init__` to prevent recursion.  Pass the
     return value to `_finish_initializing` to check that nothing has
     altered the flag in between.  This should be used in a try block.
     """
@@ -2008,7 +2048,7 @@ def _start_initializing(self):
 
 def _finish_initializing(self, previous_initializing):
     r"""Unset the `_initializing` semaphore in self.
-    Use after calling `__init__`."""
+    Use after calling :meth:`__init__`."""
     # pass, pylint: disable-msg=W0212
     try:
         _initializing = self._initializing
@@ -2038,7 +2078,7 @@ class StateVars(Archivable):
     1) Define the :attr:`_state_vars` attribute as discussed below.
     2) Call :func:`process_vars`.
     3) Define :meth:`__init__` to specifying initialization.  Be sure
-       to call `__init__` for any base classes (not needed if
+       to call :meth:`__init__` for any base classes (not needed if
        inheriting directly from :class:`StateVars`.  Remember that you
        do not need to assign any parameters in :attr:`_state_vars` ---
        these will be assigned in the constructor :meth:`__new__`.
@@ -2049,6 +2089,8 @@ class StateVars(Archivable):
        Remember that :meth:`__init__` will be called whenever
        parameter change in a shallow way (i.e. through direct
        assignment).
+
+       See :ref:`init_semantics` for details.
                                                 
     4) Profile performance: if performance is too slow then:
 
@@ -2114,10 +2156,10 @@ class StateVars(Archivable):
        A set of all settable properties not in _vars.
     _call_base__init__ : bool
        If `True`, then automatically call the base class
-       `__init__` methods.  `False` by default.
+       :meth:`__init__` methods.  `False` by default.
     _original__init__ : meth
-       This is the original `__init__` function is stored here.  After
-       the class is finished, the original `__init__` is replaced by a
+       This is the original :meth:`__init__` function is stored here.  After
+       the class is finished, the original :meth:`__init__` is replaced by a
        wrapper (defined in :func:`_get_processed_vars`) that sets the
        variables and then calls this (as well as the base constructors
        if `_call_base__init__` is `True`.)
@@ -2648,12 +2690,12 @@ class StateVars(Archivable):
     Note that the value here is the default: the NotImplemented value
     of `a.c` is ignored.
 
-    When inheriting from classes that define `__init__`, one must make
+    When inheriting from classes that define :meth:`__init__`, one must make
     sure that the base class versions are called, either by setting
     :attr:`_call_base__init__` or explicitly.  (Note that
-    :class:`StateVars` only has a dummy `__init__` method, so if you
+    :class:`StateVars` only has a dummy :meth:`__init__` method, so if you
     only inherit from this class, or from descendants that do not
-    redefine `__init__`, then you may omit this call, but it is
+    redefine :meth:`__init__`, then you may omit this call, but it is
     considered bad form.)
 
     >>> class A(StateVars):
@@ -2682,6 +2724,7 @@ class StateVars(Archivable):
 
 
     Here are two correct ways:
+
     >>> class B1(A):
     ...     _state_vars = [
     ...         ('c_b', Computed)]
@@ -2690,6 +2733,7 @@ class StateVars(Archivable):
     ...         A.__init__(self, *v, **kw)
     ...         print('Computing c_b...')
     ...         self.c_b = self.a*3
+
     >>> class B2(A):
     ...     _state_vars = [
     ...         ('c_b', Computed)]
@@ -2698,6 +2742,7 @@ class StateVars(Archivable):
     ...     def __init__(self, *v, **kw):
     ...         print('Computing c_b...')
     ...         self.c_b = self.a*3
+
     >>> b = B1(a=1)
     Computing c_a...
     Computing c_b...
@@ -2743,7 +2788,7 @@ class StateVars(Archivable):
         :meth:`_pre_hook__new__` and :meth:`_post_hook__new__` may be
         used.  These are called within the initialization look.  This
         should only be done as a last resort because it will break the
-        symantics of the StateVar class making your code hard to read.
+        semantics of the StateVar class making your code hard to read.
         
         Parameters
         ----------
@@ -2761,7 +2806,7 @@ class StateVars(Archivable):
         One non-keyword argument is allowed and signifies copy
         construction.  If there are no more `kwargs` and the object
         has the same type as `cls`, then no initialization is needed
-        as signified by :attr:`_no_init` (which is check by `__init__`). 
+        as signified by :attr:`_no_init` (which is check by :meth:`__init__`). 
         """
         # pass, pylint: disable-msg=W0212
         if 1 == len(varargin):
@@ -3012,14 +3057,16 @@ class StateVars(Archivable):
            attribute is mutated, then :meth:`__getattr__` is called
            and there is no (efficient) way to determine if it was
            mutated.
-    
-       :class:`Computed` values with `True` ` :attr:`Computed.save`
+           
+        :class:`Computed` values with `True` :attr:`Computed.save`
         will be passed in through `kwargs` when objects are restored
         from an archive.  These parameters in general need not be
         recomputed, but this opens the possibility for an inconsistent
         state upon construction if a user inadvertently provides these
         parameters.  Note that the parameters still cannot be set
         directly.
+       
+        See :ref:`init_semantics` for details.
         """
         if (1 == len(varargin) and not kwargs):
             # Called as a copy constructor.  State has been copied from
