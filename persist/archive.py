@@ -266,9 +266,9 @@ class Archive(object):
     We can include functions and classes: These are stored by their
     names and imports.
     
-    >>> arch.insert(f=np.sin)
-    'f'
-    
+    >>> arch.insert(f=np.sin, g=restore)
+    ['g', 'f']
+
     Here we include a list and a dictionary containing that list.  The
     resulting archive will only have one copy of the list since it is
     referenced.
@@ -297,16 +297,19 @@ class Archive(object):
 
     >>> s = str(arch)
     >>> print s
+    from mmf.archive._archive import restore as _restore
     from numpy import sin as _sin
     from __builtin__ import dict as _dict
-    _l_2 = ['a', 'b']
-    l = [1, 2, 3, _l_2]
-    d = _dict([('s', 'hi'), ('l', l), ('l0', _l_2)])
+    _l_3 = ['a', 'b']
+    l = [1, 2, 3, _l_3]
+    d = _dict([('s', 'hi'), ('l', l), ('l0', _l_3)])
+    g = _restore
     f = _sin
     x = 4
+    del _restore
     del _sin
     del _dict
-    del _l_2
+    del _l_3
     try: del __builtins__
     except NameError: pass
 
@@ -476,6 +479,7 @@ class Archive(object):
         np.ndarray:_archive_ndarray,
         np.ufunc:_archive_func,
         types.BuiltinFunctionType:_archive_func,
+        types.FunctionType:_archive_func,
         list:_archive_list,
         tuple:_archive_tuple,
         dict:_archive_dict,
@@ -605,8 +609,8 @@ class Archive(object):
          [('c', '_numpy.array([ 1.+0.j,  2.+3.j,  3.+0.j])'),
           ('cc', '[c, c, [3]]'),
           ('A', '_numpy.array([1, 2, 3])'),
-          ('x', '2'),
-          ('_x', '5')])        
+          ('_x', '5'),
+          ('x', '2')])        
         """
         if env is None:
             env = {}
@@ -1927,7 +1931,11 @@ class DataSet(object):
 
     >>> for (nx, mu) in dat:
     ...     ds._insert(dat[(nx, mu)], info=(nx, mu))
-    
+    ['x_0']
+    ['x_1']
+    ['x_2']
+    ['x_3']
+
     >>> print(ds)
     DataSet './...' containing ['mus', 'nxs', 'x_2', 'x_3', 'x_0', 'x_1']
 
