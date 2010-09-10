@@ -2116,9 +2116,9 @@ class DataSet(object):
         init_file = os.path.join(self._module_name, '__init__.py')
         if os.path.exists(init_file):
             execfile(init_file, d)
-            self._info_dict = d['_info_dict']
+            self._info_dict = d.get('_info_dict', {})
         else:
-            self._info_dict = {}            
+            self._info_dict = {}
         del d
         os.chdir(curdir)
 
@@ -2254,8 +2254,11 @@ class DataSet(object):
                         n += 1
                     os.rename(archive_file, backup_name)
 
+                # This conversion does all the work, and may throw
+                # exceptions, so we do this before trying to write.
+                arch_rep = str(arch)
                 f = open(archive_file, 'w')
-                f.write(str(arch))
+                f.write(arch_rep)
                 f.close()
 
                 if backup_name and not self._backup_data:
@@ -2358,6 +2361,8 @@ class DataSet(object):
                                      'array_threshold', 'backup_data',
                                      'name_prefix', ]]))
 
+    def _keys(self):
+        return self._info_dict.keys()
     def _insert(self, *v, **kw):
         r"""Store object and info in the archive under `name`.
         Returns a list of the names added.

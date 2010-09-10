@@ -1,16 +1,16 @@
 import sys
-
-import inspect
 import math
+
+import os
+import tempfile
+import shutil
 
 import nose.tools
 
 import numpy as np
 import scipy as sp
-import scipy.sparse
 
 import mmf.objects
-import mmf.interfaces as interfaces
 
 archive = sys.modules['mmf.archive._archive']
 
@@ -370,6 +370,40 @@ class DocTests(object):
         >>> archive.archive_1_type(type(None), {})
         ('NoneType', [], [('types', 'NoneType', 'NoneType')])
         """
+
+class TestDataSet(object):
+    def setUp(self):
+        # Make a temporary directory for tests.
+        self.ds_name = tempfile.mkdtemp(dir='.')[2:]
+        os.rmdir(self.ds_name)
+
+    def tearDown(self):
+        shutil.rmtree(self.ds_name)
+
+    def test_failure1(self):
+        r"""Regression test for a bug that left a DataSet in a bad
+        state."""
+        ds = archive.DataSet(self.ds_name, 'w')
+
+        class A(object):
+            def __repr__(self):
+                raise Exception()
+
+        a = A()
+        try:
+            ds['a'] = a
+        except:
+            pass
+        
+        # Archive should still be in an okay state
+        ds['x'] = 1
+        nose.tools.assert_equals(1, ds['x'])
+        
+        
+        
+
+        
+
         
 class TestPerformance(object):
     """Tests that could illustrate bad performance."""
