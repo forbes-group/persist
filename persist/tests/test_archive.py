@@ -11,6 +11,7 @@ import numpy as np
 import scipy as sp
 
 import mmf.objects
+import mmf.interfaces
 
 archive = sys.modules['mmf.archive._archive']
 
@@ -345,6 +346,21 @@ class TestSuite(object):
         nose.tools.assert_equals(F.f(2), ld['f'](2))
         nose.tools.assert_equals(F.f(2), ld['g'](F, 2))
 
+    @nose.tools.raises(Exception)
+    def test_archive_1_regression_1(self):
+        r"""Regression for usage of archive_1().  Exceptions raised
+        should not be ignored."""
+        class A(object):
+            mmf.interfaces.implements(mmf.interfaces.IArchivable)
+            def archive_1(self, env=None):
+                raise Exception()
+        
+        arch = mmf.archive.Archive()
+        a = A()
+        arch.insert(a=a)
+        str(a)
+
+    
 class DocTests(object):    
     def regression_1(self):
         """Regression Test 1.

@@ -108,7 +108,8 @@ data-file.
 """
 from __future__ import division, with_statement
 __all__  = ['Archive', 'DataSet', 'restore',
-            'ArchiveError', 'DuplicateError', 'repr_']
+            'ArchiveError', 'DuplicateError', 'repr_',
+            'get_imports']
 
 import os
 import sys
@@ -886,6 +887,9 @@ def get_imports(obj, env=None):
 
        from module import iname as uiname
        obj = uiname(...)
+
+    This may be useful when writing :meth:`~mmf.IArchivable.archive_1`
+    methods.
 
     Examples
     --------
