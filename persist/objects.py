@@ -364,10 +364,9 @@ class NameClashWarning(UserWarning):
     The default is to ignore warnings of type
     :class:`NameClassWarning1` but show those of type
     :class:`NameClassWarning2` which tend to be more severe.
-    warn once.  If you want to ignore all such
-    errors (after debugging!) so you can disable this using
-    :meth:`simplefilter`.  See :mod:`warnings` for
-    possible actions: the most common are 'one' or 'ignore'.
+    If you want to ignore all such errors (after debugging!) so you
+    can disable this using :meth:`simplefilter`.  See :mod:`warnings`
+    for possible actions: the most common are 'one' or 'ignore'.
 
     You can also do this on a class by class basis by defining the
     class attribute :attr:`_ignore_name_clash`.  This should be a set
@@ -403,9 +402,6 @@ class NameClashWarning2(NameClashWarning):
     indicative of bugs.  It is by default enabled to warn once.
     """
     default_action = 'once'
-
-NameClashWarning1.simplefilter()
-NameClashWarning2.simplefilter()
 
 class _Required(object):                # pylint: disable-msg=R0903
     r"""Default value for required attributes.
@@ -1208,10 +1204,10 @@ def _gather_vars(cls):
                 # By this point, all _state_vars are normalized
                 if default is Deleted:
                     deleted.add(var)
-                elif var in vars_:
+                elif var in vars_ and var not in deleted:
                     if var not in ignore_name_clash:
                         warnings.warn(NameClashWarning1(
-                            "Attempt to redefine attr %r in class %r"
+                            "Attempt to redefine attr '%s' in class '%s'"
                             % (var, cls.__name__)))
                 else:
                     vars_.append(var)
@@ -1227,8 +1223,8 @@ def _gather_vars(cls):
     # Delete all "Deleted" vars.
     for var in deleted:
         if var not in vars_:
-            raise ValueError(
-                "Attempt to delete non-existent state var %r" % (var,))
+            raise ValueError("Attempt to delete non-existent state var '%s'" 
+                             % (var,))
         else:
             while var in vars_:
                 vars_.remove(var)

@@ -906,6 +906,18 @@ class TestStateVarsDelegate(object):
 
         nose.tools.assert_equal(b1.a, 1)
 
+    @nose.tools.raises(mmf.objects.NameClashWarning)
+    def test9(self):
+        """Test warning if delegates are hidden."""
+        class A(StateVars):
+            _state_vars = [('x', 1)]
+            process_vars()
+        
+        class B(StateVars):
+            _state_vars = [('a', Delegate(A, ['x'])),
+                           ('x', 2)]
+            process_vars()
+
 class TestStateVarsCached(object):
     r"""Test cached reference optimization functionality."""
     def setUp(self):
@@ -976,6 +988,35 @@ class TestStateVarsDelete(object):
             _state_vars = [('b', Deleted)]
             process_vars()
 
+    def test_delete_3(self):
+        """Test deleting delegate references."""
+        class A1(StateVars):
+            _state_vars = [('x', 1)]
+            process_vars()
+
+        class A2(StateVars):
+            _state_vars = []
+            process_vars()
+        
+        class B1(StateVars):
+            _state_vars = [('a', Delegate(A1, ['x'])),
+                           ('a.x', 2)]
+            process_vars()
+
+        class B2(B1):
+            _ignore_name_clash = set(['a', 'x'])
+            _state_vars = [
+                ('a', Delegate(A2)),
+                ('a.x', Deleted),
+                ('x', 3)]
+            process_vars()
+
+        b1 = B1()
+        nose.tools.assert_equal(b1.x, 2)
+        nose.tools.assert_equal(b1.a.x, 2)
+
+        b2 = B2()
+        nose.tools.assert_equal(b2.x, 3)
     
 class TestCoverage(object):
     """Some tests of special cases to force code coverage."""
