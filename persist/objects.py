@@ -403,6 +403,9 @@ class NameClashWarning2(NameClashWarning):
     """
     default_action = 'once'
 
+NameClashWarning1.simplefilter()
+NameClashWarning2.simplefilter()
+
 class _Required(object):                # pylint: disable-msg=R0903
     r"""Default value for required attributes.
     
