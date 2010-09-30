@@ -41,7 +41,6 @@ class WithProperty(StateVars):
         """Only valid after initialization (which can cause a bug in
         the __new__ checking of Required attributes)."""
         return self._x
-    
 
 class MyFloat(StateVars, float):
     """Overloading builtin type with extra data members."""
@@ -56,6 +55,12 @@ class MyFloat(StateVars, float):
         if self < self.min or self.max < self:
             raise ValueError(
                 "Value must be between self.min and self.max")
+
+class BadRep(object):
+    r"""Class with no representation."""
+    def __repr__(self):
+        raise Exception
+
 
 def test_MyFloat():
     """Test the subclassing of a builtin as a StateVar."""
@@ -440,7 +445,7 @@ class TestStateVars(object):
         C.b = 5
         nose.tools.assert_equals(C.b, 5)
 
-    def test_excluded(self):
+    def test_excluded_1(self):
         """Tests Excluded attribute definition."""
         class C(StateVars):
             _state_vars = [('a', Excluded),
@@ -449,6 +454,16 @@ class TestStateVars(object):
         c = C()
         nose.tools.assert_equals(c.b, 3)
         
+    def test_excluded_2(self):
+        r"""Excluded attributes should not be part of the rep."""
+        class A(StateVars):
+            _state_vars = [
+                ('bad', Excluded(BadRep()))]
+            process_vars()
+        
+        a = A()
+        rep = repr(a)
+        rep = rep
 
     def test_class_vars(self):
         """Test ClassVars attribute bug with __new__ overwriting with

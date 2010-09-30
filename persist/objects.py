@@ -1850,9 +1850,13 @@ def _get_processed_vars(cls, copy, archive_check, with_docs=None):
 
     if archive_check:
         arch = mmf.archive.Archive()
-        arch.insert(x=defaults)
+        _defaults = dict((_k, defaults[_k]) 
+                         for _k in defaults 
+                         if _k not in excluded_vars)
+        arch.insert(x=_defaults)
         try:
             _arch_rep = str(arch)
+            _arch_rep = _arch_rep  # noop to appease lint
         except Exception, err:     # pragma: no cover
             err.archive = arch
             raise
