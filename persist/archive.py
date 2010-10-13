@@ -105,6 +105,18 @@ data-file.
    - Maybe allow rep's to be suites for objects that require construction
      and initialization.  (Could also allow a special method to be called
      to restore the object such as `restore()`.)
+   - Performance: There have been some performance issues.  A major improvement
+     was made in version <>.  Now the following are the bottlenecks.  These will
+     probably require some work as there is no single line.  (This was from a
+     profile generated while archiving least squares solutions for a box SLDA
+     problem.)::
+
+           ncalls  tottime  cumtime  percall filename:lineno(function)
+            29999    3.683    3.683    0.000 _archive.py:1737(_replace_rep)
+            29999    1.454    1.454    0.000 _utils.py:67(unique_list)
+             3004    0.897    0.897    0.000 transformer.py:104(__init__)
+            11079    0.559    0.565    0.000 _archive.py:1131(is_simple)
+        59332/3004   0.501    0.501    0.000 transformer.py:1358(get_docstring)
 """
 from __future__ import division, with_statement
 __all__  = ['Archive', 'DataSet', 'restore',
@@ -276,7 +288,7 @@ class Archive(object):
 
     >>> l0 = ['a', 'b']
     >>> l = [1, 2, 3, l0]
-    >>> d = dict(l0=l0, l=l, s='hi')    
+    >>> d = dict(l0=l0, l=l, s='hi')
     >>> arch.insert(d=d, l=l)
     ['d', 'l']
 
@@ -301,16 +313,16 @@ class Archive(object):
     from mmf.archive._archive import restore as _restore
     from numpy import sin as _sin
     from __builtin__ import dict as _dict
-    _l_3 = ['a', 'b']
-    l = [1, 2, 3, _l_3]
-    d = _dict([('s', 'hi'), ('l', l), ('l0', _l_3)])
+    _l_5 = ['a', 'b']
+    l = [1, 2, 3, _l_5]
+    d = _dict([('s', 'hi'), ('l', l), ('l0', _l_5)])
     g = _restore
     f = _sin
     x = 4
     del _restore
     del _sin
     del _dict
-    del _l_3
+    del _l_5
     try: del __builtins__
     except NameError: pass
 
@@ -491,7 +503,7 @@ class Archive(object):
     def unique_name(self, name):
         r"""Return a unique name not contained in the archive."""
         names = _unzip(self.arch)[0]
-        return _get_unique(name, names)
+        return UniqueNames(names).unique(name)
 
     def insert(self, env=None, **kwargs):
         r"""`res = insert(name=obj)` or `res = insert(obj)`: Add the
@@ -611,7 +623,7 @@ class Archive(object):
           ('cc', '[c, c, [3]]'),
           ('A', '_numpy.array([1, 2, 3])'),
           ('_x', '5'),
-          ('x', '2')])        
+          ('x', '2')])
         """
         if env is None:
             env = {}
@@ -1091,8 +1103,9 @@ def archive_1_list(l, env):
     name = '_l_0'
     names = set(env)
     reps = []
+    unames = UniqueNames(names).unique_names(name)
     for o in l:
-        name = _get_unique(name, names)
+        name = unames.next()
         args.append((name, o))
         names.add(name)
         reps.append(name)
@@ -1243,7 +1256,8 @@ class Graph(object):
            List of top-level objects and names `[(name, obj, env)]`.
            Generated names will be from these and the graph will be
            generated from thes dependents of these objects as
-           determined by applying :attr:`archive_1`.
+           determined by applying :attr:`archive_1`.  It is assumed that all
+           these names are unique.
         archive_1 : function
            Function of `(obj, env)` that returns `(rep, args,
            imports)` where `rep` is a representation of `objs`
@@ -1259,7 +1273,8 @@ class Graph(object):
         self.roots = set([])
         self.envs = {}
         self.imports = []
-        self.names = [name for (name, obj, env) in objects]
+        self.names = UniqueNames(set([name for (name, obj, env) 
+                                      in objects]))
         self.archive_1 = archive_1
 
         # First insert the root nodes
@@ -1286,8 +1301,7 @@ class Graph(object):
                 uname = node.name
                 if not node.name.startswith('_'):
                     uname = "_" + uname
-                uname = _get_unique(uname, self.names)
-                self.names.append(uname)
+                uname = self.names.unique(uname)
                 node.name = uname
 
             replacements = {}
@@ -1345,10 +1359,8 @@ class Graph(object):
                 uiname = uiname_
                 if not uiname.startswith('_'):
                     uiname = "_" + uiname
-                uiname = _get_unique(uiname,
-                                     self.names + arg_names)
+                uiname = self.names.unique(uiname, arg_names)
                 self.imports.append((module_, iname_, uiname))
-                self.names.append(uiname)
             else:
                 # Import already specified.  Just refer to it
                 module, iname, uiname = self.imports[ind]
@@ -1536,62 +1548,142 @@ def _unzip(q, n=3):
     else:
         return map(list, zip(*q))
 
-def _get_unique(name, names, sep='_'):
-    r"""Return a unique name not in `names` starting with `name`.
-
-    Parameters
-    ----------
-    name : str
-       Base name.  Resulting name will start with this.
-    names : [str]
-       List of previously defined names.  The new name will not be in
-       `names`.
-    sep : str
-       The new name will be something like `name + sep + str(i)` where
-       `i` is an integer.
-    
-    Examples
-    --------
-    >>> names = ['a', 'a.1', 'b']
-    >>> _get_unique('c', names)
-    'c'
-    >>> _get_unique('a', names, sep='.')
-    'a.2'
-    >>> _get_unique('b', names)
-    'b_1'
-    >>> _get_unique('b_1', names)
-    'b_1'
-    >>> _get_unique('a.1', names, sep='.')
-    'a.2'
-    >>> _get_unique('a_', ['a_'], sep='_')
-    'a__1'
-    >>> _get_unique('', [])
-    '_1'
-    >>> _get_unique('', ['_1', '_2'])
-    '_3'
+class UniqueNames(object):
+    """Profiling indicates that the generation of unique names is a significant
+    bottleneck.  This class is used to manage unique names in an efficient
+    manner.
     """
-    # Matches extension for unique names so they can be incremented.
-    
-    _extension_re = re.compile(r'(.*)%s(\d+)$'%re.escape(sep))
+    def __init__(self, names=None, sep='_'):
+        """
+        Parameters
+        ----------
+        names : set
+           Set of names.  New names will not clash with these.
+        """
+        self.sep = sep
+        self.extension_re = re.compile(r'(.*)%s(\d+)$' % re.escape(sep))
+        self.names = set(names)
+        
+        # This is a dictionary of numbers associated with each base such that
+        # sep.join([base, num]) will be a unique name for all num >=
+        # bases[base].
+        self.bases = {}
+        for name in self.names:
+            self._reserve(name)
 
-    
-    if name and name not in names:
-        uname = name
-    else:
-        match = _extension_re.match(name)
-        if match is None:
-            base = name
-            c = 1
-        else:
+    def _reserve(self, name):
+        r"""Update :attr:`bases` so that `name` will be consider used.  Does not
+        add `name` to :attr:`names`.
+        """
+        match = self.extension_re.match(name)
+        if match:
             base, c = match.groups()
-            c = int(c) + 1
+            c = int(c)
+        else:
+            base = name
+            c = -1
+        c += 1
+        self.bases[base] = max(c, self.bases.get(base, c))
+        
+    def unique(self, name, others=None):
+        r"""Return a unique version of `name` with the same base.
 
+        Parameter
+        ---------
+        name : str
+           Desired name or base.
+        others : set(str)
+           Set of additional names to avoid conflicts with.  These are not added
+           to :attr:`names`, but will increment :attr:`bases`.
+
+        >>> un = UniqueNames(set(['a', 'b_3']))
+        >>> un.unique('a')
+        'a_0'
+        >>> un.unique('a')
+        'a_1'
+        >>> un.unique('a_4')
+        'a_4'
+        >>> un.unique('a_2')
+        'a_5'
+        >>> un.unique('b')
+        'b_4'
+        >>> un.unique('b', set(['b_5']))
+        'b_6'
+
+        Here is a regression test:
+        >>> names = set(['a', 'a.1', 'bdf4'])
+        >>> UniqueNames(names).unique('c')
+        'c'
+        >>> UniqueNames(names, sep='.').unique('a')
+        'a.2'
+        >>> UniqueNames(names, sep='df').unique('bdf4')
+        'bdf5'
+        >>> UniqueNames(names).unique('b_1')
+        'b_1'
+        >>> UniqueNames(names, sep='.').unique('a.1')
+        'a.2'
+        >>> UniqueNames(['a_'], sep='_').unique('a_')
+        'a__0'
+        >>> UniqueNames([]).unique('')
+        '_0'
+        >>> UniqueNames(['_1', '_2']).unique('')
+        '_3'
+        """
+        if others:
+            for _name in others:
+                self._reserve(_name)
+
+        return self.unique_names(name).next()
+
+    def unique_names(self, name):
+        r"""Return a generator that generates a sequence of sequential unique
+        names.
+
+        Examples
+        --------
+        >>> names = UniqueNames(['a', 'a.1', 'b_1'])
+        >>> gen = names.unique_names('c')
+        >>> gen.next(), gen.next()
+        ('c', 'c_0')
+        >>> gen = names.unique_names('a')
+        >>> gen.next(), gen.next()
+        ('a_0', 'a_1')
+        >>> gen = names.unique_names('b')
+        >>> gen.next(), gen.next()
+        ('b_2', 'b_3')
+        >>> gen = names.unique_names('')
+        >>> gen.next(), gen.next()
+        ('_0', '_1')
+        """
+        match = self.extension_re.match(name)
+        if match:
+            base, _c = match.groups()
+            c = int(_c)
+        elif name:
+            base = name
+            c = -1
+        else:
+            # If the name is empty, we must start at 0.
+            base = name
+            c = 0
+
+        _c = self.bases.get(base, -1)
+        if _c < 0 and name:
+            uname = name
+            c = max(c, -1)
+        else:
+            c = max(c, _c)
+            uname = self.sep.join([base, str(c)])
+
+        # uname is unique and base + sep + str(c + 1) will be the next unique
+        # name
         while True:
-            uname = sep.join((base, "%i"%c))
-            if uname not in names:
-                break
-            c += 1
-    return uname
+            self.bases[base] = c + 1
+            assert uname not in self.names
+            self.names.add(uname)
+            yield uname
+            c = self.bases[base]
+            uname = self.sep.join([base, str(c)])
 
 class ReplacementError(Exception):
     r"""Replacements not consistent with parse tree."""
