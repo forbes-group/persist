@@ -106,10 +106,10 @@ data-file.
      and initialization.  (Could also allow a special method to be called
      to restore the object such as `restore()`.)
    - Performance: There have been some performance issues.  A major improvement
-     was made in version <>.  Now the following are the bottlenecks.  These will
-     probably require some work as there is no single line.  (This was from a
-     profile generated while archiving least squares solutions for a box SLDA
-     problem.)::
+     was made in version c9e9fff8662f.  Now the following are the bottlenecks.
+     These will probably require some work as there is no single line.  (This
+     was from a profile generated while archiving least squares solutions for a
+     box SLDA problem.)::
 
            ncalls  tottime  cumtime  percall filename:lineno(function)
             29999    3.683    3.683    0.000 _archive.py:1737(_replace_rep)
