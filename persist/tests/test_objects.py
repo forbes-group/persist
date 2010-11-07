@@ -692,7 +692,7 @@ class TestStateVars(object):
             _state_vars = []
             _nodeps = ['x']
             process_vars()
-        
+
 class TestStateVars1(object):
     """Test StateVars processing without explicit calls to
     process_vars()"""
