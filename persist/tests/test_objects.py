@@ -1032,7 +1032,27 @@ class TestStateVarsDelete(object):
 
         b2 = B2()
         nose.tools.assert_equal(b2.x, 3)
-    
+
+class TestComputedRefs(object):
+    """Some tests for errors with computed references (which should not be
+    settable)."""
+    @nose.tools.raises(AttributeError)
+    def test_setting_computed_ref(self):
+        class A(StateVars):
+            _state_vars = [('x', 1)]
+            process_vars()
+
+        class B(StateVars):
+            _state_vars = [('a', Delegate(A,[])),
+                           ('x=a.x', Computed)]
+            process_vars()
+            def __init__(self, *v, **kw):
+                self.x = 10.0
+
+        b = B()
+        nose.tools.assert_equal(b.x, 10.0)
+        b.x = 20.0              # Should raise AttributeError
+        
 class TestCoverage(object):
     """Some tests of special cases to force code coverage."""
     def setUp(self):

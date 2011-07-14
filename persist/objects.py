@@ -3249,6 +3249,9 @@ class StateVars(Archivable):
         try:
             if name in self._refs or name in self._settable_vars:
                 if name in self._refs:
+                    if self._refs[name] in self._computed_vars:
+                        raise AttributeError(
+                            "Cannot set Computed references")
                     setattr(self, self._refs[name], value)
                 else:
                     object.__setattr__(self, name, value)
