@@ -161,12 +161,23 @@ To Do
    be used, represented, etc. but are the result of calculations.  Errors
    or warnings should be issued if the user tries to set these.
 .. todo:: Complete :func:`_preprocess` to support optional syntax.
+.. todo:: Provide more functionality for subclasses to change default values of
+   the parent classes.  For example, if a parent class delegates `x=a.x`, then
+   the subclass has to include `('a.x', 5)` in `_state_vars` to change the
+   default.  If, instead, the subclass includes `('x', 5)`, then this will
+   create a new variable and the delegation will be broken.  This should raise a
+   warning.  Perhaps add a new type :class:`Default` so that one can do `('x',
+   Default(5))`.  This will raise an error unless `x` is already a properly
+   settable attribute in a parent, and will use the previous definition,
+   including any delegation. A related issue that this would solve is that there
+   is presently no way to provide defaults for non-stored attributes that
+   provide both setters and getters.
 
 Known Bugs
 ----------
 .. todo:: Multiple inheritance requires a call to
-   :func:`process_vars`.  There is probably no solution without
-   `__metaclass__` trickery.
+   :func:`process_vars` even if no new `_state_vars` are added.  There is
+   probably no solution without `__metaclass__` trickery.
 .. todo:: If a class is defined in a local scope such as a function,
    then the local variables will be added to the class __dict__.  This
    is because of how :func:`process_vars()` works, but I don't know
@@ -4409,6 +4420,7 @@ class MemoizedContainer(dict):
     {'y': set(['g']), 'x': set(['g', 'f']), 'z': set([]), 'g': set([]), 'f': set(['g'])}
 
     One can also use multiple inheritance to combine parameters:
+
     >>> class Data2(MemoizedContainer):
     ...     @parameter
     ...     def a():
@@ -4443,6 +4455,7 @@ class MemoizedContainer(dict):
     -199998.0
 
     For faster bare parameter access, use the dictionary
+
     >>> d.x                     # slow
     10.0
     >>> d['x']                  # fastest
@@ -4700,6 +4713,7 @@ class Options(object):
     Options({'y': 4, 'x': 3})
 
     Here is an example which defines a base class with defaults:
+
     >>> class MyOpts(Options):
     ...   x = 1
     ...   y = 2
@@ -4719,6 +4733,7 @@ class Options(object):
     opts.z=[3]
  
     Here is an example with the option decorator:
+
     >>> class MyOpts(Options):
     ...     @option
     ...     def abs_tol():
@@ -4903,6 +4918,7 @@ def class_NamedArray(array_, names=None):
     arguments to set specific values.  If you do not initialize, then
     the default values are used.  The initialization array need not be
     complete: it just initializes the first n values.
+
     >>> c = CoordArray([1, 3], y=2)
     >>> c
     CoordArray([ 1.,  2.,  0.])
