@@ -106,17 +106,8 @@ data-file.
      and initialization.  (Could also allow a special method to be called
      to restore the object such as `restore()`.)
    - Performance: There have been some performance issues.  A major improvement
-     was made in version c9e9fff8662f.  Now the following are the bottlenecks.
-     These will probably require some work as there is no single line.  (This
-     was from a profile generated while archiving least squares solutions for a
-     box SLDA problem.)::
-
-           ncalls  tottime  cumtime  percall filename:lineno(function)
-            29999    3.683    3.683    0.000 _archive.py:1737(_replace_rep)
-            29999    1.454    1.454    0.000 _utils.py:67(unique_list)
-             3004    0.897    0.897    0.000 transformer.py:104(__init__)
-            11079    0.559    0.565    0.000 _archive.py:1131(is_simple)
-        59332/3004   0.501    0.501    0.000 transformer.py:1358(get_docstring)
+     was made in version c9e9fff8662f.  The remaining bottleneck was removed in
+     version daa21ec81421.
 """
 from __future__ import division, with_statement
 __all__  = ['Archive', 'DataSet', 'restore',
