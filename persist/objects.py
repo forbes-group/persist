@@ -320,17 +320,17 @@ class Archivable(object):
         
         Defines a representation rep of the instance self where the
         instance can be reconstructed from the string rep evaluated in
-        the context of args with the specified imports = list of
+        the context of dict args with the specified imports = list of
         (module, iname, uiname) where one has either "import module as
         uiname", "from module import iname" or "from module import
         iname as uiname".
         """
-        args = self.items()
+        args = dict(self.items())
         module = self.__class__.__module__
         name = self.__class__.__name__
         imports = [(module, name, name)]
 
-        keyvals = ["=".join((k, k)) for (k, _v) in args]
+        keyvals = ["=".join((k, k)) for k in args]
         rep = "%s(%s)" % (name, ", ".join(keyvals))
         return (rep, args, imports)
 
@@ -749,11 +749,11 @@ class Delegate(HasDefault):
        corresponding attribute is set via the reference.
 
     >>> Delegate(None, ['x', 'y'])
-    Delegate(cls=None, vars=['x', 'y'])
+    Delegate(vars=['x', 'y'], cls=None)
     >>> Delegate(None)
     Delegate(cls=None)
     >>> Delegate(None, vars=['x'], value=4)
-    Delegate(cls=None, vars=['x'], value=4)
+    Delegate(value=4, vars=['x'], cls=None)
     """
     # pylint: disable-msg=W0231, W0622
     def __init__(self, cls, vars=None, value=NotImplemented, cached=False):
@@ -771,7 +771,7 @@ class Ref(Attr):
     >>> Ref('x')
     Ref(ref='x')
     >>> Ref('x', cached=True)
-    Ref(ref='x', cached=True)
+    Ref(cached=True, ref='x')
     """
     # pylint: disable-msg=W0231
     def __init__(self, ref, cached=False):
@@ -786,6 +786,7 @@ class NoCopy(object):                   # pylint: disable-msg=R0903
 
     Examples
     --------
+    >>> import copy
     >>> n = NoCopy(3); n
     NoCopy(3)
     >>> n.copy                  # doctest: +ELLIPSIS
@@ -2001,6 +2002,9 @@ def process_vars(cls, copy=copy.deepcopy, archive_check=None,
     <BLANKLINE>
     <BLANKLINE>
     <BLANKLINE>
+    Attributes
+    ----------
+    <BLANKLINE>
     **State Variables:**
         a: Param a
         b: Param b
@@ -2427,7 +2431,7 @@ class StateVars(Archivable):
     >>> a.x = 6
     Setting x=2*y
     >>> print a
-    y=3.0
+    y=3
 
     If you want the property to represent stored data, you must
     explicitly include it in :attr:`_state_vars` and suppress the name
@@ -2516,7 +2520,7 @@ class StateVars(Archivable):
     ...                    ('B', ClassVar(1), "Optional class var"),
     ...                    ('a', 2, "Regular parameter")]
     ...     process_vars()
-    >>> help(F)             #doctest: +ELLIPSIS, +NORMALIZE_WHITESPACE
+    >>> help(F)             #doctest: +ELLIPSIS, +SKIP, +NORMALIZE_WHITESPACE
     Help on class F...
     <BLANKLINE>
     class F(StateVars)
@@ -3485,12 +3489,12 @@ class StateVars(Archivable):
         Same as :meth:`Archivable.archive_1` except passes
         `archive=True` to :meth:`items`.
         """
-        args = self.items(archive=True)
+        args = dict(self.items(archive=True))
         module = self.__class__.__module__
         name = self.__class__.__name__
         imports = [(module, name, name)]
 
-        keyvals = ["=".join((k, k)) for (k, _v) in args]
+        keyvals = ["=".join((k, k)) for k in args]
         rep = "%s(%s)" % (name, ", ".join(keyvals))
         return (rep, args, imports)
 
@@ -3644,7 +3648,7 @@ class StateVarMetaclass(type):
         ...                    ('y', 0.0, "Imaginary part")]
         >>> class Quaternion(Complex):
         ...     "Quaternions"
-        ...     _state_vars = dict(z=0.0, t=0.0)    
+        ...     _state_vars = dict(z=0.0, t=0.0)
         >>> help(Complex)       #doctest: +ELLIPSIS
         Help on class Complex in module ...:
         <BLANKLINE>

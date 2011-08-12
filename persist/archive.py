@@ -38,7 +38,7 @@ Objects can aid this by implementing an archive method, for example::
         has either "import module as uiname", "from module import
         iname" or "from module import iname as uiname".
         '''
-        args = [('a', self.a), ('b', self.b), ...]
+        args = dict(a=self.a, b=self.b, ...)
 
         module = self.__class__.__module__
         name = self.__class__.__name__
@@ -279,6 +279,7 @@ class Archive(object):
     We can include functions and classes: These are stored by their
     names and imports.
     
+    >>> import numpy as np
     >>> arch.insert(f=np.sin, g=restore)
     ['g', 'f']
 
@@ -310,7 +311,7 @@ class Archive(object):
 
     >>> s = str(arch)
     >>> print s
-    from mmf.archive._archive import restore as _restore
+    from mmf.archive import restore as _restore
     from numpy import sin as _sin
     from __builtin__ import dict as _dict
     _l_5 = ['a', 'b']
@@ -416,7 +417,7 @@ class Archive(object):
             array_name = array_name % (i,)
             self.data[array_name] = obj
             rep = "%s['%s']" % (self.data_name, array_name)
-            args = []
+            args = {}
             imports = []            
         elif (self.tostring
             and obj.__class__ is np.ndarray
@@ -425,7 +426,7 @@ class Archive(object):
             rep = "numpy.fromstring(%r, dtype=%r).reshape(%s)" % (
                 obj.tostring(), obj.dtype.str, str(obj.shape))
             imports = [('numpy', None, 'numpy')]
-            args = []
+            args = {}
         else:
             popts = np.get_printoptions()
             np.set_printoptions(**(self._numpy_printoptions))
@@ -450,7 +451,7 @@ class Archive(object):
                        ('numpy', 'nan', 'nan'),
                        ('numpy', 'nan', 'NaN'),
                        ('numpy', 'nan', 'NAN')]
-            args = []
+            args = {}
         return (rep, args, imports)
 
     def _archive_spmatrix(self, obj, env):
@@ -466,7 +467,7 @@ class Archive(object):
         class_name = obj.__class__.__name__
         imports = [('scipy.sparse', class_name, class_name)]
         rep = '%s(args, shape=%s)' % (class_name, str(obj.shape))
-        return (rep, [('args', args)], imports)
+        return (rep, dict(args=args), imports)
 
     def _archive_func(self, obj, env):
         r"""Attempt to archive the func."""
@@ -905,6 +906,7 @@ def get_imports(obj, env=None):
 
     Examples
     --------
+    >>> import numpy as np
     >>> a = np.array([1, 2, 3])
     >>> get_imports(a)
     [('numpy', 'ndarray', 'ndarray')]
@@ -960,16 +962,14 @@ def repr_(obj):
     ...     def __init__(self, x):
     ...         self.x = x
     ...     def archive_1(self):
-    ...         return ('A(x=x)', [('x', self.x)], [])
+    ...         return ('A(x=x)', dict(x=self.x), [])
     ...     def __repr__(self):
     ...         return repr_(self)
     >>> A(x=[1])
     A(x=[1])
     """
     (rep, args, imports) = obj.archive_1()
-    replacements = {}
-    replacements = dict((k, repr(v))
-                        for (k, v) in args)
+    replacements = dict((k, repr(args[k])) for k in args)
     rep = _replace_rep(rep, replacements=replacements)
     return rep
     
@@ -991,14 +991,14 @@ def archive_1_args(obj, args):
     >>> a = 1
     >>> b = 2
     >>> l = [a, b]
-    >>> archive_1_args(l, [('a', a), ('b', b)])
-    ('list(a=a, b=b)', [('a', 1), ('b', 2)], [('__builtin__', 'list', 'list')])
+    >>> archive_1_args(l, dict(a=a, b=b))
+    ('list(a=a, b=b)', {'a': 1, 'b': 2}, [('__builtin__', 'list', 'list')])
     """
     module = obj.__class__.__module__
     name = obj.__class__.__name__
     imports = [(module, name, name)]
     
-    keyvals = ["=".join((k, k)) for (k, v) in args]
+    keyvals = ["=".join((k, k)) for k in args]
     rep = "%s(%s)"%(name, ", ".join(keyvals))
     return (rep, args, imports)
 
@@ -1009,7 +1009,7 @@ def archive_1_repr(obj, env):
     This is the fallback: try to make a rep from the `repr` call.
     """
     imports = []
-    args = []
+    args = {}
     rep = repr(obj)
     scope = {}
     try:
@@ -1032,7 +1032,7 @@ def archive_1_repr(obj, env):
 
 def archive_1_type(obj, env):
     name = None
-    args = []
+    args = {}
     for module in [__builtin__, types]:
         obj_id = id(obj)
         val_ids = map(id, module.__dict__.values())
@@ -1057,11 +1057,11 @@ def archive_1_float(obj, env):
     Examples
     --------
     >>> archive_1_float(np.inf, {})
-    ('inf', [], [('numpy', 'inf', 'inf')])
+    ('inf', {}, [('numpy', 'inf', 'inf')])
     """
     rep = repr(obj)
     imports = [('numpy', name, name) for name in AST(rep)._get_names()]
-    args = []
+    args = {}
     
     return (rep, args, imports)
 
@@ -1069,7 +1069,7 @@ def archive_1_obj(obj, env):
     r"""Archive objects at the top level of a module."""
     module = get_module(obj)
     imports, rep = get_toplevel_imports(obj, env)
-    return (rep, [], imports)
+    return (rep, {}, imports)
 
 def archive_1_method(obj, env):
     r"""Archive methods."""
@@ -1080,10 +1080,10 @@ def archive_1_method(obj, env):
     if instance is None:
         imports, cls_name = get_toplevel_imports(cls, env)
         rep = ".".join([cls_name, name])
-        args = []
+        args = {}
     else:
         rep = ".".join(["_instance", name])
-        args = [('_instance', instance)]
+        args = dict(_instance=instance)
         imports = []
     return (rep, args, imports)
 
@@ -1098,7 +1098,7 @@ def _get_rep(obj, arg_rep):
     return (rep, (module, cname, cname))
     
 def archive_1_list(l, env):
-    args = []
+    args = {}
     imports = []
     name = '_l_0'
     names = set(env)
@@ -1106,7 +1106,7 @@ def archive_1_list(l, env):
     unames = UniqueNames(names).unique_names(name)
     for o in l:
         name = unames.next()
-        args.append((name, o))
+        args[name] = o
         names.add(name)
         reps.append(name)
 
@@ -1183,16 +1183,15 @@ class Node(object):
     rep : str
        String representation of :attr:`obj`.  This depends on the
        names defined in :attr:`args`
-    args : list
-       List of `(name, obj)` pairs where the specified
-       object is referenced in rep by name.
+    args : dict
+       Dictionary where value `obj` is referenced in `rep` by key `name`.
     parents : set
        Set of parent id's
     """
     def __init__(self, obj, rep, args, name, parents=set()):
         self.obj = obj
         self.rep = rep
-        self.args = [[name_, obj] for (name_, obj) in args]
+        self.args = dict(**args)
         self.name = name
         self.parents = set(parents)
 
@@ -1201,8 +1200,8 @@ class Node(object):
 
         Examples
         --------
-        >>> Node(obj=['A'], rep='[x]', args=[('x', 'A')], name='a')
-        Node(obj=['A'], rep='[x]', args=[['x', 'A']], name='a', parents=set([]))
+        >>> Node(obj=['A'], rep='[x]', args=dict(x='A'), name='a')
+        Node(obj=['A'], rep='[x]', args={'x': 'A'}, name='a', parents=set([]))
         """
         return "Node(obj=%r, rep=%r, args=%r, name=%r, parents=%r)"%(
             self.obj, self.rep, self.args, self.name, self.parents)
@@ -1212,7 +1211,7 @@ class Node(object):
 
         Examples
         --------
-        >>> print Node(obj=['A'], rep='[x]', args=[('x', 'A')], name='a')
+        >>> print Node(obj=['A'], rep='[x]', args=dict(x='A'), name='a')
         Node(a=[x])
         """
         return "Node(%s=%s)"%(self.name, self.rep)
@@ -1225,8 +1224,7 @@ class Node(object):
     @property
     def children(self):
         r"""List of dependent ids"""
-        return [id(obj) for (name, obj) in self.args]
-    
+        return [id(self.args[name]) for name in self.args]
 
     def isreducible(self, roots):
         r"""Return True if the node can be reduced.
@@ -1262,8 +1260,8 @@ class Graph(object):
            Function of `(obj, env)` that returns `(rep, args,
            imports)` where `rep` is a representation of `objs`
            descending a single level.  This representation is a string
-           expression and can refer to either `name` in the list `args
-           = [[name, obj]]` of dependents or the `uiname` in the list
+           expression and can refer to either `name` in the dict `args`
+           of dependents or the `uiname` in the list
            `imports = [(module, iname, uiname)]` which will be
            imported as::
 
@@ -1305,16 +1303,14 @@ class Graph(object):
                 node.name = uname
 
             replacements = {}
-            for args in node.args:
-                name, obj = args
+            args = {}
+            for name in node.args:
+                obj = node.args[name]
                 uname = self.nodes[id(obj)].name
+                args[uname] = obj
                 if not name == uname:
                     replacements[name] = uname
-                args[0] = uname
-
-            # This process can create duplicate args, so we remove the
-            # duplicates here:
-            node.args = mmf.utils.unique_list(node.args)
+            node.args = args
                 
             for child in node.children:
                 cnode = self.nodes[child]
@@ -1334,7 +1330,7 @@ class Graph(object):
     def _DFS(self, node, env):
         r"""Visit all nodes in the directed subgraph specified by
         node, and insert them into nodes."""
-        for (name, obj) in node.args:
+        for name, obj in node.args.iteritems():
             id_ = id(obj)
             if id_ not in self.nodes:
                 node = self._new_node(obj, env, name)
@@ -1344,9 +1340,8 @@ class Graph(object):
     def _process_imports(self, rep, args, imports):
         r"""Process imports and add them to self.imports,
         changing names as needed so there are no conflicts
-        between `args = [(name, obj)]` and `self.names`."""
-
-        arg_names = _unzip(args)[0]
+        between `args = {name: obj}` and `self.names`."""
+        arg_names = args.keys()
         # Check for duplicate imports
         new_imports = []
         replacements = {}
@@ -1377,7 +1372,7 @@ class Graph(object):
         on object `id2`."""
         return [(id_, id(obj))
                 for id_ in self.nodes
-                for (name, obj) in self.nodes[id_].args]
+                for (name, obj) in self.nodes[id_].args.iteritems()]
 
     def _topological_order(self):
         r"""Return a list of the ids for all nodes in the graph in a
@@ -1396,9 +1391,8 @@ class Graph(object):
             for parent in node.parents:
                 pnode = self.nodes[parent]
                 pnode.rep = _replace_rep(pnode.rep, replacements)
-                pnode.args.remove([node.name, node.obj])
-                pnode.args.extend(node.args)
-                pnode.args = mmf.utils.unique_list(pnode.args)
+                del pnode.args[node.name]
+                pnode.args.update(node.args)
             for child in node.children:
                 cnode = self.nodes[child]
                 cnode.parents.remove(id)
@@ -1495,10 +1489,10 @@ class Graph(object):
        >>> len(g.nodes)         # Nodes A, F and G remain
        3
        >>> print a
-       _l_1 = ['G']
        _l_5 = ['F']
+       _l_1 = ['G']
        A = [[_l_5], [_l_5, [_l_1], [_l_1]]]
-       del _l_1,_l_5
+       del _l_5,_l_1
        try: del __builtins__
        except NameError: pass
        
@@ -1514,8 +1508,8 @@ class Graph(object):
        4
        >>> print a
        _l_5 = ['F']
-       _l_1 = ['G']
        B = [_l_5]
+       _l_1 = ['G']
        A = [B, [_l_5, [_l_1], [_l_1]]]
        del _l_5,_l_1
        try: del __builtins__
@@ -1957,7 +1951,7 @@ class DataSet(object):
        not trigger a save. For example, the following will not behave
        as expected:
 
-       >>> import tempfile, shutil       # Make a unique temporary module
+       >>> import tempfile, shutil, os # Make a unique temporary module
        >>> t = tempfile.mkdtemp(dir='.')
        >>> os.rmdir(t)
        >>> modname = t[2:]
@@ -1999,6 +1993,7 @@ class DataSet(object):
 
     Here is the data we are going to store.
 
+    >>> import numpy as np
     >>> nxs = [10, 20]
     >>> mus = [1.2, 2.5]
     >>> dat = dict([((nx, mu), np.ones(nx)*mu)
@@ -2083,6 +2078,7 @@ class DataSet(object):
 
     This may be modified, but see the warnings above.
 
+    >>> import numpy as np
     >>> ds1.x_0 = np.ones(5)
 
     This should work, but fails within doctests.  Don't know why...

@@ -26,7 +26,7 @@ class IArchivable(Interface):   # pragma: no cover
         
         Defines a representation rep of the instance self where the
         instance can be reconstructed from the string rep evaluated in
-        the context of args with the specified imports = list of
+        the context of dict args with the specified imports = list of
         (module,iname,uiname) where one has either `import module as
         uiname`, `from module import iname` or `from module import
         iname as uiname`.

@@ -25,8 +25,7 @@ class A(object):
     def archive_1(self,env=None):
         """Example of an archive function."""
         imports = archive.get_imports(self)
-        args = [('d',self.d),
-                ('l',self.l)]
+        args = dict(d=self.d, l=self.l)
         rep = imports[0][-1] + '(d=d,l=l)'
         return (rep, args, imports)
 
@@ -358,8 +357,7 @@ class TestSuite(object):
         arch = mmf.archive.Archive()
         a = A()
         arch.insert(a=a)
-        str(a)
-
+        str(arch)
     
 class DocTests(object):    
     def regression_1(self):
@@ -384,7 +382,7 @@ class DocTests(object):
         >>> import __builtin__
         >>> __builtin__._ = np.array([1,2])
         >>> archive.archive_1_type(type(None), {})
-        ('NoneType', [], [('types', 'NoneType', 'NoneType')])
+        ('NoneType', {}, [('types', 'NoneType', 'NoneType')])
         """
 
 class TestDataSet(object):
@@ -416,11 +414,6 @@ class TestDataSet(object):
         nose.tools.assert_equals(1, ds['x'])
         
         
-        
-
-        
-
-        
 class TestPerformance(object):
     """Tests that could illustrate bad performance."""
     def test_1(self):
@@ -434,8 +427,6 @@ class TestPerformance(object):
                                   'NAN': '_nan'},
                     rep="numpy.array([" + " ".join(("0.,",)*1000000) + "0])")
         archive._replace_rep(**args)
-        
-
 
 class TestCoverage(object):
     """Ensure coverage."""
