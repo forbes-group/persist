@@ -629,15 +629,14 @@ class Archive(object):
 
             # First check to see if object is already in archive:
             unames, objs, envs = _unzip(self.arch)
-            try:
-                ind_obj = objs.index(obj)
-            except ValueError:
-                ind_obj = None
 
-            try:
+            ind_obj = None
+            if obj in objs:
+                ind_obj = objs.index(obj)
+
+            ind_name = None
+            if name in unames:
                 ind_name = unames.index(name)
-            except ValueError:
-                ind_name = None
 
             ind = None
             if ind_name is not None:
@@ -931,11 +930,11 @@ def get_toplevel_imports(obj, env=None):
     mname = module.__name__
     name = obj.__name__
 
-    try:
+    if hasattr(module, name):
         _obj = getattr(module, name)
         if _obj is not obj: # pragma: nocover
             raise AttributeError
-    except AttributeError: # pragma: nocover
+    else: # pragma: nocover
         raise ArchiveError(
             "name %s is not in module %s."%(name, mname))
 
@@ -1144,11 +1143,8 @@ def is_simple(obj):
     ...     [[1], (1, ), {'a':2}])
     [False, False, False]
     """
-    try:
+    if hasattr(obj, '__class__'):
         class_ = obj.__class__
-    except AttributeError:      # pragma: no cover
-        result = False
-    else:
         result = (
             class_ in [
                 bool, int, long,
@@ -1158,6 +1154,8 @@ def is_simple(obj):
             (class_ in [float, complex] 
              and not np.isinf(obj)
              and not np.isnan(obj)))
+    else:                       # pragma: no cover
+        result = False
     if result:
         assert obj == eval(repr(obj))
 
@@ -1338,18 +1336,17 @@ class Graph(object):
         replacements = {}
         for (module_, iname_, uiname_) in imports:
             mod_inames = zip(*_unzip(self.imports)[:2])
-            try:
+            if (module_, iname_) in mod_inames:
+                # Import already specified.  Just refer to it
                 ind = mod_inames.index((module_, iname_))
-            except ValueError:
+                module, iname, uiname = self.imports[ind]
+            else:
                 # Get new name.  All import names are local
                 uiname = uiname_
                 if not uiname.startswith('_'):
                     uiname = "_" + uiname
                 uiname = self.names.unique(uiname, arg_names)
                 self.imports.append((module_, iname_, uiname))
-            else:
-                # Import already specified.  Just refer to it
-                module, iname, uiname = self.imports[ind]
 
             if not uiname == uiname_:
                 replacements[uiname_] = uiname
