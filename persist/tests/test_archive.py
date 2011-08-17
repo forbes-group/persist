@@ -78,6 +78,21 @@ class MyList(list):
 class MyTuple(tuple):
     """Class to test archiving of derived classes."""
 
+class NoStrNoRepr(mmf.objects.Archivable):
+    r"""This class provides its own archive_1 function, so __str__ and __repr__
+    should never be called."""
+    def archive_1(self, env):
+        rep = 'NoStrNoRepr()'
+        args = {}
+        imports = []
+        return (rep, args, imports)
+    def __str__(self):
+        import pdb;pdb.set_trace()
+        raise NotImplementedError
+    def __repr__(self):
+        import pdb;pdb.set_trace()
+        raise NotImplementedError
+        
 class TestSuite(object):
     """Test the functionality of the archive module."""
     def setUp(self):
@@ -412,7 +427,12 @@ class TestDataSet(object):
         # Archive should still be in an okay state
         ds['x'] = 1
         nose.tools.assert_equals(1, ds['x'])
-        
+    
+    def test_no_str_no_repr(self):
+        r"""Test that str and repr are not called unnecessarily."""
+        ds = archive.DataSet(self.ds_name, 'w')
+        ds.a = NoStrNoRepr()
+
         
 class TestPerformance(object):
     """Tests that could illustrate bad performance."""
@@ -427,6 +447,21 @@ class TestPerformance(object):
                                   'NAN': '_nan'},
                     rep="numpy.array([" + " ".join(("0.,",)*1000000) + "0])")
         archive._replace_rep(**args)
+    def test_no_str_no_repr(self):
+        r"""Test that str and repr are not called unnecessarily."""
+        arch = archive.Archive()
+        arch.insert(a=NoStrNoRepr())
+        s = str(arch)
+        del s
+
+    def _test_large_array(self):
+        r"""Test archiving a large list.  This was giving some performance
+        issues."""
+        #c = mmf.objects.Container(x=[1 for _l in xrange(820*6)])
+        #ds = archive.DataSet(self.ds_name, 'w')
+        #ds.c = c
+        
+
 
 class TestCoverage(object):
     """Ensure coverage."""

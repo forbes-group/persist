@@ -140,6 +140,7 @@ import contrib.RADLogic.topsort as topsort
 
 import mmf.utils
 import mmf.interfaces as interfaces
+import mmf.objects
 
 try:
     import tables
@@ -376,7 +377,8 @@ class Archive(object):
         iname` or `from module import iname as uiname`.
         """
         if (interfaces.IArchivable.providedBy(obj) or
-            isinstance(obj, interfaces.IArchivable)):
+            isinstance(obj, interfaces.IArchivable) or
+            isinstance(obj, mmf.objects.Archivable)):
             return obj.archive_1(env)
 
         for class_ in self._dispatch:

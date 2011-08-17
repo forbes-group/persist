@@ -540,8 +540,7 @@ class HasDefault(Attr):
     Examples
     --------
     >>> HasDefault(4)
-    HasDefault(value=4)
-    
+    HasDefault(value=4)    
     """
     value = NotImplemented              # Here so that one can always
                                         # access value, even on a class.
@@ -2740,7 +2739,6 @@ class StateVars(Archivable):
         ...
     AttributeError: 'B_bad' object has no attribute 'c_a'
 
-
     Here are two correct ways:
 
     >>> class B1(A):
@@ -2771,6 +2769,58 @@ class StateVars(Archivable):
     Computing c_b...
     >>> b.c_a, b.c_b
     (2, 3)
+
+    StateVar object know how to be archived.  One can modify this by defining
+    two hooks: :meth:`_pre_hook_archive` and :meth:`_post_hook_archive`.  These
+    will be called before and after the call to :meth:`items` that is used to
+    archive the object.  One common use of these is to convert a list of arrays
+    (useful if there are multiple concatenations during processing) to a single
+    array to be stored using HD5 for example.
+
+    >>> import numpy as np
+    >>> class A(StateVars):
+    ...     _state_vars = [('x', [])]
+    ...     process_vars()
+    ...     def __init__(self, *v, **kw):
+    ...         if 'x' in kw and isinstance(self.x, np.ndarray):
+    ...             self.x = [_a for _a in self.x]
+    ...     def _pre_hook_archive(self):
+    ...         self.__dict__['x'] = np.asarray(self.x)
+    ...     def _post_hook_archive(self):
+    ...         self.__init__(x=self.x)
+    >>> a = A(x=[np.ones((2,1)) for _n in xrange(5)])
+    >>> a.x
+    [array([[ 1.],
+           [ 1.]]), array([[ 1.],
+           [ 1.]]), array([[ 1.],
+           [ 1.]]), array([[ 1.],
+           [ 1.]]), array([[ 1.],
+           [ 1.]])]
+    >>> a._pre_hook_archive()
+    >>> a.x
+    array([[[ 1.],
+            [ 1.]],
+    <BLANKLINE>
+           [[ 1.],
+            [ 1.]],
+    <BLANKLINE>
+           [[ 1.],
+            [ 1.]],
+    <BLANKLINE>
+           [[ 1.],
+            [ 1.]],
+    <BLANKLINE>
+           [[ 1.],
+            [ 1.]]])
+    >>> a._post_hook_archive()
+    >>> a.x
+    [array([[ 1.],
+           [ 1.]]), array([[ 1.],
+           [ 1.]]), array([[ 1.],
+           [ 1.]]), array([[ 1.],
+           [ 1.]]), array([[ 1.],
+           [ 1.]])]
+
     """
     _state_vars = []
     _nodeps = []
@@ -3489,7 +3539,9 @@ class StateVars(Archivable):
         Same as :meth:`Archivable.archive_1` except passes
         `archive=True` to :meth:`items`.
         """
+        self._pre_hook_archive()
         args = dict(self.items(archive=True))
+        self._post_hook_archive()
         module = self.__class__.__module__
         name = self.__class__.__name__
         imports = [(module, name, name)]
@@ -3497,6 +3549,25 @@ class StateVars(Archivable):
         keyvals = ["=".join((k, k)) for k in args]
         rep = "%s(%s)" % (name, ", ".join(keyvals))
         return (rep, args, imports)
+    def _pre_hook_archive(self):
+        r"""Called before archiving attributes.  Can be used to convert some
+        structures into arrays for better archiving performance. For example, a
+        list of many arrays of identical size should be converted to a single
+        array for storage using HD5.  Note that the constructor must convert
+        these objects back to lists upon import.  Because of this feature, one
+        must set the variable directly in the dictionary to avoid calling
+        :meth:`__init__` and undoing the conversion, e.g.::
+
+           self.__dict__['x'] = np.asarray(self.x)
+        """
+        
+    def _post_hook_archive(self):
+        r"""Called after archiving attributes.  Any converted attributes should
+        be restored.  Note that, since the constructor :meth:`__init__` should
+        also do this conversion, it might simply look like::
+        
+           self.__init__(x=self.x)
+        """
 
 class Container(StateVars):
     r"""Simple container class.  This is just a StateVars class with
@@ -4908,7 +4979,9 @@ def class_NamedArray(array_, names=None):
     default values for objects instantiated from this class.  The
     advantage of proceeding this way is that the name of the class
     will be well defined and usefull rather than the generic "NamedArray".
-    
+  
+    Examples
+    --------
     >>> from numpy import array
     >>> a = array([0.0, 0.0, 0.0])
     >>> n = array(['x', 'y', 'z'])
