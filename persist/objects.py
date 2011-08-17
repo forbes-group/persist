@@ -2773,9 +2773,9 @@ class StateVars(Archivable):
     StateVar object know how to be archived.  One can modify this by defining
     two hooks: :meth:`_pre_hook_archive` and :meth:`_post_hook_archive`.  These
     will be called before and after the call to :meth:`items` that is used to
-    archive the object.  One common use of these is to convert a list of arrays
-    (useful if there are multiple concatenations during processing) to a single
-    array to be stored using HD5 for example.
+    archive the object.  One common use of these is to convert a large list
+    (useful for concatenation) to a single array to be stored using HD5 for
+    example.
 
     >>> import numpy as np
     >>> class A(StateVars):
