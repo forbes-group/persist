@@ -360,6 +360,7 @@ class Archive(object):
         self.datafile = datafile
         self.pytables = pytables
         self.array_threshold = array_threshold
+        self._maxint = -1       # Cache of maximum int label in archive
 
         if pytables and tables is NotImplemented:
             raise ArchiveError(
@@ -404,15 +405,15 @@ class Archive(object):
         if self.array_threshold < np.prod(obj.shape):
             # Data should be archived to a data file.
             array_prefix = 'array_'
-            conflicts = [_k[len(array_prefix):] for _k in self.data 
-                         if _k.startswith(array_prefix)]
-            ints = set([-1])
-            for _k in conflicts:
-                try:
-                    ints.add(int(_k))
-                except ValueError:
-                    pass
-            array_name = "%s%i" % (array_prefix, max(ints) + 1)
+            i = self._maxint + 1
+            array_name = array_prefix + str(i)
+            while array_name in self.data:
+                # This should only execute a few times if the user, for example,
+                # included manually an element with name "array_<n>" for
+                # example.
+                i += 1
+                array_name = array_prefix + str(i)
+            self._maxint = i
             self.data[array_name] = obj
             rep = "%s['%s']" % (self.data_name, array_name)
             args = {}
@@ -2160,6 +2161,7 @@ class DataSet(object):
         self._name_prefix = name_prefix
         self._info_dict = {}
         self._timeout = timeout
+        self._maxint = -1
 
         # If a writing lock is established, then the name of the lock
         # file will be set here.  This serves as a flag.  Locking is
@@ -2475,12 +2477,12 @@ class DataSet(object):
             names.add(name)
 
         for obj in v:
-            i = 0
+            i = self._maxint + 1
             name = self._name_prefix + str(i)
             while name in self._info_dict:
                 i += 1
                 name = self._name_prefix + str(i)
-            
+            self._maxint = i
             self[name] = info
             self.__setattr__(name, obj)
             names.add(name)
