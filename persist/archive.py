@@ -403,11 +403,16 @@ class Archive(object):
         """Archival of numpy arrays."""
         if self.array_threshold < np.prod(obj.shape):
             # Data should be archived to a data file.
-            array_name = 'array_%i'
-            i = 0
-            while (array_name % (i,)) in self.data:
-                i += 1
-            array_name = array_name % (i,)
+            array_prefix = 'array_'
+            conflicts = [_k[len(array_prefix):] for _k in self.data 
+                         if _k.startswith(array_prefix)]
+            ints = set([-1])
+            for _k in conflicts:
+                try:
+                    ints.add(int(_k))
+                except ValueError:
+                    pass
+            array_name = "%s%i" % (array_prefix, max(ints) + 1)
             self.data[array_name] = obj
             rep = "%s['%s']" % (self.data_name, array_name)
             args = {}
