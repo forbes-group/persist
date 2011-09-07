@@ -105,9 +105,13 @@ data-file.
    - Maybe allow rep's to be suites for objects that require construction
      and initialization.  (Could also allow a special method to be called
      to restore the object such as `restore()`.)
-   - Performance: There have been some performance issues.  A major improvement
-     was made in version c9e9fff8662f.  The remaining bottleneck was removed in
-     version daa21ec81421.
+   - Performance: There have been some performance issues:
+     c9e9fff8662f: A major improvement was made (this is not in archive!?!).
+     daa21ec81421: Another bottleneck was removed.
+     23999d0c395e: Some of the code to make unique indices was running in O(n^2)
+        time because of expensive "in" lookups.  This was fixed by adding a
+        `_maxint` cache.
+     The remaining performance issues appear to be in `_replace_rep`.
 """
 from __future__ import division, with_statement
 __all__  = ['Archive', 'DataSet', 'restore',
