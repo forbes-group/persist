@@ -1033,6 +1033,16 @@ class TestStateVarsDelete(object):
         b2 = B2()
         nose.tools.assert_equal(b2.x, 3)
 
+class TestComputed(object):
+    """Some regression tests for :class:`Computed` attributes."""
+    @nose.tools.raises(TypeError)
+    def test_regression_assigning_computed(self):
+        r"""Computed attributes should not be assignable on construction."""
+        class A(StateVars):
+            _state_vars = [('x', Computed(2.0))]
+            process_vars()
+        
+        
 class TestComputedRefs(object):
     """Some tests for errors with computed references (which should not be
     settable)."""

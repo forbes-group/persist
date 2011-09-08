@@ -554,14 +554,16 @@ class Excluded(HasDefault):
     indicate that a particular method is executing, or for
     non-essential reporting of internal state/temporary data.
     """
+
 class Internal(Excluded):
     r"""Internal variable.
 
     These are not archived and are intended for internal use only.
     Functionally equivalent to :class:`Excluded` attributes and are
     presently implemented as these (and reported as these).
-    """    
-class Computed(HasDefault):
+    """
+
+class Computed(Attr):
     r"""Computed attributes.
 
     These are not assignable, and should be computed in
@@ -593,13 +595,32 @@ class Computed(HasDefault):
     False
     >>> Computed(save=True)
     Computed(save=True)
+    >>> Computed(2)
+    Traceback (most recent call last):
+       ...
+    TypeError: Computed() has no default value. Did you mean ClassVar(2)?
+
+
     """
     save = False                      # Here so that one can always
                                       # access these, even on a class.
 
-    def __init__(self, value=NotImplemented, save=False):
-        HasDefault.__init__(self, value)
+    def __init__(self, *v, **kw):
+        save = kw.pop('save', False)
+        if kw:
+            raise TypeError(
+                "Computed() got an unexpected keyword argument '%s'" 
+                % kw.keys()[0])
+        elif v:
+            raise TypeError(
+                "Computed() has no default value. " +
+                "Did you mean ClassVar(%s)?" % (repr(v[0]),))
+        Attr.__init__(self)
         self.save = save
+
+    def items(self):
+        r"Our constructor breaks the auto finding of attributes"
+        return [('save', self.save)]
     
 class ClassVar(HasDefault):
     r"""Class variables (not associated with instances).
@@ -1071,7 +1092,6 @@ def _preprocess(cls):
     r"""Preprocess `cls` converting all attributes in `cls.__dict__`
     that are attribute definitions as defined by :func:`_is_attr` to
     the appropriate entries in `cls._state_vars`"""
-    _state_vars = []
     for name in cls.__dict__:
         attr = getattr(cls, name, None)
         if isinstance(attr, tuple) and len(attr) == 2 and _is_attr(attr[1]):
@@ -1317,6 +1337,9 @@ def _gather_vars(cls):
             refs_[var] = default.ref
             if default.cached:
                 cached.add(var)
+            del defaults[var]
+        elif _is(default, Attr):
+            # Attributes without defaults
             del defaults[var]
         else:
             defaults[var] = default
