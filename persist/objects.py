@@ -34,7 +34,7 @@ In the :class:`StateVars` and its descendants, the role of
 :meth:`StateVars.__init__` and the inherited :meth:`__init__` method
 changes slightly from the usual role as an initializer.  The semantics
 are that of an initializer that ensures the class is in a consistent
-state after initialization \emph{and} after variable changes.  The
+state after initialization *and* after variable changes.  The
 following changes have been made:
 
 1) :meth:`StateVars.__setattr__` calls :meth:`__init__` whenever a
