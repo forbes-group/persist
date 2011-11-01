@@ -114,37 +114,33 @@ data-file.
      The remaining performance issues appear to be in `_replace_rep`.
 """
 from __future__ import division, with_statement
+
 __all__  = ['Archive', 'DataSet', 'restore',
             'ArchiveError', 'DuplicateError', 'repr_',
             'get_imports']
 
-import os
-import sys
-import string
-import time
-import parser
-import compiler
-import token
-import symbol
-import functools
-import inspect
-import copy
-import textwrap
-from contextlib import contextmanager
-import warnings
 import __builtin__
+import cPickle
+import compiler
+import copy
+import inspect
+import os
 import re
+import string
+import sys
+import time
 import types
+import warnings
+from contextlib import contextmanager
 
 import numpy as np
 import scipy as sp
 import scipy.sparse
 
 import contrib.RADLogic.topsort as topsort
-
-import mmf.utils
 import mmf.interfaces as interfaces
 import mmf.objects
+import mmf.utils
 
 try:
     import tables
@@ -401,8 +397,16 @@ class Archive(object):
                 return obj.archive_1(env)
             except TypeError:   # pragma: no cover
                 1+1             # Needed to deal with coverage bug
-        
-        return archive_1_repr(obj, env)
+
+        rep = repr(obj)
+        if rep.startswith('<'):
+            try:
+                return archive_1_pickle(obj, env)
+            except cPickle.PickleError, err:
+                raise ArchiveError(
+                    "Could not archive object %s.  Even tried pickling!")
+        else:
+            return archive_1_repr(obj, env, rep=rep)
 
     def _archive_ndarray(self, obj, env):
         """Archival of numpy arrays."""
@@ -1005,14 +1009,15 @@ def archive_1_args(obj, args):
     return (rep, args, imports)
 
 
-def archive_1_repr(obj, env):
+def archive_1_repr(obj, env, rep=None):
     r"""Return `(rep, args, imports)`.
     
     This is the fallback: try to make a rep from the `repr` call.
     """
     imports = []
     args = {}
-    rep = repr(obj)
+    if rep is None:
+        rep = repr(obj)
     scope = {}
     try:
         module = get_module(obj.__class__)
@@ -1030,6 +1035,14 @@ def archive_1_repr(obj, env):
         if module:
             imports.append((module.__name__, name, name))
             
+    return (rep, args, imports)
+
+def archive_1_pickle(obj, env):
+    r"""Last resort - archive by pickle."""
+    rep = "loads(%s)" % repr(
+        cPickle.dumps(obj, protocol=cPickle.HIGHEST_PROTOCOL))
+    args = {}
+    imports = [('cPickle','loads', 'loads')]
     return (rep, args, imports)
 
 def archive_1_type(obj, env):

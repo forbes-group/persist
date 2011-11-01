@@ -92,6 +92,16 @@ class NoStrNoRepr(mmf.objects.Archivable):
     def __repr__(self):
         import pdb;pdb.set_trace()
         raise NotImplementedError
+
+class Pickleable(object):
+    def __init__(self, x):
+        self.x = x
+        self.pickled = False
+    def __getstate__(self):
+        return dict(x=self.x)
+    def __setstate__(self, state):
+        self.x = state['x']
+        self.pickled = True
         
 class TestSuite(object):
     """Test the functionality of the archive module."""
@@ -359,6 +369,19 @@ class TestSuite(object):
         exec(s,ld)
         nose.tools.assert_equals(F.f(2), ld['f'](2))
         nose.tools.assert_equals(F.f(2), ld['g'](F, 2))
+
+    def test_pickle(self):
+        r"""Test archiving of picklable objects as a last resort."""
+        arch = archive.Archive()
+        p = Pickleable(x=2)
+        arch.insert(p=p)
+        s = str(arch)
+        ld = {}
+        exec s in ld
+        p1 = ld['p']
+        assert not p.pickled
+        assert p1.pickled
+        assert p.x == p1.x
 
     @nose.tools.raises(Exception)
     def test_archive_1_regression_1(self):
