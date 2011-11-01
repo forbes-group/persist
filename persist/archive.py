@@ -71,6 +71,11 @@ The idea is to save state in a file that looks like the following::
    '__builtins__' module (so as not to clutter the dictionary) and may
    render the interpreter unusable!
 
+As a last resort, we consider the `repr` of the object: if this starts with `<`
+as is customary for instances of many classes, then we try pickling the object,
+otherwise we try using the `repr` (which allows builtin types to be simply
+archived for example).
+
 Large Archives
 --------------
 For small amounts of data, the string representation of
