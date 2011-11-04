@@ -125,8 +125,9 @@ __all__  = ['Archive', 'DataSet', 'restore',
             'get_imports']
 
 import __builtin__
-import cPickle
 import compiler
+import ast as _ast
+import cPickle
 import copy
 import inspect
 import os
