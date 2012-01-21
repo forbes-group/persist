@@ -350,7 +350,8 @@ class Archive(object):
        definitions.  This allows each entry to be evaluated in a local scope
        without the need for textual replacements in the representation (which
        can be either costly or error-prone).  The resulting output is not as
-       compact, nor as legible, but archiving can be much faster.
+       compact (can be on the order of 4 times larger), nor as legible, but
+       archiving can be much faster.
     robust_replace : bool, optional
        If `True`, then :func:`_replace_rep_robust` instead of
        :func:`_replace_rep`.  This is much more robust, but can be much slower
@@ -1052,9 +1053,9 @@ class Archive(object):
                 results.append(
                     "\n".join([
                             "",
-                            "def %(name)s(%(argnames)s):%(imports)s",
+                            "def %(name)s(%(args)s):%(imports)s",
                             "    return %(rep)s",
-                            "%(name)s = %(name)s(%(args)s)"])
+                            "%(name)s = %(name)s()"])
                     % dict(name=name,
                            argnames=",".join(node.args.keys()),
                            args=",".join([

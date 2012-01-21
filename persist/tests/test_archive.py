@@ -397,7 +397,7 @@ class TestSuite(object):
         arch.insert(a=a)
         str(arch)
 
-    def test__replace_rep_regression_1a(self):
+    def test__replace_rep_regression_issue_11a(self):
         r"""Regression test of bad replacement in numpy array rep."""
         rep = "dict(Q=_Q, a=_numpy.fromstring('`\\xbf=_Q-\\xf2?', dtype='<f8'))"
         replacements = {'_Q': '1.0'}
@@ -406,7 +406,7 @@ class TestSuite(object):
             rep == 
             "dict(Q=1.0, a=_numpy.fromstring('`\\xbf=_Q-\\xf2?', dtype='<f8'))")
 
-    def test__replace_rep_regression_1b(self):
+    def test__replace_rep_regression_issue_11b(self):
         r"""Regression test of bad replacement in numpy array rep.
 
         This is the same example as test__replace_rep_regression_1a but shows
@@ -418,7 +418,16 @@ class TestSuite(object):
         d = {}
         exec(str(arch), d)
         assert d['c'].alpha == c.alpha
-        
+
+    def test_scoped_too_many_args_issue_12(self):
+        r"""Regression test for scoped representations with too many
+        arguments.""" 
+        arch = mmf.archive.Archive(scoped=True)
+        ls = [[] for _n in xrange(500)]
+        arch.insert(ls=ls)
+        d = {}
+        exec str(arch) in d
+        assert len(d['ls']) == 500
     
 class DocTests(object):    
     def regression_1(self):
