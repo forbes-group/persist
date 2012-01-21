@@ -396,6 +396,28 @@ class TestSuite(object):
         a = A()
         arch.insert(a=a)
         str(arch)
+
+    def test__replace_rep_regression_1a(self):
+        r"""Regression test of bad replacement in numpy array rep."""
+        rep = "(Q=_Q, a=_numpy.fromstring('`\\xbf=_Q-\\xf2?', dtype='<f8'))"
+        replacements = {'_Q': '1.0'}
+        archive._replace_rep(rep, replacements)
+        assert (rep == 
+                "(Q=1.0, a=_numpy.fromstring('`\\xbf=_Q-\\xf2?', dtype='<f8'))")
+
+    def test__replace_rep_regression_1b(self):
+        r"""Regression test of bad replacement in numpy array rep.
+
+        This is the same example as test__replace_rep_regression_1a but shows
+        how it comes about from a high level.
+        """
+        c = mmf.objects.Container(Q=1.0, alpha=np.array(1.1360639305457525))
+        arch = mmf.archive.Archive()
+        arch.insert(c=c)
+        d = {}
+        exec(str(arch), d)
+        assert d['c'].alpha == c.alpha
+        
     
 class DocTests(object):    
     def regression_1(self):
