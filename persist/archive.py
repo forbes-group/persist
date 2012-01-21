@@ -76,6 +76,24 @@ as is customary for instances of many classes, then we try pickling the object,
 otherwise we try using the `repr` (which allows builtin types to be simply
 archived for example).
 
+Limitations
+-----------
+Archives must not contain explicit circular dependencies.  These must be managed
+by constructors:
+
+>>> l1 = []
+>>> l2 = [l1]
+>>> l1.append(l2)
+>>> l1                          # repr does not even work...
+[[[...]]]
+>>> a = Archive()
+>>> a.insert(l=l1)
+'l'
+>>> str(a)
+Traceback (most recent call last):
+    ...
+CycleError: Archive contains cyclic dependencies.
+
 Large Archives
 --------------
 For small amounts of data, the string representation of
@@ -87,6 +105,12 @@ used where the archive is turned into a module that contains a binary
 data-file.  
 
 .. todo::
+   - Consider using imports rather than execfile etc. for loading
+     :class:`DataSet`s.  This allows the components to be byte-compiled for
+     performance.  (Only really helps if the components have lots of code --
+     most of my loading performance issues are due instead to the execution of
+     constructors, so this will not help.)  Also important for python 3.0
+     conversion.
    - Make sure that numpy arrays from tostring() are *NOT* subject to
      replacement somehow.  Not exactly sure how to reproduce the
      problem, but it is quite common for these to have things like
@@ -96,11 +120,8 @@ data-file.
      refer to the same object several times.  This has to be examined
      so that non-reducible nodes are not reduced (see the test case
      which fails).
-   - :func:`_replace_rep` is stupid (it just does text replacements).
-     Make it smart.  Maybe use a refactoring library like :mod:`rope`...
-     If this is hard, then the data-file might have to redefine the
-     environment locally before each rep.   This would be a pain but
-     not impossible.
+   - :func:`_replace_rep` is stupid (it just does text replacements).  The
+     alternative :func:`_replace_rep_robust` is slow.
    - It would be nice to be able to use `import A.B` and then just use
      the name `A.B.x`, `A.B.y` etc.  However, the name `A` could clash
      with other symbols, and it cannot be renamed (i.e. `import A_1.B`
@@ -117,6 +138,68 @@ data-file.
         time because of expensive "in" lookups.  This was fixed by adding a
         `_maxint` cache.
      The remaining performance issues appear to be in `_replace_rep`.
+
+Developer's Note
+================
+After issue 12 arose, I have decided to change the structure of archives to
+minimize the need to replace text.  New archives will evaluate objects in a
+local scope.  Here is an example, first in the old format::
+
+   from mmf.objects import Container as _Container
+   _y = [1, 2, 3, 4]
+   l1 = [_y, [1, _y]]
+   l2 = [_y, l1]
+   c = _Container(_y=_y, x=1, l=l2)
+   del _Container
+   del _y
+   try: del __builtins__
+   except NameError: pass
+
+Now in an explicit local scoping format using dictionaries::
+
+   _g = {}
+   _g['_y'] = [1, 2, 3, 4]
+   _d = dict(y=_g['_y'])
+   l1 = _g['_l1'] = eval('[y, [1, y]]', _d)
+   _d = dict(y=_g['_y'], 
+             l1=l1)
+   l2 = _g['_l2'] = eval('[y, l1]', _d)
+   _d = dict(x=1,
+             _y=_g['_y'],
+             l2=l2,
+             Container=__import__('mmf.objects', fromlist=['Container']).Container)
+   c = _g['_c'] = eval('Container(x=x, _y=_y, l=l2)', _d)
+   del _g, _d
+   try: del __builtins__
+   except NameError: pass
+
+Now a version using local scopes to eschew :func:`eval`.  One can use either
+classes or functions: preliminary profiling shows functions to be slightly
+faster - and there is no need for using `global` - so I am using that for now.
+Local variables are assigned using keyword arguments.  The idea is to establish
+a one-to-one correspondence between functions and each object so that the
+representation can be evaluated without requiring textual replacements that have
+been the source of errors.
+
+The old format is clearer, but the replacements require render it somewhat
+unreliable::
+
+   _y = [1, 2, 3, 4]   # No arguments here
+   def _d(y):
+       return [y, [1, y]]
+   l1 = _d(y=_y)
+   def _d(y): 
+       return [y, l1]
+   l2 = _d(y=_y)
+   def _d(x):
+       from mmf.objects import Container as Container
+       return Container(x=x, _y=_y, l=l2)
+   c = _d(x=1)
+   del _d
+   del _y
+   try: del __builtins__
+   except NameError: pass
+
 """
 from __future__ import division, with_statement
 
@@ -1256,7 +1339,6 @@ class Node(object):
                      (is_simple(self.obj) or 1 == len(self.parents)))
         return reducible
 
-
 class Graph(object):
     r"""Dependency graph.  Also manages imports.
 
@@ -1806,6 +1888,60 @@ def _replace_rep(rep, replacements, check=False):
                 if m == 0: break
                 n_rep += m
    """
+
+def _replace_rep_robust(rep, replacements):
+    r"""Return rep with all replacements made.
+
+    Parameters
+    ----------
+    rep : str
+       String expression to make replacements in
+    replacements : dict
+       Dictionary of replacements.
+
+    Examples
+    --------
+    >>> _replace_rep_robust('n = array([1, 2, 3])', dict(array='array_1'))
+    'n = array_1([1, 2, 3])'
+    >>> _replace_rep_robust('a + aa', dict(a='c'))
+    'c + aa'
+    >>> _replace_rep_robust('(a, a)', dict(a='c'))
+    '(c, c)'
+    >>> _replace_rep_robust("a + 'a'", dict(a='c'))
+    "c + 'a'"
+
+    Notes
+    -----
+    This version is extremely robust, but very slow.  It uses the python parser.
+    """
+    if not replacements:
+        return rep
+    names = [_n for _n in _ast.walk(_ast.parse(rep)) 
+             if _n.__class__ is _ast.Name 
+             and _n.ctx.__class__ is not _ast.Store]
+    if not names:
+        return rep
+    if '_inf_numpy' in rep:
+        import pdb;pdb.set_trace()
+        print rep, replacements
+    line_offsets = np.cumsum([0] + map(lambda _x:len(_x) + 1, # include \n
+                                       rep.splitlines()))
+    splits = sorted((_n.lineno - 1, _n.col_offset, len(_n.id), _n.id) 
+                     for _n in names)
+    ind = 0
+    results = []
+    for _line, _col, _len, _id in splits:
+        offset = line_offsets[_line] + _col
+        results.append(rep[ind:offset])
+        assert rep[offset:].startswith(_id)
+        assert _len == len(_id)
+        results.append(replacements.get(_id, _id))
+        ind = offset + _len
+    results.append(rep[ind:])
+    res = "".join(results)
+    return res
+
+_replace_rep = _replace_rep_robust
 
 class AST(object):
     r"""Class to represent and explore the AST of expressions."""

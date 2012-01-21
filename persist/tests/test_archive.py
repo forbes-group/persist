@@ -399,11 +399,12 @@ class TestSuite(object):
 
     def test__replace_rep_regression_1a(self):
         r"""Regression test of bad replacement in numpy array rep."""
-        rep = "(Q=_Q, a=_numpy.fromstring('`\\xbf=_Q-\\xf2?', dtype='<f8'))"
+        rep = "dict(Q=_Q, a=_numpy.fromstring('`\\xbf=_Q-\\xf2?', dtype='<f8'))"
         replacements = {'_Q': '1.0'}
-        archive._replace_rep(rep, replacements)
-        assert (rep == 
-                "(Q=1.0, a=_numpy.fromstring('`\\xbf=_Q-\\xf2?', dtype='<f8'))")
+        rep = archive._replace_rep(rep, replacements)
+        assert (
+            rep == 
+            "dict(Q=1.0, a=_numpy.fromstring('`\\xbf=_Q-\\xf2?', dtype='<f8'))")
 
     def test__replace_rep_regression_1b(self):
         r"""Regression test of bad replacement in numpy array rep.
