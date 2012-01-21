@@ -491,7 +491,8 @@ class TestPerformance(object):
                                   'numpy': '_numpy',
                                   'Inf': '_inf',
                                   'NAN': '_nan'},
-                    rep="numpy.array([" + " ".join(("0.,",)*1000000) + "0])")
+                    rep="numpy.array([" + " ".join(("0.,",)*1000000) + "0])",
+                    robust=False)
         archive._replace_rep(**args)
     def test_no_str_no_repr(self):
         r"""Test that str and repr are not called unnecessarily."""

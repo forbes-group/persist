@@ -343,7 +343,19 @@ class Archive(object):
        If provided, then these names will be considered acceptable.
        This allows for 'private' names to be used by specialized
        structures.
-       
+    gname_prefix : str, optional
+       This string is used to prefix all global variables.
+    scoped : bool, optional
+       If `True`, then the representation is "scoped": i.e. a series of function
+       definitions.  This allows each entry to be evaluated in a local scope
+       without the need for textual replacements in the representation (which
+       can be either costly or error-prone).  The resulting output is not as
+       compact, nor as legible, but archiving can be much faster.
+    robust_replace : bool, optional
+       If `True`, then :func:`_replace_rep_robust` instead of
+       :func:`_replace_rep`.  This is much more robust, but can be much slower
+       as it invokes the python parser.
+
     Notes
     -----
     A required invariant is that all `uname` be unique.
@@ -353,7 +365,7 @@ class Archive(object):
     First we make a simple archive as a string (no external storage)
     and then restore it.
 
-    >>> arch = Archive()
+    >>> arch = Archive(scoped=False) # Old form of scoped
     >>> arch.insert(x=4)
     'x'
 
@@ -392,7 +404,7 @@ class Archive(object):
 
     >>> s = str(arch)
     >>> print s
-    from mmf.archive import restore as _restore
+    from mmf.archive... import restore as _restore
     from numpy import sin as _sin
     from __builtin__ import dict as _dict
     _l_5 = ['a', 'b']
@@ -426,7 +438,8 @@ class Archive(object):
     data_name = '_arrays'
     def __init__(self, flat=True, tostring=True,
                  check_on_insert=False, array_threshold=np.inf,
-                 datafile=None, pytables=True, allowed_names=None):
+                 datafile=None, pytables=True, allowed_names=None,
+                 gname_prefix='_g', scoped=True, robust_replace=True):
         self.tostring = tostring
         self.flat = flat
         self.imports = []
@@ -435,6 +448,7 @@ class Archive(object):
         if not allowed_names:
             allowed_names = []
         self.allowed_names = allowed_names
+        self.gname_prefix = gname_prefix
 
         self._section_sep = ""  # string to separate the sections
         self._numpy_printoptions = {'infstr': 'Inf',
@@ -449,6 +463,9 @@ class Archive(object):
         self.datafile = datafile
         self.pytables = pytables
         self.array_threshold = array_threshold
+        self.scoped = scoped
+        self.robust_replace = robust_replace
+
         self._maxint = -1       # Cache of maximum int label in archive
 
         if pytables and tables is NotImplemented:
@@ -638,7 +655,7 @@ class Archive(object):
 
         Examples
         --------
-        >>> a = Archive()
+        >>> a = Archive(scoped=False) # Old format for doctest
         >>> a.insert(x=2)
         'x'
         >>> a.insert(x=2)       # Duplicates are okay.
@@ -648,7 +665,7 @@ class Archive(object):
            ...
         DuplicateError: Object with name 'x' already exists in archive.
         >>> a.insert(**{a.unique_name('x'):3}) # ...but can make unique label
-        'x_1'
+        'x_0'
         >>> a.insert(a=4, b=5)   # Can insert multiple items
         ['a', 'b']
         >>> a.insert(A=np.array([1, 2, 3]))
@@ -675,7 +692,7 @@ class Archive(object):
         import numpy as _numpy
         try: del __builtins__
         x = 2
-        x_1 = 3
+        x_0 = 3
 
         The default :mod:`numpy` representation for arrays is not very
         friendly, so we might want to use strings instead.  Be aware
@@ -719,8 +736,8 @@ class Archive(object):
          [('c', '_numpy.array([ 1.+0.j,  2.+3.j,  3.+0.j])'),
           ('cc', '[c, c, [3]]'),
           ('A', '_numpy.array([1, 2, 3])'),
-          ('_x', '5'),
-          ('x', '2')])
+          ('x', '2'),
+          ('_x', '5')])
         """
         if env is None:
             env = {}
@@ -735,19 +752,21 @@ class Archive(object):
             # First check to see if object is already in archive:
             unames, objs, envs = _unzip(self.arch)
 
-            ind_obj = None
-            if obj in objs:
-                ind_obj = objs.index(obj)
+            obj_ids = map(id, objs)
+            obj_id = id(obj)
+            obj_ind = None
+            if obj_id in obj_ids:
+                obj_ind = obj_ids.index(obj_id)
 
-            ind_name = None
+            name_ind = None
             if name in unames:
-                ind_name = unames.index(name)
+                name_ind = unames.index(name)
 
             ind = None
-            if ind_name is not None:
+            if name_ind is not None:
                 # Name already in archive
-                if ind_name == ind_obj:
-                    ind = ind_name
+                if name_ind == obj_ind:
+                    ind = name_ind
                 else:
                     raise DuplicateError(name)
             else:
@@ -899,7 +918,8 @@ class Archive(object):
         # Generate dependency graph
         try:
             graph = Graph(objects=self.arch,
-                          archive_1=self.archive_1)
+                          archive_1=self.archive_1,
+                          robust_replace=self.robust_replace)
         except topsort.CycleError, err:
             msg = "Archive contains cyclic dependencies."
             raise CycleError, (msg,) + err.args , sys.exc_info()[-1]
@@ -945,13 +965,13 @@ class Archive(object):
     def __repr__(self):
         return str(self)
 
-    def __str__(self):
-        r"""Return a string representing the archive.
-
-        This string can be saved to a file, and that file imported to
-        define the required symbols.
+    def _get_import_lines(self, imports):
+        r"""Return `(import_lines, del_lines)`.
+        
+        Parameters
+        ----------
+        imports : [(module, iname, uname)]
         """
-        imports, defs = self.make_persistent()
         import_lines = []
         del_lines = []
         for (module, iname, uiname) in imports:
@@ -969,7 +989,24 @@ class Archive(object):
                 import_lines.append(
                     "from %s import %s as %s"%(module, iname, uiname))
                 del_lines.append("del %s" % (uiname,))
+        return import_lines, del_lines
 
+    def __str__(self):
+        r"""Return a string representing the archive.
+
+        This string can be saved to a file, and that file imported to
+        define the required symbols.
+        """
+        if self.scoped:
+            return self.scoped__str__()
+        else:
+            return self.unscoped_str()
+
+    def unscoped_str(self):
+        r"""Return an unscoped string representation with all objects defined in
+        the global scope.  This requires renaming and textual replacement."""
+        imports, defs = self.make_persistent()
+        import_lines, del_lines = self._get_import_lines(imports)
         temp_names = [name for (name, rep) in defs
                       if (name.startswith('_')
                           and name not in self.allowed_names)]
@@ -988,6 +1025,90 @@ class Archive(object):
         res = ("\n"+self._section_sep).join([l for l in [imports, lines, dels]
                            if 0 < len(l)])
         return res
+
+    def scoped__str__(self):
+        r"""Return the scoped version of the string representation."""
+        # Generate dependency graph
+        try:
+            graph = _Graph(objects=self.arch,
+                           archive_1=self.archive_1,
+                           gname_prefix=self.gname_prefix)
+        except topsort.CycleError, err:
+            msg = "Archive contains cyclic dependencies."
+            raise CycleError, (msg,) + err.args , sys.exc_info()[-1]
+
+        # Optionally: at this stage perform a graph reduction.
+        #graph.reduce()
+
+        results = []
+        names = set()
+        for _id in graph.order:
+            node = graph.nodes[_id]
+            name = node.name
+            assert name not in names
+            names.add(name)
+            
+            if node.args or node.imports:
+                results.append(
+                    "\n".join([
+                            "",
+                            "def %(name)s(%(argnames)s):%(imports)s",
+                            "    return %(rep)s",
+                            "%(name)s = %(name)s(%(args)s)"])
+                    % dict(name=name,
+                           argnames=",".join(node.args.keys()),
+                           args=",".join([
+                                "=".join([
+                                        _a, 
+                                        graph.nodes[id(node.args[_a])].name])
+                                for _a in node.args]),
+                           imports="\n    ".join([""] + 
+                                self._get_import_lines(node.imports)[0]),
+                           rep=node.rep))
+            else:
+                results.append(
+                    "%(name)s = %(rep)s"
+                    % dict(name=name, rep=node.rep))
+                
+        # Add any leftover names (aliases):
+        for name in self.ids:
+            if name in names:
+                continue
+            node = graph.nodes[self.ids[name]]
+            results.append(" = ".join([name, node.name]))
+
+        # Archive the data to file if requested.
+        if self.data and self.datafile is not None:
+            if self.pytables and tables is not NotImplemented:
+                backup_name = None
+                if os.path.exists(self.datafile):
+                    backup_name = self.datafile + ".bak"
+                    n = 1
+                    while os.path.exists(backup_name):
+                        backup_name = self.datafile + "_%i.bak" % (n)
+                        n += 1
+                    os.rename(self.datafile, backup_name)
+                f = tables.openFile(self.datafile, 'w')
+                for name in self.data:
+                    f.createArray(f.root, name, self.data[name])
+                f.close()
+                if backup_name and not self.backup_data:
+                    # Remove backup of data
+                    os.remove(backup_name)
+            else:
+                raise NotImplementedError(
+                    "Data can presently only be saved with pytables")
+
+        gnames = ", ".join(_n for _n in names 
+                           if _n.startswith(self.gname_prefix) 
+                           and _n not in self.allowed_names)
+        if gnames:
+            results.append("del %s" % (gnames,))
+        results.extend([
+                "try: del __builtins__",
+                "except NameError: pass"])
+            
+        return "\n".join(results)
    
 def get_imports(obj, env=None):
     r"""Return `imports = [(module, iname, uiname)]` where
@@ -1045,7 +1166,7 @@ def get_toplevel_imports(obj, env=None):
 
     return ([(mname, name, name)], name)
 
-def repr_(obj):
+def repr_(obj, robust=True):
     r"""Return representation of `obj`.
 
     Stand-in `repr` function for objects that support the `archive_1`
@@ -1065,7 +1186,7 @@ def repr_(obj):
     """
     (rep, args, imports) = obj.archive_1()
     replacements = dict((k, repr(args[k])) for k in args)
-    rep = _replace_rep(rep, replacements=replacements)
+    rep = _replace_rep(rep, replacements=replacements, robust=robust)
     return rep
     
 def get_module(obj):
@@ -1291,12 +1412,13 @@ class Node(object):
     parents : set
        Set of parent id's
     """
-    def __init__(self, obj, rep, args, name, parents=set()):
+    def __init__(self, obj, rep, args, name, imports=None, parents=set()):
         self.obj = obj
         self.rep = rep
         self.args = dict(**args)
         self.name = name
         self.parents = set(parents)
+        self.imports = imports
 
     def __repr__(self):
         r"""Return string representation of node.
@@ -1304,10 +1426,13 @@ class Node(object):
         Examples
         --------
         >>> Node(obj=['A'], rep='[x]', args=dict(x='A'), name='a')
-        Node(obj=['A'], rep='[x]', args={'x': 'A'}, name='a', parents=set([]))
+        Node(obj=['A'], rep='[x]', args={'x': 'A'}, name='a', imports=None, 
+             parents=set([]))
         """
-        return "Node(obj=%r, rep=%r, args=%r, name=%r, parents=%r)"%(
-            self.obj, self.rep, self.args, self.name, self.parents)
+        return (
+            "Node(obj=%r, rep=%r, args=%r, name=%r, imports=%r, parents=%r)"
+            % (self.obj, self.rep, self.args, self.name, self.imports, 
+               self.parents))
 
     def __str__(self):
         r"""Return string showing node.
@@ -1330,7 +1455,7 @@ class Node(object):
         return [id(self.args[name]) for name in self.args]
 
     def isreducible(self, roots):
-        r"""Return True if the node can be reduced.
+        r"""Return `True` if the nodeg can be reduced.
 
         A node can be reduced if it is either a simple object with an
         efficient representation (as defined by :meth:`is_simple`), or
@@ -1345,7 +1470,7 @@ class Graph(object):
     This is a graph of objects in memory: these are identified by
     their python :func:`id`.
     """
-    def __init__(self, objects, archive_1):
+    def __init__(self, objects, archive_1, robust_replace=True):
         r"""Initialize the dependency graph with some reserved
         names.
 
@@ -1370,12 +1495,13 @@ class Graph(object):
                 from module import iname as uiname
         """
         self.nodes = {}
-        self.roots = set([])
+        self.roots = set()
         self.envs = {}
         self.imports = []
         self.names = UniqueNames(set([name for (name, obj, env) 
                                       in objects]))
         self.archive_1 = archive_1
+        self.robust_replace = robust_replace
 
         # First insert the root nodes
         for (name, obj, env) in objects:
@@ -1418,7 +1544,8 @@ class Graph(object):
                 cnode = self.nodes[child]
                 cnode.parents.add(node.id)
 
-            node.rep = _replace_rep(node.rep, replacements)
+            node.rep = _replace_rep(node.rep, replacements,
+                                    robust=self.robust_replace)
 
     def _new_node(self, obj, env, name=None):
         r"""Return a new node associated with `obj` and using the
@@ -1465,7 +1592,7 @@ class Graph(object):
                 replacements[uiname_] = uiname
 
         # Update names of rep in archive
-        rep = _replace_rep(rep, replacements)
+        rep = _replace_rep(rep, replacements, robust=self.robust_replace)
         return rep
 
     def edges(self):
@@ -1491,7 +1618,8 @@ class Graph(object):
             replacements = {node.name:node.rep}
             for parent in node.parents:
                 pnode = self.nodes[parent]
-                pnode.rep = _replace_rep(pnode.rep, replacements)
+                pnode.rep = _replace_rep(pnode.rep, replacements,
+                                         robust=self.robust_replace)
                 del pnode.args[node.name]
                 pnode.args.update(node.args)
             for child in node.children:
@@ -1551,7 +1679,7 @@ class Graph(object):
 
        >>> G = 'G'; F = 'F'
        >>> D = [G]; E = [G]; C = [F, D, E]; B = [F]; A = [B, C]
-       >>> a = Archive(); 
+       >>> a = Archive(scoped=False); 
        >>> a.insert(A=A)
        'A'
        >>> g = Graph(a.arch, a.archive_1)
@@ -1580,7 +1708,7 @@ class Graph(object):
 
        >>> G = ['G']; F = ['F']
        >>> D = [G]; E = [G]; C = [F, D, E]; B = [F]; A = [B, C]
-       >>> a = Archive(); 
+       >>> a = Archive(scoped=False); 
        >>> a.insert(A=A)
        'A'
        >>> g = Graph(a.arch, a.archive_1)
@@ -1623,6 +1751,164 @@ class Graph(object):
             self._reduce(id)
 
         self.order = self._topological_order()
+
+class _Graph(object):
+    r"""Simplified dependency graph for use with scoped files.
+
+    This is a graph of objects in memory: these are identified by
+    their python :func:`id`.  Unlike :class:`Graph`, this does not bother with
+    unique names and replacements.  The output routine must make sure each
+    object is evaluated in a separate scope.
+
+    .. note:: To improve performance, it is assumed that the names of `objects`
+       are unique and do not start with an underscore `_`.
+    """
+    def __init__(self, objects, archive_1, 
+                 gname_prefix='_g', allowed_names=set()):
+        r"""Initialize the dependency graph with some reserved
+        names.
+
+        Parameters
+        ----------
+        roots : [(id, env)]
+        objects : list
+           List of top-level objects and names `[(name, obj, env)]`.
+           Generated names will be from these and the graph will be
+           generated from thes dependents of these objects as
+           determined by applying :attr:`archive_1`.  It is assumed that all
+           these names are unique.
+        archive_1 : function
+           Function of `(obj, env)` that returns `(rep, args,
+           imports)` where `rep` is a representation of `objs`
+           descending a single level.  This representation is a string
+           expression and can refer to either `name` in the dict `args`
+           of dependents or the `uiname` in the list
+           `imports = [(module, iname, uiname)]` which will be
+           imported as::
+
+                from module import iname as uiname
+        """
+        self.nodes = {}
+        self.roots = set()
+        self.envs = {}
+        self.imports = []
+        self.gname_num = 0
+        self.gname_prefix = gname_prefix
+        self.allowed_names = allowed_names
+        self.archive_1 = archive_1
+        self.names = set()
+
+        # First insert the root nodes
+        for (name, obj, env) in objects:
+            node = self._new_node(obj, env, name)
+            self.roots.add(node.id)
+            self.envs[node.id] = env
+            self.nodes[node.id] = node
+
+        # Now do a depth first search to build the graph.
+        for _id in self.roots:
+            self._DFS(node=self.nodes[_id], env=self.envs[_id])
+        
+        self.order = self._topological_order()
+
+        # Add all reverse links from child to parent nodes.
+        for _id_ in self.order:
+            node = self.nodes[_id]
+            for child in node.children:
+                cnode = self.nodes[child]
+                cnode.parents.add(node.id)
+
+    def _new_node(self, obj, env, name=None):
+        r"""Return a new node associated with `obj` and using the
+        specified `name`  If `name` is specified, then we assume
+        that the `name` is to be exported.  Also process the
+        imports of the node."""
+        if name is None:
+            name = self.gname
+        else:
+            assert not name.startswith(self.gname_prefix)
+            assert name not in self.names
+        self.names.add(name)
+        rep, args, imports = self.archive_1(obj, env)
+        return Node(obj=obj, rep=rep, args=args, name=name, imports=imports)
+
+    @property
+    def gname(self):
+        r"""Return a unique global name.  These start with an underscore."""
+        while True:
+            gname = self.gname_prefix + str(self.gname_num)
+            self.gname_num += 1
+            if gname not in self.allowed_names:
+                break
+        return gname
+
+    def _DFS(self, node, env):
+        r"""Visit all nodes in the directed subgraph specified by
+        node, and insert them into nodes."""
+        for _name in node.args:
+            obj = node.args[_name]
+            id_ = id(obj)
+            if id_ not in self.nodes:
+                new_node = self._new_node(obj, env)
+                self.nodes[id_] = new_node
+                self._DFS(new_node, env)
+
+    def edges(self):
+        r"""Return a list of edges `(id1, id2)` where object `id1` depends
+        on object `id2`."""
+        return [(id_, id(obj))
+                for id_ in self.nodes
+                for (name, obj) in self.nodes[id_].args.iteritems()]
+
+    def _topological_order(self):
+        r"""Return a list of the ids for all nodes in the graph in a
+        topological order."""
+        order = topsort.topsort(self.edges())
+        order.reverse()
+        # Insert roots (they may be disconnected)
+        order.extend([id for id in self.roots if id not in order])
+        return order
+    
+    def _reduce(self, id):
+        r"""Reduce the node."""
+        raise NotImplementedError
+        node = self.nodes[id]
+        if node.isreducible(roots=self.roots):
+            replacements = {node.name:node.rep}
+            for parent in node.parents:
+                pnode = self.nodes[parent]
+                pnode.rep = _replace_rep(pnode.rep, replacements,
+                                         robust=self.robust_replace)
+                del pnode.args[node.name]
+                pnode.args.update(node.args)
+            for child in node.children:
+                cnode = self.nodes[child]
+                cnode.parents.remove(id)
+                cnode.parents.update(node.parents)
+            del self.nodes[id]
+
+    def check(self):
+        r"""Check integrity of graph."""
+        for id in self.nodes:
+            node = self.nodes[id]
+            children = node.children
+            assert children == mmf.utils.unique_list(children)
+            for child in children:
+                cnode = self.nodes[child]
+                assert id in cnode.parents
+
+    def paths(self, node=None):
+        """Return a list of all paths through the graph starting from
+        `node`."""
+        paths = []
+        if node is None:
+            for r in self.roots:
+                paths.extend(self.paths(r))
+        else:
+            for c in node.children:
+                paths.extend([[node] + p for p in self.paths(c)])
+        return paths
+        
 
 def _unzip(q, n=3):
     r"""Unzip q to lists.
@@ -1787,7 +2073,7 @@ class ReplacementError(Exception):
             "Replacement %s->%s: Expected %i, replaced %i"%(
                 old, new, expected, actual))
 
-def _replace_rep(rep, replacements, check=False):
+def _replace_rep(rep, replacements, check=False, robust=True):
     r"""Return rep with all replacements made.
 
     Parameters
@@ -1805,10 +2091,14 @@ def _replace_rep(rep, replacements, check=False):
     'c + aa'
     >>> _replace_rep('(a, a)', dict(a='c'))
     '(c, c)'
-    >>> _replace_rep("a + 'a'", dict(a='c'), check=True)
+    >>> _replace_rep("a + 'a'", dict(a='c'), robust=False)
+    "c + 'c'"
+    >>> _replace_rep("a + 'a'", dict(a='c'), check=True, robust=False)
     Traceback (most recent call last):
         ...
     ReplacementError: Replacement a->c: Expected 1, replaced 2
+    >>> _replace_rep("a + 'a'", dict(a='c'))
+    "c + 'a'"
 
     Notes
     -----
@@ -1817,6 +2107,9 @@ def _replace_rep(rep, replacements, check=False):
     construct a string with % style replacements and the effect the
     replacements.
     """
+    if robust:
+        return _replace_rep_robust(rep, replacements)
+
     if check:
         rep_names = AST(rep).names
         counts = dict((n, rep_names.count(n)) for n in replacements)
@@ -1940,8 +2233,6 @@ def _replace_rep_robust(rep, replacements):
     results.append(rep[ind:])
     res = "".join(results)
     return res
-
-_replace_rep = _replace_rep_robust
 
 class AST(object):
     r"""Class to represent and explore the AST of expressions."""
