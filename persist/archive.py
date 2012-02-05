@@ -208,8 +208,7 @@ __all__  = ['Archive', 'DataSet', 'restore',
             'get_imports']
 
 import __builtin__
-import compiler
-import ast as _ast
+import ast
 import cPickle
 import copy
 import inspect
@@ -1238,9 +1237,9 @@ def archive_1_repr(obj, env, rep=None):
         1+1                     # Needed to deal with coverage bug
     scope.update(env)
 
-    ast = AST(rep)
+    _ast = AST(rep)
 
-    for name in ast.names:
+    for name in _ast.names:
         obj = eval(name, scope)
         module = get_module(obj)
         if module:
@@ -2210,9 +2209,9 @@ def _replace_rep_robust(rep, replacements):
     """
     if not replacements:
         return rep
-    names = [_n for _n in _ast.walk(_ast.parse(rep)) 
-             if _n.__class__ is _ast.Name 
-             and _n.ctx.__class__ is not _ast.Store]
+    names = [_n for _n in ast.walk(ast.parse(rep)) 
+             if _n.__class__ is ast.Name 
+             and _n.ctx.__class__ is not ast.Store]
     if not names:
         return rep
     if '_inf_numpy' in rep:
@@ -2239,7 +2238,7 @@ class AST(object):
     r"""Class to represent and explore the AST of expressions."""
     def __init__(self, expr):
         self.__dict__['expr'] = expr
-        self.__dict__['ast'] = compiler.parse(expr)
+        self.__dict__['ast'] = ast.parse(expr)
         self.__dict__['names'] = self._get_names()
     @property
     def expr(self):
@@ -2256,19 +2255,10 @@ class AST(object):
         r"""Symbols references in expression."""
         return self.__dict__['names']
 
-    def _get_names(self):        
-        names = []
-        def _descend(node):
-            if isinstance(node, compiler.ast.Name):
-                names.append(node.name)
-            try:
-                map(_descend, node.getChildren())
-            except AttributeError:
-                return
-
-        _descend(self.ast)
-        return sorted(names)
-
+    def _get_names(self):
+        return [_n.id for _n in ast.walk(ast.parse(self.expr)) 
+                if _n.__class__ is ast.Name 
+                and _n.ctx.__class__ is not ast.Store]
 
 class Arch(object):
     r"""Maintains a collection of objects and provides a mechanism for
