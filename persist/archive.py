@@ -106,7 +106,7 @@ data-file.
 
 .. todo::
    - Consider using imports rather than execfile etc. for loading
-     :class:`DataSet`s.  This allows the components to be byte-compiled for
+     :class:`DataSet` s.  This allows the components to be byte-compiled for
      performance.  (Only really helps if the components have lots of code --
      most of my loading performance issues are due instead to the execution of
      constructors, so this will not help.)  Also important for python 3.0
@@ -135,9 +135,9 @@ data-file.
      c9e9fff8662f: A major improvement was made (this is not in archive!?!).
      daa21ec81421: Another bottleneck was removed.
      23999d0c395e: Some of the code to make unique indices was running in O(n^2)
-        time because of expensive "in" lookups.  This was fixed by adding a
-        `_maxint` cache.
-     The remaining performance issues appear to be in `_replace_rep`.
+     time because of expensive "in" lookups.  This was fixed by adding a
+     `_maxint` cache. The remaining performance issues appear to be in
+     `_replace_rep`.
 
 Developer's Note
 ================
@@ -1760,7 +1760,8 @@ class _Graph(object):
     unique names and replacements.  The output routine must make sure each
     object is evaluated in a separate scope.
 
-    .. note:: To improve performance, it is assumed that the names of `objects`
+    .. note::
+       To improve performance, it is assumed that the names of `objects`
        are unique and do not start with an underscore `_`.
     """
     def __init__(self, objects, archive_1, 
@@ -2382,11 +2383,10 @@ class DataSet(object):
        conflicting updates.  We have two mechanisms for dealing with
        this as specified by the `synchronize` flag.
 
-    .. warning:: The mechanism for saving is dependent on
-       :meth:`__setattr__` and :meth:`__setitem__` being called.  This
-       means that you must not rely on mutating members.  This will
-       not trigger a save. For example, the following will not behave
-       as expected:
+    .. warning:: The mechanism for saving is dependent on :meth:`__setattr__`
+       and :meth:`__setitem__` being called.  This means that you must not rely
+       on mutating members.  This will not trigger a save. For example, the
+       following will not behave as expected:
 
        >>> import tempfile, shutil, os # Make a unique temporary module
        >>> t = tempfile.mkdtemp(dir='.')
@@ -2397,13 +2397,13 @@ class DataSet(object):
        >>> ds1 = DataSet(modname, 'r')
        >>> ds1.d                        # See?
        {'a': 1, 'b': 2}
-
+       
        This is dangerous... Do not do this.
-
+       
        >>> ds.d['a'] = 6                # No write!
        >>> ds1.d['a']                   # This was not updated
        1
-
+       
        Instead, do something like this: Store the mutable object in a
        local variable, manipulate it, then reassign it:
        
@@ -2413,9 +2413,10 @@ class DataSet(object):
        >>> ds1.d['a']
        6
        >>> shutil.rmtree(t)       
-           
+    
     Examples
     --------
+
     First we make the directory that will hold the data.  Here we use
     the :mod:`tempfile` module to make a unique name.
     
@@ -2492,19 +2493,19 @@ class DataSet(object):
 
     .. todo:: Fix module interface...
     
-    To load the archive, you can import it as a module:
+    To load the archive, you can import it as a module::
     
-    >> mod1 = __import__(modname)
+       >> mod1 = __import__(modname)
 
     The info is again available in `info_dict` and the actual data
     can be loaded using the `load()` method.  This allows for the data
-    set to include large amounts of data, only loading what is needed.
-
-    >> mod1._info_dict['x_0'].info
-    (20, 2.5)
-    >> mod1._info_dict['x_0'].load()
-    array([ 2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,
-            2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5])
+    set to include large amounts of data, only loading what is needed::
+    
+       >> mod1._info_dict['x_0'].info
+       (20, 2.5)
+       >> mod1._info_dict['x_0'].load()
+       array([ 2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,
+               2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5])
 
     If you want to modify the data set, then create a new data set
     object pointing to the same place:
@@ -2518,10 +2519,10 @@ class DataSet(object):
     >>> import numpy as np
     >>> ds1.x_0 = np.ones(5)
 
-    This should work, but fails within doctests.  Don't know why...
+    This should work, but fails within doctests.  Don't know why...::
 
-    >> reload(mod1)                    # doctest: +SKIP
-    <module '...' from '.../mmf/archive/.../__init__.py'>
+       >> reload(mod1)                    # doctest: +SKIP
+       <module '...' from '.../mmf/archive/.../__init__.py'>
 
     Here we open a read-only copy:
     
@@ -2580,13 +2581,13 @@ class DataSet(object):
            before raising an :exc:`IOException` exception.  (Default
            is 60s.)
            
-        .. warning:: Although you can change entries by using the `store`
+        .. warning: Although you can change entries by using the `store`
            method of the records, this will not write the "__init__.py"
            file until :meth:`close` or :meth:`write` are called.  As a
            safeguard, these are called when the object is deleted, but the
            user should explicitly call these when new data is added.
 
-        .. warning:: The locking mechanism is to prevent two archives
+        .. warning: The locking mechanism is to prevent two archives
            from clobbering upon writing.  It is not designed to
            prevent reading invalid information from a partially
            written archive (the reading mechanism does not use the
