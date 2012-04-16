@@ -371,7 +371,6 @@ class TestStateVars(object):
         a2 = A2()
         assert a2.y == 4
 
-
     @nose.tools.raises(AttributeError)
     def test_NotImplemented(self):
         """Test NotImplemented keys"""
@@ -1048,6 +1047,23 @@ class TestStateVarsDelete(object):
 
         b2 = B2()
         nose.tools.assert_equal(b2.x, 3)
+
+    @mmf.utils.mmf_test.dec.skipknownfailure
+    def test_delete_4_issue_15(self):
+        """Bug when var is deleted the redefined."""
+        class A1(StateVars):
+            _state_vars = [('x', Required), ('y', Computed)]
+            process_vars()
+            def __init__(self, *v, **kw):
+                self.y = self.x**2
+        class A2(A1):
+            _state_vars = [('x', Deleted), ('x', 2)]
+            process_vars()
+            def __init__(self, *v, **kw):
+                A1.__init__(self, *v, **kw)
+        a2 = A2()
+        assert a2.y == 4
+
 
 class TestComputed(object):
     """Some regression tests for :class:`Computed` attributes."""
