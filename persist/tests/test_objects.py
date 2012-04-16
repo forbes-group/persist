@@ -356,6 +356,22 @@ class TestStateVars(object):
             _state_vars = [('x', mmf.objects.Required('Required'))]
             process_vars()
 
+    def test_Required4_issue_14(self):
+        """Test subclass providing Required variable."""
+        class A1(StateVars):
+            _state_vars = [('x', Required), ('y', Computed)]
+            process_vars()
+            def __init__(self, *v, **kw):
+                self.y = self.x**2
+        class A2(A1):
+            _state_vars = [('x', 2)]
+            process_vars()
+            def __init__(self, *v, **kw):
+                A1.__init__(self, *v, **kw)
+        a2 = A2()
+        assert a2.y == 4
+
+
     @nose.tools.raises(AttributeError)
     def test_NotImplemented(self):
         """Test NotImplemented keys"""
