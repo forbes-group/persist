@@ -1239,9 +1239,10 @@ def _gather_vars(cls):
                 if default is Deleted:
                     deleted.add(var)
                 elif var in vars_ and var not in deleted:
-                    if var not in ignore_name_clash:
+                    if (defaults.get(var,None) is not Required # Fix issue 14 
+                        and var not in ignore_name_clash):
                         warnings.warn(NameClashWarning1(
-                            "Attempt to redefine attr '%s' in class '%s'"
+                            "Redefining attr '%s' in class '%s'"
                             % (var, cls.__name__)))
                 else:
                     vars_.append(var)
