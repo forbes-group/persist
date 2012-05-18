@@ -1069,10 +1069,22 @@ class TestComputed(object):
     """Some regression tests for :class:`Computed` attributes."""
     @nose.tools.raises(TypeError)
     def test_regression_assigning_computed(self):
-        r"""Computed attributes should not be assignable on construction."""
+        r"""Computed attributes should not be assignable in _state_vars."""
         class A(StateVars):
             _state_vars = [('x', Computed(2.0))]
             process_vars()
+
+    @mmf.utils.mmf_test.dec.skipknownfailure
+    @nose.tools.raises(TypeError)
+    def test_regression_assigning_computed_construction_issue_16(self):
+        r"""Computed attributes should not be assignable on construction.
+
+        Maybe not... this is how they are initialized from archives.
+        """
+        class A(StateVars):
+            _state_vars = [('x', Computed)]
+            process_vars()
+        a = A(x=3)
         
         
 class TestComputedRefs(object):

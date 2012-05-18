@@ -587,7 +587,8 @@ class Computed(Attr):
 
        .. todo:: As a precaution, :class:`StateVars` should only
           permits this type of construction if *all* items returned by
-          :meth:`StateVars.items` are assigned.
+          :meth:`StateVars.items` are assigned.  This is related to `issue 16
+          <https://bitbucket.org/mforbes/pymmf/issue/16>`_.
 
     Examples
     --------
