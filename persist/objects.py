@@ -1029,9 +1029,10 @@ def _normalize_state_vars(state_vars):
                     _methods = []
                 for _m in _methods:
                     ref = '%s.%s' % (var_desc[0], _m)
+                    doc = getattr(var_desc[1].cls, _m, None).__doc__
                     new_refs.append((_m,
                                      Ref(ref, method=True),
-                                     getattr(var_desc[1].cls, _m).__doc__))
+                                     doc))
                         
                 for var, default, doc in extension:
                     ref = '%s.%s' % (var_desc[0], var)

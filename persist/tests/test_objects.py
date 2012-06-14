@@ -708,6 +708,19 @@ class TestStateVars(object):
             _nodeps = ['x']
             process_vars()
 
+    def test_issue19(self):
+        r"""Regression test.  This simple issue of a method conflicting with a
+        variable should not raise an infinite recursion..."""
+        mmf.objects.NameClashWarning2.simplefilter('ignore')
+        class A(StateVars):
+            _state_vars = [('x', 1)]
+            process_vars()
+            def x(self):
+                pass
+
+        a = A()
+        
+
 class TestStateVars1(object):
     """Test StateVars processing without explicit calls to
     process_vars()"""
@@ -963,6 +976,29 @@ class TestStateVarsDelegate(object):
         b = B()
         b.a.x = 3
         nose.tools.assert_equals(b.sq(), 9)
+
+    def test_methods2_regression(self):
+        r"""Regression test for a bug with attributes.  The idea here is to
+        allow attributes to be specified with `methods` so that the catchall can
+        still be used for vars."""
+        class A(StateVars):
+            _state_vars = [('x', 1),
+                           ('y', Computed)]
+            process_vars()
+            def __init__(self, *v, **kw):
+                self.y = 2*self.x
+            def sq(self):
+                return self.x**2
+
+        class B(StateVars):
+            _state_vars = [('a', Delegate(A, [], methods=['sq', 'y']))]
+            process_vars()
+
+        b = B()
+        b.a.x = 3
+        nose.tools.assert_equals(b.sq(), 9)
+        nose.tools.assert_equals(b.y, 6)
+
 
 class TestStateVarsCached(object):
     r"""Test cached reference optimization functionality."""
