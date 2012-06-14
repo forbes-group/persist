@@ -948,6 +948,22 @@ class TestStateVarsDelegate(object):
                            ('x', 2)]
             process_vars()
 
+    def test_methods1(self):
+        r"""Test delegating methods."""
+        class A(StateVars):
+            _state_vars = [('x', 1)]
+            process_vars()
+            def sq(self):
+                return self.x**2
+
+        class B(StateVars):
+            _state_vars = [('a', Delegate(A, [], methods=['sq']))]
+            process_vars()
+
+        b = B()
+        b.a.x = 3
+        nose.tools.assert_equals(b.sq(), 9)
+
 class TestStateVarsCached(object):
     r"""Test cached reference optimization functionality."""
     def setUp(self):
