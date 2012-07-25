@@ -3449,42 +3449,58 @@ class StateVars(Archivable):
     def __repr__(self):
         r"""Return a string representation of the object.  The items
         argument may be used to override self.items()"""
-        keyvals = ["%s=%r" % (var, getattr(self, var))
-                   for var in self._changed_vars()]
-        return "%s(%s)" % (self.__class__.__name__, ", ".join(keyvals))
+        if '__in__repr__' in self.__dict__:
+            return "<recursive call to repr!>"
+        try:
+            self.__dict__['__in__repr__'] = True
+            keyvals = ["%s=%r" % (var, getattr(self, var))
+                       for var in self._changed_vars()]
+            res = "%s(%s)" % (self.__class__.__name__, ", ".join(keyvals))
+        finally:
+            del self.__dict__['__in__repr__']
+
+        return res
     
     def __str__(self):
         r"""Pretty print state, including excluded variables.  Print order is
         sorted."""
-
-        all_vars = self._all_vars
-        vars_ = [(k, getattr(self, k)) for k in all_vars
-                if (hasattr(self, k) and
-                    k not in self._excluded_vars and
-                    k not in self._method_vars and
-                    k not in self._computed_vars and
-                    k not in self._class_vars)]
-        excluded = [(k, getattr(self, k)) for k in all_vars
-                     if (k in self._excluded_vars and 
-                         hasattr(self, k))]
-        computed = [(k, getattr(self, k, NotImplemented))
-                    for k in all_vars
-                    if k in self._computed_vars]
+        if '__in__str__' in self.__dict__:
+            return "<recursive call to str!>"
         
-        res = "\n".join(["%s=%s"%(k, v) 
-                         for (k, v) in vars_])
+        try:
+            self.__dict__['__in__str__'] = True
 
-        if 0 < len(computed):
-            res = "\n".join([res,
-                             'Computed:']
-                            +["%s=%s"%(k, str(v))
-                              for (k, v) in computed])
-            
-        if 0 < len(excluded):
-            res = "\n".join([res,
-                             'Excluded:']
-                            +["%s=%s"%(k, str(v))
-                              for (k, v) in excluded])
+            all_vars = self._all_vars
+            vars_ = [(k, getattr(self, k)) for k in all_vars
+                    if (hasattr(self, k) and
+                        k not in self._excluded_vars and
+                        k not in self._method_vars and
+                        k not in self._computed_vars and
+                        k not in self._class_vars)]
+            excluded = [(k, getattr(self, k)) for k in all_vars
+                         if (k in self._excluded_vars and 
+                             hasattr(self, k))]
+            computed = [(k, getattr(self, k, NotImplemented))
+                        for k in all_vars
+                        if k in self._computed_vars]
+
+            res = "\n".join(["%s=%s"%(k, v) 
+                             for (k, v) in vars_])
+
+            if 0 < len(computed):
+                res = "\n".join([res,
+                                 'Computed:']
+                                +["%s=%s"%(k, str(v))
+                                  for (k, v) in computed])
+
+            if 0 < len(excluded):
+                res = "\n".join([res,
+                                 'Excluded:']
+                                +["%s=%s"%(k, str(v))
+                                  for (k, v) in excluded])
+        finally:
+            del self.__dict__['__in__str__']
+
         return res
 
     @classmethod

@@ -711,6 +711,7 @@ class TestStateVars(object):
     def test_issue19(self):
         r"""Regression test.  This simple issue of a method conflicting with a
         variable should not raise an infinite recursion..."""
+        mmf.objects.NameClashWarning1.simplefilter('ignore')
         mmf.objects.NameClashWarning2.simplefilter('ignore')
         class A(StateVars):
             _state_vars = [('x', 1)]
