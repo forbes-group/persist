@@ -2751,6 +2751,7 @@ class DataSet(object):
                     msg = "\n".join([
                         "No datafile '%s' found to load '%s'.",
                         (datafile, name)])
+                    f.close()
                     raise KeyError(msg)
             res = __d[name]
             del d
