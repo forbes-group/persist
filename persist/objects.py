@@ -229,8 +229,8 @@ __all__ = [
     'NameClashWarning2',
     'Archivable', 'StateVars', 'Container', 
     'process_vars', 
-    'Attr', 'Required', 'Excluded', 'Internal', 'Computed', 'Deleted',
-    'ClassVar', 'NoCopy', 'Delegate', 'Ref',
+    'Attr', 'Required', 'Excluded', 'Internal', 'Fast', 'Computed',
+    'Deleted', 'ClassVar', 'NoCopy', 'Delegate', 'Ref',
     'attribute', 'parameter', 'calculate', 
     'MemoizedContainer', 
     'option', 'Options', 'class_NamedArray', 'recview', 
@@ -554,7 +554,6 @@ class Excluded(HasDefault):
     indicate that a particular method is executing, or for
     non-essential reporting of internal state/temporary data.
     """
-
 class Internal(Excluded):
     r"""Internal variable.
 
@@ -562,6 +561,14 @@ class Internal(Excluded):
     Functionally equivalent to :class:`Excluded` attributes and are
     presently implemented as these (and reported as these).
     """
+class Fast(HasDefault):
+    r"""Fast variable.
+
+    Like :class:`Excluded` and :class:`Internal` variables, these do not trigger
+    a call to `__init__()` when they are set, but they are stored in the
+    archive.  They should be used for simple attributes like flags or counters.
+    Make sure that nothing depends on the value though, otherwise the object
+    might not be properly updated."""
 
 class Computed(Attr):
     r"""Computed attributes.
@@ -1149,7 +1156,7 @@ def _preprocess(cls):
     
 def _gather_vars(cls):
     r"""Return `(vars, original_defaults, defaults, docs, excluded_vars,
-    computed_vars, refs, delegates, cached)` gathered from `cls`.
+    fast_vars, computed_vars, refs, delegates, cached)` gathered from `cls`.
 
     Returns
     -------
@@ -1167,6 +1174,8 @@ def _gather_vars(cls):
        List of documentation strings
     excluded_vars : set
         Set of excluded attributes.
+    fast_vars : set
+        Set of fast attributes (these do not trigger `__init__()`).
     method_vars : set
         Set of method references to delegates.
     computed_vars : dict
@@ -1326,6 +1335,7 @@ def _gather_vars(cls):
                     docs[var] = desc.__doc__
 
     excluded_vars = set()
+    fast_vars = set()
     method_vars = set()
     computed_vars = {}
     class_vars = set()
@@ -1377,6 +1387,8 @@ def _gather_vars(cls):
 
         if _is(default, Excluded):
             excluded_vars.add(var)
+        if _is(default, Fast):
+            fast_vars.add(var)
         if _is(default, Computed):
             computed_vars[var] = default.save
         if _is(default, ClassVar):
@@ -1447,7 +1459,7 @@ def _gather_vars(cls):
         irefs.setdefault(refs[ref], []).append(ref)
 
     return (vars_, original_defaults, defaults, docs,
-            excluded_vars, method_vars, computed_vars, class_vars,
+            excluded_vars, fast_vars, method_vars, computed_vars, class_vars,
             refs, irefs, delegates, settable_properties, cached,
             ignore_name_clash)
 
@@ -1879,7 +1891,7 @@ def _get_processed_vars(cls, copy, archive_check, with_docs=None):
     """
     results = {}
     (vars_, original_defaults, defaults, docs,
-     excluded_vars, method_vars, computed_vars, class_vars,
+     excluded_vars, fast_vars, method_vars, computed_vars, class_vars,
      refs, irefs, delegates, settable_properties, cached,
      ignore_name_clash) = _gather_vars(cls)
     for name in docs:
@@ -1938,6 +1950,7 @@ def _get_processed_vars(cls, copy, archive_check, with_docs=None):
     results['_state_vars'] = [
         (var, original_defaults[var], docs.get(var, '')) for var in vars_]
     results['_excluded_vars'] = excluded_vars
+    results['_fast_vars'] = fast_vars
     results['_method_vars'] = method_vars
     results['_computed_vars'] = computed_vars
     results['_class_vars'] = class_vars
@@ -2012,8 +2025,8 @@ def process_vars(cls, copy=copy.deepcopy, archive_check=None,
     r"""Return `(results, wrap__init__)`.  This is a class decorator to
     process the :attr:`_state_vars` attribute of `cls` and to define
     the documentation, and members :attr:`_state_vars`,
-    `_excluded_vars`, `_method_vars`, `_computed_vars`, `_vars`, `_defaults`,
-    and `_dynamic`.
+    `_excluded_vars`, `_fast_vars`, `_method_vars`, `_computed_vars`, `_vars`,
+    `_defaults`, and `_dynamic`.
 
     Classes may perform additional processing if required by defining
     the :func:`classmethod` hooks `_pre_hook_process_vars(cls)` and
@@ -2095,8 +2108,9 @@ def _vars_processed(cls):
     has inhereted from a proprly processed class without redefining
     any vars_."""
     vars_ = ['_vars', '_state_vars', '_defaults',
-            '_excluded_vars', '_method_vars', '_computed_vars', '_dynamic',
-            '_delegates', '_settable_properties', '_refs', '_irefs']
+            '_excluded_vars', '_fast_vars', '_method_vars', '_computed_vars',
+             '_dynamic', '_delegates', '_settable_properties', '_refs',
+             '_irefs']
     if all(map(cls.__dict__.has_key, vars_)):
         # All local variables have been assigned by process_vars, so
         # assume this was done by process_vars.
@@ -2218,6 +2232,9 @@ class StateVars(Archivable):
        Set of names allowed to be assigned, but excluded
        from archival (used for temporaries etc.) and will not generate
        calls to :meth:`__init__` when set.
+    _fast_vars : set
+       Set of names allowed to be assigned, and archived, but which will not 
+       generate calls to :meth:`__init__` when set.
     _method_vars : set
        Set of names of references to delegate methods.
     _dynamic : bool
@@ -2893,6 +2910,7 @@ class StateVars(Archivable):
     _computed_vars = {}
     _class_vars = set([])
     _excluded_vars = set([])
+    _fast_vars = set([])
     _method_vars = set([])
     _dynamic = False
     _refs = {}
@@ -3389,7 +3407,8 @@ class StateVars(Archivable):
 
                 if (hasattr(self, '_nodeps')
                     and name in self._nodeps
-                    or name in self._excluded_vars):
+                    or name in self._excluded_vars
+                    or name in self._fast_vars):
                     # Don't invoke initialization.
                     pass
                 elif hasattr(self, '_changes'):

@@ -18,7 +18,7 @@ mmf.objects._objects = sys.modules['mmf.objects._objects']
 
 from mmf.objects import StateVars, Container, process_vars
 from mmf.objects import ClassVar, Required, Computed, NoCopy, Deleted
-from mmf.objects import Excluded, Delegate
+from mmf.objects import Excluded, Fast, Delegate
 
 class A(mmf.objects.Archivable):
     def __init__(self, x):
@@ -480,6 +480,27 @@ class TestStateVars(object):
         rep = repr(a)
         rep = rep
 
+    def test_fast_1(self):
+        """Tests Fast attribute definition."""
+        class C(StateVars):
+            _state_vars = [('x', 1.0), 
+                           ('a', Fast),
+                           ('b', Fast(3)),
+                           ('c', Excluded([]))]
+            process_vars()
+            def __init__(self, *v, **kw):
+                self.c.append(kw)
+        c = C()
+        nose.tools.assert_equals(len(c.c), 1)
+        nose.tools.assert_equals(c.b, 3)
+        c.x = 2.0
+        nose.tools.assert_equals(len(c.c), 2)
+        c.a = 1
+        c.b = 2
+        nose.tools.assert_equals(len(c.c), 2)
+        nose.tools.assert_equals(c.a, 1)
+        nose.tools.assert_equals(c.b, 2)
+        
     def test_class_vars(self):
         """Test ClassVars attribute bug with __new__ overwriting with
         default values."""
