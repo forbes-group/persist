@@ -18,7 +18,7 @@ mmf.objects._objects = sys.modules['mmf.objects._objects']
 
 from mmf.objects import StateVars, Container, process_vars
 from mmf.objects import ClassVar, Required, Computed, NoCopy, Deleted
-from mmf.objects import Excluded, Fast, Delegate
+from mmf.objects import Excluded, Fast, Delegate, InitializationError
 
 class A(mmf.objects.Archivable):
     def __init__(self, x):
@@ -480,6 +480,45 @@ class TestStateVars(object):
         rep = repr(a)
         rep = rep
 
+    @nose.tools.raises(ValueError)
+    def test_invalid_nodeps1(self):
+        """Test invalid _nodeps."""
+        class A(StateVars):
+            _nodeps = [('x', 1)]
+            process_vars()
+
+    @nose.tools.raises(ValueError)
+    def test_invalid_nodeps2(self):
+        """Test _nodeps missing in _vars."""
+        class A(StateVars):
+            _state_vars = []
+            _nodeps = ['x']
+            process_vars()
+
+    def test_nodeps_inherit(self):
+        """Check that _nodeps is inherited."""
+        class A(StateVars):
+            _state_vars = [('x', 1)]
+            _nodeps = ['x']
+            process_vars()
+        class B(A):
+            process_vars()
+        a = A()
+        b = B()
+        nose.tools.assert_equals(a._nodeps, b._nodeps)
+
+    @nose.tools.raises(InitializationError)
+    def test_nodeps_check(self):
+        """Check that _nodeps are not used in __init__."""
+        class A(StateVars):
+            _state_vars = [('a', Computed), 
+                           ('x', 1)]
+            _nodeps = ['x']
+            process_vars()
+            def __init__(self, *v, **kw):
+                self.a = self.x
+        a = A()
+            
     def test_fast_1(self):
         """Tests Fast attribute definition."""
         class C(StateVars):
@@ -713,21 +752,6 @@ class TestStateVars(object):
         b = B()
         b.x = 2
         nose.tools.assert_equal(b._x, 2)
-
-    @nose.tools.raises(ValueError)
-    def test_invalid_nodeps1(self):
-        """Test invalid _nodeps."""
-        class A(StateVars):
-            _nodeps = [('x', 1)]
-            process_vars()
-
-    @nose.tools.raises(ValueError)
-    def test_invalid_nodeps2(self):
-        """Test _nodeps missing in _vars."""
-        class A(StateVars):
-            _state_vars = []
-            _nodeps = ['x']
-            process_vars()
 
     def test_issue19(self):
         r"""Regression test.  This simple issue of a method conflicting with a
@@ -1276,19 +1300,19 @@ class TestCoverage(object):
 
     def test_delegates_1(self):
         """Test fetching of documentation from deep."""
-        class A(object):
+        class A(StateVars):
             _state_vars = [
                 ('x', None, 'var x'), 
                 ('y', None, 'var y')]
             process_vars()
 
-        class B(object):
+        class B(StateVars):
             _state_vars = [
                 ('a', Delegate(A, ['x']))]
             process_vars(archive_check=False)
             j = 1
 
-        class C(object):
+        class C(StateVars):
             _state_vars = [
                 ('c', Delegate(B)),
                 ('h=c.a.x'),
@@ -1310,7 +1334,7 @@ class TestCoverage(object):
     @nose.tools.raises(NameError)
     def test_delegates_2(self):
         """Test missing ref."""
-        class A(object):
+        class A(StateVars):
             _state_vars = ['x=y']
             process_vars()
         
@@ -1361,4 +1385,13 @@ class Doctests(object):
         >>> b = _B(dyadic=False)
         >>> b.dyadic
         False
+        """
+
+    def test_no_StateVars(self):
+        """
+        >>> class B(object):
+        ...     process_vars()
+        Traceback (most recent call last):
+           ...
+        TypeError: 'process_vars()' must have 'StateVars' subclass: got 'B' 
         """

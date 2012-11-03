@@ -1156,7 +1156,7 @@ def _preprocess(cls):
     
 def _gather_vars(cls):
     r"""Return `(vars, original_defaults, defaults, docs, excluded_vars,
-    fast_vars, computed_vars, refs, delegates, cached)` gathered from `cls`.
+    nodeps, computed_vars, refs, delegates, cached)` gathered from `cls`.
 
     Returns
     -------
@@ -1174,7 +1174,7 @@ def _gather_vars(cls):
        List of documentation strings
     excluded_vars : set
         Set of excluded attributes.
-    fast_vars : set
+    nodeps : set
         Set of fast attributes (these do not trigger `__init__()`).
     method_vars : set
         Set of method references to delegates.
@@ -1212,9 +1212,10 @@ def _gather_vars(cls):
     >>> _gather_vars(B)         # doctest: +NORMALIZE_WHITESPACE
     (['a', 'b', 'n', 'c'],
      {'a': 3, 'c': 4, 'b': 2, 'n': NoCopy(3)},
-     {'a': 3, 'c': 4, 'b': 2, 'n': 3},
+     {'a': 3, 'c': 4, 'b': 2, 'n': 3}, 
      {'a': 'new_a', 'c': 'c', 'b': 'var b', 'n': 'var n'},
-     set([]), set([]), {}, set([]), {}, {}, {}, set([]), set([]), set(['a']))
+     set([]), set([]), set([]), {}, set([]), {}, {}, {}, set([]), set([]), 
+     set(['a']))
 
     >>> class C(object):
     ...    _state_vars = [('x', 1, 'var x'),
@@ -1237,7 +1238,7 @@ def _gather_vars(cls):
      {'c.x': 3},
      {'a': '<no description>', 'c': '<no description>', 'b': 'var b',
       'h': 'var n', 'y': 'var x', 'x': 'var x'},
-      set([]), set([]), {}, set([]),
+      set([]), set([]), set([]), {}, set([]),
       {'a': 'c.a', 'h': 'c.a.n', 'b': 'c.b', 'y': 'c.x', 'x': 'c.x'},
       {'c.b': ['b'], 'c.a.n': ['h'], 'c.x': ['y', 'x'], 'c.a': ['a']},
       {'c': <class '...C'>}, set([]), set([]), set([]))
@@ -1335,7 +1336,7 @@ def _gather_vars(cls):
                     docs[var] = desc.__doc__
 
     excluded_vars = set()
-    fast_vars = set()
+    nodeps = set()
     method_vars = set()
     computed_vars = {}
     class_vars = set()
@@ -1388,7 +1389,7 @@ def _gather_vars(cls):
         if _is(default, Excluded):
             excluded_vars.add(var)
         if _is(default, Fast):
-            fast_vars.add(var)
+            nodeps.add(var)
         if _is(default, Computed):
             computed_vars[var] = default.save
         if _is(default, ClassVar):
@@ -1459,7 +1460,7 @@ def _gather_vars(cls):
         irefs.setdefault(refs[ref], []).append(ref)
 
     return (vars_, original_defaults, defaults, docs,
-            excluded_vars, fast_vars, method_vars, computed_vars, class_vars,
+            excluded_vars, nodeps, method_vars, computed_vars, class_vars,
             refs, irefs, delegates, settable_properties, cached,
             ignore_name_clash)
 
@@ -1891,7 +1892,7 @@ def _get_processed_vars(cls, copy, archive_check, with_docs=None):
     """
     results = {}
     (vars_, original_defaults, defaults, docs,
-     excluded_vars, fast_vars, method_vars, computed_vars, class_vars,
+     excluded_vars, nodeps, method_vars, computed_vars, class_vars,
      refs, irefs, delegates, settable_properties, cached,
      ignore_name_clash) = _gather_vars(cls)
     for name in docs:
@@ -1900,17 +1901,17 @@ def _get_processed_vars(cls, copy, archive_check, with_docs=None):
                                   with_docs=with_docs)
 
     # Perform some sanity checks and helpful errors
-    if hasattr(cls, '_nodeps'):
-        for s in cls._nodeps:
-            if not isinstance(s, str):
-                raise ValueError(
-                    """_nodeps should just be a list of names: define the
-                    actual variables in _state_vars.  Got %s"""
-                    %(repr(s),))
-            elif s not in vars_:
-                raise ValueError(
-                    "Vars in _nodeps should also be defined in " 
-                    + "_state_vars.  Got %s" % (repr(s),))
+    nodeps.update(getattr(cls, '_nodeps', []))
+    for s in nodeps:
+        if not isinstance(s, str):
+            raise ValueError(
+                """_nodeps should just be a list of names: define the
+                actual variables in _state_vars.  Got %s"""
+                %(repr(s),))
+        elif s not in vars_:
+            raise ValueError(
+                "Vars in _nodeps should also be defined in " 
+                + "_state_vars.  Got %s" % (repr(s),))
                 
     # Check that there are no clashes
     for var in [var for var in vars_ if
@@ -1950,7 +1951,7 @@ def _get_processed_vars(cls, copy, archive_check, with_docs=None):
     results['_state_vars'] = [
         (var, original_defaults[var], docs.get(var, '')) for var in vars_]
     results['_excluded_vars'] = excluded_vars
-    results['_fast_vars'] = fast_vars
+    results['_nodeps'] = nodeps
     results['_method_vars'] = method_vars
     results['_computed_vars'] = computed_vars
     results['_class_vars'] = class_vars
@@ -2025,13 +2026,15 @@ def process_vars(cls, copy=copy.deepcopy, archive_check=None,
     r"""Return `(results, wrap__init__)`.  This is a class decorator to
     process the :attr:`_state_vars` attribute of `cls` and to define
     the documentation, and members :attr:`_state_vars`,
-    `_excluded_vars`, `_fast_vars`, `_method_vars`, `_computed_vars`, `_vars`,
+    `_excluded_vars`, `_nodeps`, `_method_vars`, `_computed_vars`, `_vars`,
     `_defaults`, and `_dynamic`.
 
     Classes may perform additional processing if required by defining
     the :func:`classmethod` hooks `_pre_hook_process_vars(cls)` and
     `_post_hook_process_vars(cls, results)`.  The latter may modify
     the dictionary `results`.
+
+    Must be called in a subclass of :class:`StateVars`.
 
     Parameters
     ----------
@@ -2057,7 +2060,7 @@ def process_vars(cls, copy=copy.deepcopy, archive_check=None,
        
     Examples
     --------
-    >>> class A(object):
+    >>> class A(StateVars):
     ...     "A simple class"
     ...     _state_vars = [('a', 1, 'Param a'),
     ...                    ('b', 2, 'Param b'),
@@ -2091,6 +2094,10 @@ def process_vars(cls, copy=copy.deepcopy, archive_check=None,
         e1: Excluded with default
         f: <no description>
     """
+    if not issubclass(cls, StateVars):
+        raise TypeError(
+            "'process_vars()' must have 'StateVars' subclass: got '%s' "
+            % (cls.__name__,))
     # pylint: disable-msg=W0212
     if archive_check is None:
         archive_check = _ARCHIVE_CHECK
@@ -2108,7 +2115,7 @@ def _vars_processed(cls):
     has inhereted from a proprly processed class without redefining
     any vars_."""
     vars_ = ['_vars', '_state_vars', '_defaults',
-            '_excluded_vars', '_fast_vars', '_method_vars', '_computed_vars',
+            '_excluded_vars', '_nodeps', '_method_vars', '_computed_vars',
              '_dynamic', '_delegates', '_settable_properties', '_refs',
              '_irefs']
     if all(map(cls.__dict__.has_key, vars_)):
@@ -2135,6 +2142,23 @@ def _start_initializing(self):
     altered the flag in between.  This should be used in a try block.
     """
     _initializing = getattr(self, '_initializing', 0)
+    if _initializing == 0:
+        _ga = self.__class__.__getattribute__
+        def __getattribute__(self, name, _nodeps=self._nodeps, _ga=_ga):
+            r"""Version of :meth:`__getattribute__` for use during
+            initialization. This checks that variables in `_nodeps` are not used
+            in :attr:`__init__`."""
+            if name in _nodeps:
+                raise InitializationError(
+                    ("Variable '%s' used in `__init__` but listed in _nodeps. "
+                     % (name,)) +
+                    "Make sure that '_nodeps' and 'Fast' vars are not used " + 
+                    "in '__init__'.")
+            else:
+                return _ga(self, name)
+        __getattribute__._ga = _ga
+        self.__class__.__getattribute__ = __getattribute__
+
     self.__dict__['_initializing'] = _initializing+1
     return _initializing
 
@@ -2144,6 +2168,9 @@ def _finish_initializing(self, previous_initializing):
     # pass, pylint: disable-msg=W0212
     try:
         _initializing = self._initializing
+        if _initializing == 1:
+            _cls = self.__class__
+            _cls.__getattribute__ = _cls.__getattribute__._ga
     except AttributeError:      # pragma: no cover
         raise InitializationError("_initializing flag not defined:"
                                   " missing _start_initializing().")
@@ -2209,11 +2236,8 @@ class StateVars(Archivable):
     _nodeps : list of str (optional)
        List of names that are not used when initializing.  These
        attributes have "no dependents" and so can be modified without
-       triggering a call to :meth:`__init__`.  This is not processed
-       by :func:`process_vars` and thus will not include values from
-       any superclass.  These must be included again explicitly
-       because your class may introduce dependencies not present in
-       the parent.
+       triggering a call to :meth:`__init__`.  :class:`Fast` vars are added
+       here.
     _vars : list of names
        List of all the variable names, including delegates,
        references, excluded variables etc.  The only names it does not
@@ -2232,9 +2256,6 @@ class StateVars(Archivable):
        Set of names allowed to be assigned, but excluded
        from archival (used for temporaries etc.) and will not generate
        calls to :meth:`__init__` when set.
-    _fast_vars : set
-       Set of names allowed to be assigned, and archived, but which will not 
-       generate calls to :meth:`__init__` when set.
     _method_vars : set
        Set of names of references to delegate methods.
     _dynamic : bool
@@ -2904,13 +2925,12 @@ class StateVars(Archivable):
 
     """
     _state_vars = []
-    _nodeps = []
+    _nodeps = set([])
     _vars = []
     _defaults = {}
     _computed_vars = {}
     _class_vars = set([])
     _excluded_vars = set([])
-    _fast_vars = set([])
     _method_vars = set([])
     _dynamic = False
     _refs = {}
@@ -3405,10 +3425,8 @@ class StateVars(Archivable):
                 else:
                     object.__setattr__(self, name, value)
 
-                if (hasattr(self, '_nodeps')
-                    and name in self._nodeps
-                    or name in self._excluded_vars
-                    or name in self._fast_vars):
+                if (name in self._nodeps
+                    or name in self._excluded_vars):
                     # Don't invoke initialization.
                     pass
                 elif hasattr(self, '_changes'):
@@ -3674,7 +3692,9 @@ class StateVars(Archivable):
 
 class Container(StateVars):
     r"""Simple container class.  This is just a StateVars class with
-    allowed dynamic allocation.
+    allowed dynamic allocation and with :meth:`__getitem__` and
+    :meth:`__setitem__` mapped to :meth:`__getattr__` and :meth:`__setattr__` so
+    that it behaves like a dictionary.
 
     Examples
     --------
@@ -3682,10 +3702,13 @@ class Container(StateVars):
     >>> print a
     a=1
     b=2
-    >>> a.z = 4
+    >>> a.z = 4                 # Can define new attributes
+    >>> a.z
+    4
+    >>> a['b'] = 3              # Can use dictionary syntax
     >>> print a
     a=1
-    b=2
+    b=3
     z=4
 
     We also include an update method that updates the dictionary
@@ -3714,6 +3737,10 @@ class Container(StateVars):
         r"""Update the items from container."""
         for (key, value) in container.items():
             setattr(self, key, value)
+    def __getitem__(self, key):
+        return getattr(self, key)
+    def __setitem__(self, key, value):
+        setattr(self, key, value)
     
 '''        
 class CopyConstruct(object):
@@ -5315,7 +5342,7 @@ class _ExceptionCoverageTests:
         ...
     TypeError: Key must be name or (name, doc) (got ('a', 3, 4))
 
-    >>> class C(object):
+    >>> class C(StateVars):
     ...     _state_vars = {(1, 3):5}
     ...     process_vars()
     Traceback (most recent call last):
