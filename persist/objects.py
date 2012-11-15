@@ -143,7 +143,7 @@ following semantics:
    does this, making sure that the delegates are copied while the
    other attributes are simply referenced.  Method
    :meth:`__deepcopy__` works as usual.
-        
+
 2) The method :meth:`items` returns a list of the data
    required to construct the object.  The object should be
    able constructed by passing all of these items to the
@@ -227,13 +227,13 @@ from __future__ import division
 __all__ = [
     'InitializationError', 'NameClashWarning', 'NameClashWarning1',
     'NameClashWarning2',
-    'Archivable', 'StateVars', 'Container', 
-    'process_vars', 
+    'Archivable', 'StateVars', 'Container',
+    'process_vars',
     'Attr', 'Required', 'Excluded', 'Internal', 'Fast', 'Computed',
     'Deleted', 'ClassVar', 'NoCopy', 'Delegate', 'Ref',
-    'attribute', 'parameter', 'calculate', 
-    'MemoizedContainer', 
-    'option', 'Options', 'class_NamedArray', 'recview', 
+    'attribute', 'parameter', 'calculate',
+    'MemoizedContainer',
+    'option', 'Options', 'class_NamedArray', 'recview',
     'RecView', 'Calculator']
 import sys
 import warnings
@@ -257,11 +257,12 @@ import mmf.utils.text
 
 try:
     from zope.interface.interface import Element as ZopeElement
-except ImportError:                     #pragma: no cover
+except ImportError:                     # pragma: no cover
     from types import NoneType as ZopeElement
 
 _ARCHIVE_CHECK = True
 __warningregistry__ = {}
+
 
 ###########################################################
 # Classes
@@ -285,8 +286,8 @@ class Archivable(object):
     # interfaces.implements(interfaces.IArchivable)
     # Breaks help.  See zope Bug #181371.
     # https://bugs.launchpad.net/zope3/+bug/181371
-    
-    def items(self):        # pragma: no cover 
+
+    def items(self):        # pragma: no cover
         r"""Return a list `[(name, obj)]` of `(name, object)` pairs
         where the instance can be constructed as
         `ClassName(name1=obj1, name2=obj2, ...)`.
@@ -314,10 +315,10 @@ class Archivable(object):
         b
         """
         return (k for (k, v) in self.items())
-    
+
     def archive_1(self, env=None):      # pylint: disable-msg=W0613
         r"""Return (rep, args, imports).
-        
+
         Defines a representation rep of the instance self where the
         instance can be reconstructed from the string rep evaluated in
         the context of dict args with the specified imports = list of
@@ -357,7 +358,7 @@ class Archivable(object):
            o.a
         """
         arch = mmf.archive.Archive()
-        arch.insert(**{name:self})
+        arch.insert(**{name: self})
         return str(arch)
 
     def __repr__(self):
@@ -366,8 +367,10 @@ class Archivable(object):
     def __str__(self):
         return self.__repr__()
 
+
 class InitializationError(Exception):
     r"""Initialization failed or incomplete."""
+
 
 class NameClashWarning(UserWarning):
     r"""Name clash.  Name already defined.
@@ -398,6 +401,7 @@ class NameClashWarning(UserWarning):
         __warningregistry__ = {}
         warnings.simplefilter(action, cls)
 
+
 class NameClashWarning1(NameClashWarning):
     r"""Name clash.  Name already defined.
 
@@ -405,6 +409,7 @@ class NameClashWarning1(NameClashWarning):
     default values are changed.  It is by default disabled.
     """
     default_action = 'ignore'
+
 
 class NameClashWarning2(NameClashWarning):
     r"""Name clash.  Name already defined.
@@ -417,9 +422,10 @@ class NameClashWarning2(NameClashWarning):
 NameClashWarning1.simplefilter()
 NameClashWarning2.simplefilter()
 
+
 class _Required(object):                # pylint: disable-msg=R0903
     r"""Default value for required attributes.
-    
+
     Examples
     --------
     >>> Required
@@ -430,7 +436,7 @@ class _Required(object):                # pylint: disable-msg=R0903
     def __init__(self, doc=NotImplemented):
         if doc is not NotImplemented:
             self.doc = doc
-            
+
     def __repr__(self):
         r"""Simple string for describing arguments etc.
         """
@@ -439,12 +445,13 @@ class _Required(object):                # pylint: disable-msg=R0903
             return "Required(%r)" % (doc, )
         else:
             return "Required"
-        
+
     def __call__(self, doc):
         r"""Return a required object with documentation."""
         return _Required(doc=doc)
 
 Required = _Required()                  # pylint: disable-msg=C0103
+
 
 class _Deleted(Archivable):
     r"""Deleted variable.
@@ -500,8 +507,9 @@ class _Deleted(Archivable):
     >>> 'a' in c._vars
     False
     """
-    
+
 Deleted = _Deleted()                    # pylint: disable-msg=C0103
+
 
 def _is(default, type_):
     r"""Return true if default is a subclass or instance of `type`."""
@@ -509,6 +517,7 @@ def _is(default, type_):
         return issubclass(default, type_)
     except TypeError:
         return isinstance(default, type_)
+
 
 class Attr(Archivable):
     r"""Base class for all attribute types."""
@@ -518,7 +527,7 @@ class Attr(Archivable):
         names are determined by inspecting the arguments to the
         constructor :meth:`__init__`."""
         items = []
-        func_code = self.__init__.im_func.func_code # pylint: disable-msg=E1101
+        func_code = self.__init__.im_func.func_code  # pylint: disable-msg=E1101
         nargs = func_code.co_argcount
 
         # pylint: disable-msg=E1101
@@ -533,7 +542,8 @@ class Attr(Archivable):
             elif value != defaults[name - (nargs - 1 - len(defaults))]:
                 items.append((var, value))
         return items
-            
+
+
 class HasDefault(Attr):
     r"""Base class for types with default values.
 
@@ -544,8 +554,10 @@ class HasDefault(Attr):
     """
     value = NotImplemented              # Here so that one can always
                                         # access value, even on a class.
+
     def __init__(self, value):          # pylint: disable-msg=W0231
         self.value = value
+
 
 class Excluded(HasDefault):
     r"""Excluded variable.
@@ -554,6 +566,8 @@ class Excluded(HasDefault):
     indicate that a particular method is executing, or for
     non-essential reporting of internal state/temporary data.
     """
+
+
 class Internal(Excluded):
     r"""Internal variable.
 
@@ -561,6 +575,8 @@ class Internal(Excluded):
     Functionally equivalent to :class:`Excluded` attributes and are
     presently implemented as these (and reported as these).
     """
+
+
 class Fast(HasDefault):
     r"""Fast variable.
 
@@ -569,6 +585,7 @@ class Fast(HasDefault):
     archive.  They should be used for simple attributes like flags or counters.
     Make sure that nothing depends on the value though, otherwise the object
     might not be properly updated."""
+
 
 class Computed(Attr):
     r"""Computed attributes.
@@ -617,7 +634,7 @@ class Computed(Attr):
         save = kw.pop('save', False)
         if kw:
             raise TypeError(
-                "Computed() got an unexpected keyword argument '%s'" 
+                "Computed() got an unexpected keyword argument '%s'"
                 % kw.keys()[0])
         elif v:
             raise TypeError(
@@ -629,7 +646,8 @@ class Computed(Attr):
     def items(self):
         r"Our constructor breaks the auto finding of attributes"
         return [('save', self.save)]
-    
+
+
 class ClassVar(HasDefault):
     r"""Class variables (not associated with instances).
 
@@ -640,6 +658,7 @@ class ClassVar(HasDefault):
     :attr:`_state_vars` mechanism once :func:`process_vars()` is
     called.
     """
+
 
 class _Attr(HasDefault):
     r"""Denotes an attribute.
@@ -655,6 +674,7 @@ class _Attr(HasDefault):
     def __init__(self, doc, value=NotImplemented):
         self.doc = doc
         self.value = value
+
 
 class Delegate(HasDefault):
     r"""Delegate Class.
@@ -677,7 +697,7 @@ class Delegate(HasDefault):
     --------
     This is the simplest delegation to `A`.  All variables in
     `A._state_vars` become members of `D1`:
-    
+
     >>> class A(StateVars):
     ...     _state_vars = [('a', 1), ('b', 2)]
     ...     process_vars()
@@ -698,7 +718,7 @@ class Delegate(HasDefault):
 
     >>> d1
     D1(A_=A(a=3))
-    
+
     >>> d1.a=5; print d1
     a=5
     b=2
@@ -741,7 +761,7 @@ class Delegate(HasDefault):
     >>> class D3(StateVars):
     ...     _state_vars = [('C_', Delegate(C, ['x','y']))]
     ...     process_vars()
-    
+
     >>> d3 = D3(x=10); d3
     D3(C_=C(y=2, x=10))
 
@@ -793,14 +813,16 @@ class Delegate(HasDefault):
     >>> Delegate(None, vars=['x'], value=4)
     Delegate(value=4, vars=['x'], cls=None)
     """
+
     # pylint: disable-msg=W0231, W0622
-    def __init__(self, cls, vars=None, methods=None, 
+    def __init__(self, cls, vars=None, methods=None,
                  value=NotImplemented, cached=False):
         self.cls = cls
         self.vars = vars
         self.methods = methods
         self.value = value
         self.cached = cached
+
 
 class Ref(Attr):
     r"""Ref Class.  Represents an attribute reference to another
@@ -818,7 +840,8 @@ class Ref(Attr):
         self.ref = ref
         self.cached = cached
         self.method = method
-    
+
+
 class NoCopy(object):                   # pylint: disable-msg=R0903
     r"""Default value for objects that should not be copied (or copied
     with a custom copier copy).  The default semantics are that
@@ -844,12 +867,13 @@ class NoCopy(object):                   # pylint: disable-msg=R0903
     NoCopy(3, copy=<function <lambda> at ...>)
     >>> n.copy                  # doctest: +ELLIPSIS
     <function <lambda> at ...>
-    
     """
-    def __init__(self, value, copy=False): # pylint: disable-msg=W0621
+
+    def __init__(self, value, copy=False):  # pylint: disable-msg=W0621
         self.value = value
         if copy is not False:
             self._copy = copy
+
     @property
     def copy(self):
         r"""Return the copier"""
@@ -861,16 +885,18 @@ class NoCopy(object):                   # pylint: disable-msg=R0903
             else:
                 return self._copy
         else:
-            return lambda x:x
+            return lambda x: x
+
     def __repr__(self):
         args = [repr(self.value)]
         if hasattr(self, '_copy'):
-            args.append('copy=%r'%self._copy)
+            args.append('copy=%r' % self._copy)
         return "NoCopy(%s)" % (", ".join(args),)
+
 
 def _classinitializer(proc):
     r"""Magic decorator to allow class decoration.
-    
+
     One added feature is that the return value of `proc` is used to
     set the docstring.  (This means that `proc` is called twice).
     """
@@ -883,8 +909,9 @@ def _classinitializer(proc):
         worms!)"""
         frame = sys._getframe(1)        # pylint: disable-msg=W0212
         if '__module__' in frame.f_locals and not \
-            '__module__' in frame.f_code.co_varnames: # we are in a class
+            '__module__' in frame.f_code.co_varnames:  # we are in a class
             thetype = frame.f_locals.get("__metaclass__", type)
+
             def makecls(name, bases, dic):
                 r"""Construct the new class and return it."""
                 # This dic is the source of a bug: See
@@ -892,7 +919,7 @@ def _classinitializer(proc):
                 # enclosing scope...
                 try:
                     cls = thetype(name, bases, dic)
-                except TypeError, err: # pragma: no cover
+                except TypeError, err:  # pragma: no cover
                     if "can't have only classic bases" in str(err):
                         cls = thetype(name, bases + (object, ), dic)
                     else:  # other strange errs, e.g. __slots__ conflicts
@@ -906,7 +933,7 @@ def _classinitializer(proc):
                 dic.update(res)
                 try:
                     cls = thetype(name, bases, dic)
-                except TypeError, err: # pragma: no cover
+                except TypeError, err:  # pragma: no cover
                     if "can't have only classic bases" in str(err):
                         cls = thetype(name, bases + (object, ), dic)
                     else:  # other strange errs, e.g. __slots__ conflicts
@@ -914,9 +941,9 @@ def _classinitializer(proc):
                 wrap__init__(cls)
                 # Need to do this after new class is created so
                 # _original__init__ has correct im_class.
-                
+
                 return cls
-            
+
             frame.f_locals["__metaclass__"] = makecls
         else:                   # pragma: no cover
             proc(*args, **kw)
@@ -927,6 +954,8 @@ def _classinitializer(proc):
     return newproc
 
 _NO_DESCRIPTION = "<no description>"
+
+
 def _normalize_state_vars(state_vars):
     r"""Return the normalized form of state_vars as a list of
     triplets.
@@ -936,7 +965,7 @@ def _normalize_state_vars(state_vars):
     >>> _normalize_state_vars([('a'), # doctest: +NORMALIZE_WHITESPACE
     ...                        ('b', 1),
     ...                        ('c', 2, 'doc'),
-    ...                        ('d=c'), 
+    ...                        ('d=c'),
     ...                        ('e', Ref('c'), 'e doc'),
     ...                        ('f=a.x', 2, 'New f doc'),
     ...                        ('g=a.y', 2),
@@ -988,10 +1017,10 @@ def _normalize_state_vars(state_vars):
                 elif 3 > len(var_desc):
                     doc = _NO_DESCRIPTION
                 else:
-                    raise TypeError("Attr must be a str or tuple "+
+                    raise TypeError("Attr must be a str or tuple " +
                                     "of length 3 or less (got %s)" %\
                                         repr(var_desc))
-                
+
                 new_state_vars.append((var, Ref(ref), doc))
 
                 if 2 <= len(var_desc):
@@ -1005,7 +1034,7 @@ def _normalize_state_vars(state_vars):
                                          (var_desc[1], var, ref, ref))
 
             elif (isinstance(var_desc, tuple)
-                  and 2 <= len(var_desc) 
+                  and 2 <= len(var_desc)
                   and isinstance(var_desc[1], Delegate)):
                 cls_state_vars = getattr(var_desc[1].cls, '_state_vars', [])
 
@@ -1024,7 +1053,7 @@ def _normalize_state_vars(state_vars):
                     if not cls_state_vars:
                         # Add one element for construction zip(*) below
                         cls_state_vars = [(None, NotImplemented, '')]
-                    
+
                     extension.extend(
                         [(v, NotImplemented, _NO_DESCRIPTION)
                          for v in vars_
@@ -1040,13 +1069,13 @@ def _normalize_state_vars(state_vars):
                     new_refs.append((_m,
                                      Ref(ref, method=True),
                                      doc))
-                        
+
                 for var, default, doc in extension:
                     ref = '%s.%s' % (var_desc[0], var)
                     # Insert new references at front so they don't hide
                     # explicit references.
                     new_refs.append((var,
-                                     Ref(ref,cached=var_desc[1].cached),
+                                     Ref(ref, cached=var_desc[1].cached),
                                      doc))
                     #if default is not NotImplemented:
                     #    state_vars.append((ref, default, ''))
@@ -1068,20 +1097,20 @@ def _normalize_state_vars(state_vars):
                 elif 3 == len(var_desc):
                     var, default, doc = var_desc
                 else:
-                    raise TypeError("Attr must be a str or tuple "+
+                    raise TypeError("Attr must be a str or tuple " +
                                     "of length 3 or less (got %s)" %\
                                         repr(var_desc))
             else:
                 raise TypeError(
                     'state_vars must be a list of strings or tuples')
             if not isinstance(var, str):
-                raise TypeError('Name must be a string (got %s)'%\
+                raise TypeError('Name must be a string (got %s)' %\
                                     repr(var))
 
             # Now process references
             if '=' in var:
                 var, ref = var.split('=')
-                if default is not NotImplemented: # pragma: no cover
+                if default is not NotImplemented:  # pragma: no cover
                     raise ValueError("\n".join(
                             ["Cannot set default %r for ref '%s=%s'.",
                              "(Set default for %r instead)"]) %
@@ -1098,12 +1127,13 @@ def _normalize_state_vars(state_vars):
             elif isinstance(key, tuple) and len(key) == 2:
                 state_vars_.append((key[0], state_vars[key], key[1]))
             else:
-                raise TypeError('Key must be name or (name, doc)'+
-                                ' (got %s)'%repr(key))
+                raise TypeError('Key must be name or (name, doc)' +
+                                ' (got %s)' % repr(key))
         return _normalize_state_vars(state_vars_)
     else:
         raise TypeError("state_vars must be a list or dict")
     return normalized_state_vars
+
 
 def _is_attr(attr):
     r"""Return `True` if `attr` is an attribute definition or a tuple of
@@ -1119,6 +1149,7 @@ def _is_attr(attr):
             or isinstance(attr, Ref)
             or _is(attr, Excluded)
             or _is(attr, Computed))
+
 
 def _preprocess(cls):
     r"""Preprocess `cls` converting all attributes in `cls.__dict__`
@@ -1153,7 +1184,8 @@ def _preprocess(cls):
             pass
         elif _is(attr, Computed):
             pass
-    
+
+
 def _gather_vars(cls):
     r"""Return `(vars, original_defaults, defaults, docs, excluded_vars,
     nodeps, computed_vars, refs, delegates, cached)` gathered from `cls`.
@@ -1198,7 +1230,7 @@ def _gather_vars(cls):
         to this set as the properties are stored in  `cls.__dict__`
         and we add the name to `cls._vars` so that the getters and
         setters will be called.
-    
+
     If `cls` has no :attr:`_state_vars`, then `vars` is `None`.
 
     >>> class A(object):
@@ -1212,9 +1244,9 @@ def _gather_vars(cls):
     >>> _gather_vars(B)         # doctest: +NORMALIZE_WHITESPACE
     (['a', 'b', 'n', 'c'],
      {'a': 3, 'c': 4, 'b': 2, 'n': NoCopy(3)},
-     {'a': 3, 'c': 4, 'b': 2, 'n': 3}, 
+     {'a': 3, 'c': 4, 'b': 2, 'n': 3},
      {'a': 'new_a', 'c': 'c', 'b': 'var b', 'n': 'var n'},
-     set([]), set([]), set([]), {}, set([]), {}, {}, {}, set([]), set([]), 
+     set([]), set([]), set([]), {}, set([]), {}, {}, {}, set([]), set([]),
      set(['a']))
 
     >>> class C(object):
@@ -1226,7 +1258,7 @@ def _gather_vars(cls):
     >>> class D(object):
     ...    _state_vars = [
     ...        ('c', Delegate(C)),
-    ...        ('y=c.x'), 
+    ...        ('y=c.x'),
     ...        ('c.x', 3),
     ...        ('h=c.a.n')]
     >>> _gather_vars(D)    # doctest: +NORMALIZE_WHITESPACE, +ELLIPSIS
@@ -1254,7 +1286,7 @@ def _gather_vars(cls):
         all_bases.append(Class)
     else:
         all_bases.append(cls)
-    
+
     # vars_ == None means no _state_vars which is different than empty
     # _state_vars.
     defaults = {}
@@ -1276,7 +1308,7 @@ def _gather_vars(cls):
                 if default is Deleted:
                     deleted.add(var)
                 elif var in vars_ and var not in deleted:
-                    if (defaults.get(var,None) is not Required # Fix issue 14 
+                    if (defaults.get(var,None) is not Required  # Fix issue 14
                         and var not in ignore_name_clash):
                         warnings.warn(NameClashWarning1(
                             "Redefining attr '%s' in class '%s'"
@@ -1295,7 +1327,7 @@ def _gather_vars(cls):
     # Delete all "Deleted" vars.
     for var in deleted:
         if var not in vars_:
-            raise ValueError("Attempt to delete non-existent state var '%s'" 
+            raise ValueError("Attempt to delete non-existent state var '%s'"
                              % (var,))
         else:
             while var in vars_:
@@ -1304,7 +1336,7 @@ def _gather_vars(cls):
                 del docs[var]
             while var in defaults:
                 del defaults[var]
-    
+
     # Now check for any data descriptors in the class dictionary.
     # If no corresponding var has been specified in _state_vars,
     # then a new entry will be added.  If there is no setter
@@ -1348,7 +1380,7 @@ def _gather_vars(cls):
             # Continue processing value.  This allows
             # NoCopy(Excluded) for example.
             default = default.value
-            
+
         if default is NotImplemented:
             del defaults[var]
         elif _is(default, ClassVar):
@@ -1398,7 +1430,7 @@ def _gather_vars(cls):
             raise ValueError(
                 "Required should not be called " +
                 "in _state_vars (got arg %r)" % (default.doc,))
-        
+
         if '.' in var and var in docs:
             # Removed documentation from overridden reference defaults.
             del docs[var]
@@ -1414,8 +1446,8 @@ def _gather_vars(cls):
             if inds:
                 # pylint: disable-msg=W0212
                 return cls._state_vars[inds[0]][-1]
-        except Exception:               #pragma: no cover
-            1+1 # pass, pylint: disable-msg=W0104
+        except Exception:               # pragma: no cover
+            1 + 1  # pass, pylint: disable-msg=W0104
 
         attr, _sep, tail = var.partition('.')
         #if sep and hasattr(cls, attr):
@@ -1432,9 +1464,9 @@ def _gather_vars(cls):
     refs = {}
     for var in refs_:
         ref_ = refs_[var]
-        ref = refs.get(ref_, ref_) # Dereference
+        ref = refs.get(ref_, ref_)  # Dereference
         if '.' in ref:
-            head, sep, tail  = ref.partition('.')
+            head, sep, tail = ref.partition('.')
             attr = refs.get(head, head)
             ref = "".join((head, sep, tail))
         else:
@@ -1464,6 +1496,7 @@ def _gather_vars(cls):
             refs, irefs, delegates, settable_properties, cached,
             ignore_name_clash)
 
+
 def _format_varstring(doc, width=70, indent=''):
     r"""Return the formatted varstring, processing it like a docstring
     and removing indentation.
@@ -1476,7 +1509,7 @@ def _format_varstring(doc, width=70, indent=''):
     ...                        be preserved if it is indented:
     ...                           1) A series of points
     ...                           2) Here is a longer point
-    ...              
+    ...
     ...                        You can use paragraphs too!  They will
     ...                        also be wrapped for you.'''
     >>> print _format_varstring(a, width=66, indent='  ')
@@ -1863,7 +1896,7 @@ def _get_doc(name, with_docs, default=_NO_DESCRIPTION):
     """
     if with_docs is None:
         return default
-    
+
     if (not isinstance(with_docs, list)
         and not isinstance(with_docs, tuple)):
         with_docs = [with_docs]
@@ -1876,11 +1909,12 @@ def _get_doc(name, with_docs, default=_NO_DESCRIPTION):
             try:
                 doc = getattr(obj, name).__doc__
             except AttributeError:
-                1+1 # pass, pylint: disable-msg=W0104
+                1 + 1  # pass, pylint: disable-msg=W0104
         if doc:
             return doc
     return default
-            
+
+
 # pylint: disable-msg=W0621
 def _get_processed_vars(cls, copy, archive_check, with_docs=None):
     r"""Return (results, `__doc__`) where `results` is a dictionary of
@@ -1978,11 +2012,12 @@ def _get_processed_vars(cls, copy, archive_check, with_docs=None):
 
     def wrap__init__(cls):
         r"""Wraps the original `cls.__init__` with a new version that
-        does processing."""        
+        does processing."""
         cls._original__init__ = cls.__init__
+
         def __init__(self, *varargin, **kwargs):
             r"""Wrapper for :meth:`__init__` to set _initializing flag."""
-            # pass, pylint: disable-msg=W0212            
+            # pass, pylint: disable-msg=W0212
             if '_no_init' in self.__dict__:
                 # Short circuit for copy construction:
                 del self.__dict__['_no_init']
@@ -2001,7 +2036,7 @@ def _get_processed_vars(cls, copy, archive_check, with_docs=None):
             # Update all cached values.
             for name in self._cached:
                 self.__dict__[name] = getattr(self, self._refs[name])
-            
+ 
             try:
                 if self._call_base__init__:
                     for cl in cls.__bases__:
@@ -2019,6 +2054,7 @@ def _get_processed_vars(cls, copy, archive_check, with_docs=None):
 
     doc = _get__doc__(cls, state_vars=results['_state_vars'])
     return (results, doc, wrap__init__)
+
 
 @_classinitializer
 def process_vars(cls, copy=copy.deepcopy, archive_check=None,
