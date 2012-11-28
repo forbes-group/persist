@@ -21,7 +21,7 @@ And after you could read from the file again::
    f.close()
 
 Now we can restore the archive:
-   
+
 >>> d = {}
 >>> exec(s, d)
 >>> d['x']
@@ -102,7 +102,7 @@ data, however, this
 
 is extremely inefficient.  In this case, a separate archive format is
 used where the archive is turned into a module that contains a binary
-data-file.  
+data-file.
 
 .. todo::
    - Consider using imports rather than execfile etc. for loading
@@ -141,7 +141,7 @@ data-file.
 
 Developer's Note
 ================
-After issue 12 arose, I have decided to change the structure of archives to
+After issue 12 arose, I decided to change the structure of archives to
 minimize the need to replace text.  New archives will evaluate objects in a
 local scope.  Here is an example, first in the old format::
 
@@ -161,13 +161,14 @@ Now in an explicit local scoping format using dictionaries::
    _g['_y'] = [1, 2, 3, 4]
    _d = dict(y=_g['_y'])
    l1 = _g['_l1'] = eval('[y, [1, y]]', _d)
-   _d = dict(y=_g['_y'], 
+   _d = dict(y=_g['_y'],
              l1=l1)
    l2 = _g['_l2'] = eval('[y, l1]', _d)
    _d = dict(x=1,
              _y=_g['_y'],
              l2=l2,
-             Container=__import__('mmf.objects', fromlist=['Container']).Container)
+             Container=__import__('mmf.objects',
+                                  fromlist=['Container']).Container)
    c = _g['_c'] = eval('Container(x=x, _y=_y, l=l2)', _d)
    del _g, _d
    try: del __builtins__
@@ -188,7 +189,7 @@ unreliable::
    def _d(y):
        return [y, [1, y]]
    l1 = _d(y=_y)
-   def _d(y): 
+   def _d(y):
        return [y, l1]
    l2 = _d(y=_y)
    def _d(x):
@@ -203,9 +204,9 @@ unreliable::
 """
 from __future__ import division, with_statement
 
-__all__  = ['Archive', 'DataSet', 'restore',
-            'ArchiveError', 'DuplicateError', 'repr_',
-            'get_imports']
+__all__ = ['Archive', 'DataSet', 'restore',
+           'ArchiveError', 'DuplicateError', 'repr_',
+           'get_imports']
 
 import __builtin__
 import ast
@@ -222,8 +223,8 @@ import warnings
 from contextlib import contextmanager
 
 import numpy as np
-import scipy as sp
 import scipy.sparse
+sp = scipy
 
 import contrib.RADLogic.topsort as topsort
 import mmf.interfaces as interfaces
@@ -235,28 +236,35 @@ try:
 except ImportError:
     from __builtin__ import NotImplemented as tables
 
+
 class ArchiveError(Exception):
     r"""Archiving error."""
+
 
 class CycleError(ArchiveError):
     r"""Cycle found in archive."""
     def __init__(self, *v):
         if 0 < len(v):
             self.message = v[0]
+
     def __str__(self):
         return self.message
+
     def __repr__(self):
         return repr(self.args)
-    
+
+
 class DuplicateError(ArchiveError):
     r"""Object already exists."""
+
     def __init__(self, name):
-        msg = "Object with name %r already exists in archive."%name
+        msg = "Object with name '%s' already exists in archive." % (name,)
         ArchiveError.__init__(self, msg)
+
 
 def restore(archive, env={}):
     r"""Return dictionary obtained by evaluating the string arch.
-    
+
     arch is typically returned by converting an Archive instance into
     a string using :func:`str` or :func:`repr`:
 
@@ -275,9 +283,10 @@ def restore(archive, env={}):
     exec(archive, ld)
     return ld
 
+
 class Archive(object):
     r"""Archival tool.
-    
+
     Maintains a list of symbols to import in order to reconstruct the
     states of objects and contains methods to convert objects to
     strings for archival.
@@ -371,7 +380,7 @@ class Archive(object):
 
     We can include functions and classes: These are stored by their
     names and imports.
-    
+
     >>> import numpy as np
     >>> arch.insert(f=np.sin, g=restore)
     ['g', 'f']
@@ -396,7 +405,7 @@ class Archive(object):
     also save any external data as we shall see later.
 
     >>> _tmp = arch.make_persistent()
-    
+
     This is not strictly needed as it will be called implicitly by the
     following call to :meth:`__str__` which returns the string
     representation.  (Note also that this will thus be called whenever
@@ -431,11 +440,12 @@ class Archive(object):
     ['a', 'b']
 
     Note that the shared list here is the same list:
-    
+
     >>> id(res['l'][3]) == id(res['d']['l0'])
     True
     """
     data_name = '_arrays'
+
     def __init__(self, flat=True, tostring=True,
                  check_on_insert=False, array_threshold=np.inf,
                  datafile=None, pytables=True, allowed_names=None,
@@ -475,7 +485,7 @@ class Archive(object):
     def names(self):
         r"""Return list of unique names in the archive."""
         return [k[0] for k in self.arch]
-    
+
     def archive_1(self, obj, env):
         r"""Return `(rep, args, imports)` where `obj` can be reconstructed
         from the string `rep` evaluated in the context of `args` with the
@@ -502,7 +512,7 @@ class Archive(object):
             try:
                 return obj.archive_1(env)
             except TypeError:   # pragma: no cover
-                1+1             # Needed to deal with coverage bug
+                1 + 1           # Needed to deal with coverage bug
 
         rep = repr(obj)
         if rep.startswith('<'):
@@ -531,11 +541,11 @@ class Archive(object):
             self.data[array_name] = obj
             rep = "%s['%s']" % (self.data_name, array_name)
             args = {}
-            imports = []            
+            imports = []
         elif (self.tostring
-            and obj.__class__ is np.ndarray
-            and not obj.dtype.hasobject):
-            
+              and obj.__class__ is np.ndarray
+              and not obj.dtype.hasobject):
+
             rep = "numpy.fromstring(%r, dtype=%r).reshape(%s)" % (
                 obj.tostring(), obj.dtype.str, str(obj.shape))
             imports = [('numpy', None, 'numpy')]
@@ -551,11 +561,11 @@ class Archive(object):
             # Import A.B.C as C
             iname = module.__name__
             mname = iname.rpartition('.')[-1]
-        
+
             constructor = rep.partition("(")[0]
             if not constructor.startswith(mname):
                 rep = ".".join([mname, rep])
-        
+
             imports = [(iname, None, mname),
                        ('numpy', 'inf', 'inf'),
                        ('numpy', 'inf', 'Infinity'),
@@ -600,20 +610,20 @@ class Archive(object):
 
     def _archive_type(self, obj, env):
         return archive_1_type(obj, env)
-        
+
     _dispatch = {
-        sp.sparse.base.spmatrix:_archive_spmatrix,
-        np.ndarray:_archive_ndarray,
-        np.ufunc:_archive_func,
-        types.BuiltinFunctionType:_archive_func,
-        types.FunctionType:_archive_func,
-        list:_archive_list,
-        tuple:_archive_tuple,
-        dict:_archive_dict,
-        float:_archive_float,
-        complex:_archive_float,
-        type:_archive_type}
-        
+        sp.sparse.base.spmatrix: _archive_spmatrix,
+        np.ndarray: _archive_ndarray,
+        np.ufunc: _archive_func,
+        types.BuiltinFunctionType: _archive_func,
+        types.FunctionType: _archive_func,
+        list: _archive_list,
+        tuple: _archive_tuple,
+        dict: _archive_dict,
+        float: _archive_float,
+        complex: _archive_float,
+        type: _archive_type}
+
     def unique_name(self, name):
         r"""Return a unique name not contained in the archive."""
         names = _unzip(self.arch)[0]
@@ -697,7 +707,7 @@ class Archive(object):
         The default :mod:`numpy` representation for arrays is not very
         friendly, so we might want to use strings instead.  Be aware
         that this might incur a performance hit.
-        
+
         >>> a = Archive(tostring=False)
         >>> a.insert(x=2)
         'x'
@@ -771,7 +781,7 @@ class Archive(object):
                     raise DuplicateError(name)
             else:
                 uname = name
-            
+
             if ind is not None:
                 # Object already in archive.  We are done
                 pass
@@ -781,10 +791,10 @@ class Archive(object):
 
                 self.arch.append((uname, obj, env))
                 ind = len(self.arch) - 1
-                
+
             assert(ind is not None)
             uname, obj, env = self.arch[ind]
-            names.append(uname)            
+            names.append(uname)
             self.ids[uname] = id(obj)
 
         if 1 < len(names):
@@ -799,20 +809,20 @@ class Archive(object):
         version of the archive.  If :attr:`datafile` is specified and
         there is data in :attr:`data` (large arrays), then these are
         also stored (requires :attr:`pytables`) at this time.
-        
+
         Returns
         -------
         imports : list
            Elements are `(module, iname, uiname)` where one of the
            following forms is uses::
-           
+
               from module import iname as uiname
               from module import iname
               import module as uiname
 
            The second form is used if `iname` is `uiname`, and the
            last form is used if `iname` is `None`.  `uiname` must not
-           be `None`.          
+           be `None`.
         defs : list
            Elements are `(uname, rep)` where `rep` is an expression
            depending on the imports and the previously defined `uname`
@@ -836,7 +846,7 @@ class Archive(object):
 
         Objects are hierarchical in that one object will depend on
         others.  Consider for example the following suite::
-            
+
             a = [1, 2, 3]
             b = [4, 5, 6]
             c = dict(a=a, b=b)
@@ -845,7 +855,7 @@ class Archive(object):
         single expression::
 
             c = dict(a=[1, 2, 3], b=[4, 5, 6])
-            
+
         In some cases, one must use a suite, for example::
 
             a = [1, 2, 3]
@@ -854,7 +864,7 @@ class Archive(object):
 
         Since everything refers to a single list, one must preserve
         this structure and we cannot expand anything.
-        
+
         These concepts can all be couched in the language of graph
         theory.  The dependency structure forms a "directed graph"
         (DG) and we are looking for an "evaluation order" or
@@ -880,14 +890,14 @@ class Archive(object):
               recursive structures
 
         .. digraph:: example
-        
+
            "A" -> "B" -> "F";
            "A" -> "C" -> "D" -> "G";
            "C" -> "E" -> "G";
            "C" -> "F";
 
         Example::
-        
+
                                 A
                                / \
                               B   C
@@ -904,7 +914,7 @@ class Archive(object):
            A = [B, C]
            a = Archive()
            a.insert(A=A)
-        
+
         """
 
         # First we build the dependency tree using the nodes and a
@@ -913,8 +923,9 @@ class Archive(object):
         # children are specified by the "args" and parents is a set of
         # the parent ids.  The nodes dictionary also acts as the
         # "visited" list to prevent cycles.
-        names = _unzip(self.arch)[0]
-        
+
+        ##names = _unzip(self.arch)[0]
+
         # Generate dependency graph
         try:
             graph = Graph(objects=self.arch,
@@ -922,7 +933,7 @@ class Archive(object):
                           robust_replace=self.robust_replace)
         except topsort.CycleError, err:
             msg = "Archive contains cyclic dependencies."
-            raise CycleError, (msg,) + err.args , sys.exc_info()[-1]
+            raise CycleError, (msg, ) + err.args , sys.exc_info()[-1]
 
         # Optionally: at this stage perform a graph reduction.
         graph.reduce()
@@ -967,7 +978,7 @@ class Archive(object):
 
     def _get_import_lines(self, imports):
         r"""Return `(import_lines, del_lines)`.
-        
+
         Parameters
         ----------
         imports : [(module, iname, uname)]
@@ -980,7 +991,7 @@ class Archive(object):
                 import_lines.append(
                     "import %s as %s"%(module, uiname))
                 del_lines.append("del %s" % (uiname,))
-            elif iname == uiname or uiname is None: # pragma: no cover
+            elif iname == uiname or uiname is None:  # pragma: no cover
                 # Probably never happens because uinames start with _
                 import_lines.append(
                     "from %s import %s"%(module, uiname))
@@ -1012,18 +1023,18 @@ class Archive(object):
                           and name not in self.allowed_names)]
         if temp_names:
             del_lines.append("del %s" % (",".join(temp_names),))
-                                     
-        del_lines.extend([
-                "try: del __builtins__",
-                "except NameError: pass"])
 
-        lines = "\n".join(["%s = %s"%(uname, rep) 
+        del_lines.extend([
+            "try: del __builtins__",
+            "except NameError: pass"])
+
+        lines = "\n".join(["%s = %s"%(uname, rep)
                            for (uname, rep) in defs])
         imports = "\n".join(import_lines)
         dels = "\n".join(del_lines)
 
         res = ("\n"+self._section_sep).join([l for l in [imports, lines, dels]
-                           if 0 < len(l)])
+                                             if 0 < len(l)])
         return res
 
     def scoped__str__(self):
@@ -1035,7 +1046,7 @@ class Archive(object):
                            gname_prefix=self.gname_prefix)
         except topsort.CycleError, err:
             msg = "Archive contains cyclic dependencies."
-            raise CycleError, (msg,) + err.args , sys.exc_info()[-1]
+            raise CycleError, (msg, ) + err.args, sys.exc_info()[-1]
 
         # Optionally: at this stage perform a graph reduction.
         #graph.reduce()
@@ -1047,29 +1058,29 @@ class Archive(object):
             name = node.name
             assert name not in names
             names.add(name)
-            
+
             if node.args or node.imports:
                 results.append(
                     "\n".join([
-                            "",
-                            "def %(name)s(%(args)s):%(imports)s",
-                            "    return %(rep)s",
-                            "%(name)s = %(name)s()"])
+                        "",
+                        "def %(name)s(%(args)s):%(imports)s",
+                        "    return %(rep)s",
+                        "%(name)s = %(name)s()"])
                     % dict(name=name,
                            argnames=",".join(node.args.keys()),
                            args=",".join([
                                 "=".join([
-                                        _a, 
-                                        graph.nodes[id(node.args[_a])].name])
-                                for _a in node.args]),
-                           imports="\n    ".join([""] + 
-                                self._get_import_lines(node.imports)[0]),
+                                    _a,
+                                    graph.nodes[id(node.args[_a])].name])
+                               for _a in node.args]),
+                           imports="\n    ".join(
+                               [""] + self._get_import_lines(node.imports)[0]),
                            rep=node.rep))
             else:
                 results.append(
                     "%(name)s = %(rep)s"
                     % dict(name=name, rep=node.rep))
-                
+
         # Add any leftover names (aliases):
         for name in self.ids:
             if name in names:
@@ -1099,17 +1110,18 @@ class Archive(object):
                 raise NotImplementedError(
                     "Data can presently only be saved with pytables")
 
-        gnames = ", ".join(_n for _n in names 
-                           if _n.startswith(self.gname_prefix) 
+        gnames = ", ".join(_n for _n in names
+                           if _n.startswith(self.gname_prefix)
                            and _n not in self.allowed_names)
         if gnames:
             results.append("del %s" % (gnames,))
         results.extend([
-                "try: del __builtins__",
-                "except NameError: pass"])
-            
+            "try: del __builtins__",
+            "except NameError: pass"])
+
         return "\n".join(results)
-   
+
+
 def get_imports(obj, env=None):
     r"""Return `imports = [(module, iname, uiname)]` where
     `iname` is the constructor of `obj` to be used and called as::
@@ -1136,6 +1148,7 @@ def get_imports(obj, env=None):
 
     return [(module, iname, uiname)]
 
+
 def get_toplevel_imports(obj, env=None):
     r"""Return `(imports, uname) = [(module, name, uname)]` where
     `obj` is `module.name`::
@@ -1158,13 +1171,14 @@ def get_toplevel_imports(obj, env=None):
 
     if hasattr(module, name):
         _obj = getattr(module, name)
-        if _obj is not obj: # pragma: nocover
+        if _obj is not obj:  # pragma: nocover
             raise AttributeError
-    else: # pragma: nocover
+    else:  # pragma: nocover
         raise ArchiveError(
             "name %s is not in module %s."%(name, mname))
 
     return ([(mname, name, name)], name)
+
 
 def repr_(obj, robust=True):
     r"""Return representation of `obj`.
@@ -1188,7 +1202,8 @@ def repr_(obj, robust=True):
     replacements = dict((k, repr(args[k])) for k in args)
     rep = _replace_rep(rep, replacements=replacements, robust=robust)
     return rep
-    
+
+
 def get_module(obj):
     r"""Return module in which object is defined."""
     module = inspect.getmodule(obj)
@@ -1196,7 +1211,8 @@ def get_module(obj):
         return module
     else:                       # pragma: no cover
         return None
-    
+
+
 def archive_1_args(obj, args):
     r"""Return `(rep, args, imports)`.
 
@@ -1213,7 +1229,7 @@ def archive_1_args(obj, args):
     module = obj.__class__.__module__
     name = obj.__class__.__name__
     imports = [(module, name, name)]
-    
+
     keyvals = ["=".join((k, k)) for k in args]
     rep = "%s(%s)"%(name, ", ".join(keyvals))
     return (rep, args, imports)
@@ -1221,7 +1237,7 @@ def archive_1_args(obj, args):
 
 def archive_1_repr(obj, env, rep=None):
     r"""Return `(rep, args, imports)`.
-    
+
     This is the fallback: try to make a rep from the `repr` call.
     """
     imports = []
@@ -1244,16 +1260,18 @@ def archive_1_repr(obj, env, rep=None):
         module = get_module(obj)
         if module:
             imports.append((module.__name__, name, name))
-            
+
     return (rep, args, imports)
+
 
 def archive_1_pickle(obj, env):
     r"""Last resort - archive by pickle."""
     rep = "loads(%s)" % repr(
         cPickle.dumps(obj, protocol=cPickle.HIGHEST_PROTOCOL))
     args = {}
-    imports = [('cPickle','loads', 'loads')]
+    imports = [('cPickle', 'loads', 'loads')]
     return (rep, args, imports)
+
 
 def archive_1_type(obj, env):
     name = None
@@ -1269,10 +1287,10 @@ def archive_1_type(obj, env):
     if name is None:
         # default
         return archive_1_obj(obj, env)
-    
+
     return (rep, args, imports)
-        
-    
+
+
 def archive_1_float(obj, env):
     r"""Deal with float types, including `inf` or `nan`.
 
@@ -1287,14 +1305,16 @@ def archive_1_float(obj, env):
     rep = repr(obj)
     imports = [('numpy', name, name) for name in AST(rep)._get_names()]
     args = {}
-    
+
     return (rep, args, imports)
+
 
 def archive_1_obj(obj, env):
     r"""Archive objects at the top level of a module."""
-    module = get_module(obj)
+    ##module = get_module(obj)
     imports, rep = get_toplevel_imports(obj, env)
     return (rep, {}, imports)
+
 
 def archive_1_method(obj, env):
     r"""Archive methods."""
@@ -1321,7 +1341,8 @@ def _get_rep(obj, arg_rep):
     cname = obj.__class__.__name__
     rep = "%s(%s)"%(cname, arg_rep)
     return (rep, (module, cname, cname))
-    
+
+
 def archive_1_list(l, env):
     args = {}
     imports = []
@@ -1343,6 +1364,7 @@ def archive_1_list(l, env):
 
     return (rep, args, imports)
 
+
 def archive_1_tuple(t, env):
     rep, args, imports = archive_1_list(list(t), env=env)
     if len(t) == 1:
@@ -1356,6 +1378,7 @@ def archive_1_tuple(t, env):
 
     return (rep, args, imports)
 
+
 def archive_1_dict(d, env):
     rep, args, imports = archive_1_list(d.items(), env)
 
@@ -1364,6 +1387,7 @@ def archive_1_dict(d, env):
         imports.append(imp)
 
     return (rep, args, imports)
+
 
 def is_simple(obj):
     r"""Return `True` if `obj` is a simple type defined only by its
@@ -1386,7 +1410,7 @@ def is_simple(obj):
                 str, unicode,
                 None.__class__]
             or
-            (class_ in [float, complex] 
+            (class_ in [float, complex]
              and not np.isinf(obj)
              and not np.isnan(obj)))
     else:                       # pragma: no cover
@@ -1395,6 +1419,7 @@ def is_simple(obj):
         assert obj == eval(repr(obj))
 
     return result
+
 
 class Node(object):
     r"""Represents a Node in the tree as a tuple:
@@ -1426,12 +1451,12 @@ class Node(object):
         Examples
         --------
         >>> Node(obj=['A'], rep='[x]', args=dict(x='A'), name='a')
-        Node(obj=['A'], rep='[x]', args={'x': 'A'}, name='a', imports=None, 
+        Node(obj=['A'], rep='[x]', args={'x': 'A'}, name='a', imports=None,
              parents=set([]))
         """
         return (
             "Node(obj=%r, rep=%r, args=%r, name=%r, imports=%r, parents=%r)"
-            % (self.obj, self.rep, self.args, self.name, self.imports, 
+            % (self.obj, self.rep, self.args, self.name, self.imports,
                self.parents))
 
     def __str__(self):
@@ -1463,6 +1488,7 @@ class Node(object):
         reducible = (self.id not in roots and
                      (is_simple(self.obj) or 1 == len(self.parents)))
         return reducible
+
 
 class Graph(object):
     r"""Dependency graph.  Also manages imports.
@@ -1498,7 +1524,7 @@ class Graph(object):
         self.roots = set()
         self.envs = {}
         self.imports = []
-        self.names = UniqueNames(set([name for (name, obj, env) 
+        self.names = UniqueNames(set([name for (name, obj, env)
                                       in objects]))
         self.archive_1 = archive_1
         self.robust_replace = robust_replace
@@ -1513,7 +1539,7 @@ class Graph(object):
         # Now do a depth first search to build the graph.
         for id_ in self.roots:
             self._DFS(node=self.nodes[id_], env=self.envs[id_])
-        
+
         self.order = self._topological_order()
 
         # Go through all nodes to determine unique names and update
@@ -1539,7 +1565,7 @@ class Graph(object):
                 if not name == uname:
                     replacements[name] = uname
             node.args = args
-                
+
             for child in node.children:
                 cnode = self.nodes[child]
                 cnode.parents.add(node.id)
@@ -1572,7 +1598,8 @@ class Graph(object):
         between `args = {name: obj}` and `self.names`."""
         arg_names = args.keys()
         # Check for duplicate imports
-        new_imports = []
+
+        ##new_imports = []
         replacements = {}
         for (module_, iname_, uiname_) in imports:
             mod_inames = zip(*_unzip(self.imports)[:2])
@@ -1610,12 +1637,12 @@ class Graph(object):
         # Insert roots (they may be disconnected)
         order.extend([id for id in self.roots if id not in order])
         return order
-    
+
     def _reduce(self, id):
         r"""Reduce the node."""
         node = self.nodes[id]
         if node.isreducible(roots=self.roots):
-            replacements = {node.name:node.rep}
+            replacements = {node.name: node.rep}
             for parent in node.parents:
                 pnode = self.nodes[parent]
                 pnode.rep = _replace_rep(pnode.rep, replacements,
@@ -1627,6 +1654,7 @@ class Graph(object):
                 cnode.parents.remove(id)
                 cnode.parents.update(node.parents)
             del self.nodes[id]
+
     def check(self):
         r"""Check integrity of graph."""
         for id in self.nodes:
@@ -1648,7 +1676,7 @@ class Graph(object):
             for c in node.children:
                 paths.extend([[node] + p for p in self.paths(c)])
         return paths
-        
+
     def reduce(self):
         r"""Reduce the graph once by combining representations for nodes
         that have a single parent.
@@ -1657,14 +1685,14 @@ class Graph(object):
        --------
 
        .. digraph:: example
-        
+
            "A" -> "B" -> "F";
            "A" -> "C" -> "D" -> "G";
            "C" -> "E" -> "G";
            "C" -> "F";
 
         ::
-       
+
                                 A
                                / \
                               B   C
@@ -1679,7 +1707,7 @@ class Graph(object):
 
        >>> G = 'G'; F = 'F'
        >>> D = [G]; E = [G]; C = [F, D, E]; B = [F]; A = [B, C]
-       >>> a = Archive(scoped=False); 
+       >>> a = Archive(scoped=False);
        >>> a.insert(A=A)
        'A'
        >>> g = Graph(a.arch, a.archive_1)
@@ -1708,7 +1736,7 @@ class Graph(object):
 
        >>> G = ['G']; F = ['F']
        >>> D = [G]; E = [G]; C = [F, D, E]; B = [F]; A = [B, C]
-       >>> a = Archive(scoped=False); 
+       >>> a = Archive(scoped=False);
        >>> a.insert(A=A)
        'A'
        >>> g = Graph(a.arch, a.archive_1)
@@ -1724,9 +1752,9 @@ class Graph(object):
        del _l_5,_l_1
        try: del __builtins__
        except NameError: pass
-       
+
        If we explicitly add a node, then it can no longer be reduced:
-       
+
        >>> a.insert(B=B)
        'B'
        >>> g = Graph(a.arch, a.archive_1)
@@ -1745,12 +1773,13 @@ class Graph(object):
        except NameError: pass
        """
         self.check()
-        reducible_ids = [id for id in self.order 
+        reducible_ids = [id for id in self.order
                          if self.nodes[id].isreducible(roots=self.roots)]
         for id in reducible_ids:
             self._reduce(id)
 
         self.order = self._topological_order()
+
 
 class _Graph(object):
     r"""Simplified dependency graph for use with scoped files.
@@ -1764,7 +1793,7 @@ class _Graph(object):
        To improve performance, it is assumed that the names of `objects`
        are unique and do not start with an underscore `_`.
     """
-    def __init__(self, objects, archive_1, 
+    def __init__(self, objects, archive_1,
                  gname_prefix='_g', allowed_names=set()):
         r"""Initialize the dependency graph with some reserved
         names.
@@ -1809,7 +1838,7 @@ class _Graph(object):
         # Now do a depth first search to build the graph.
         for _id in self.roots:
             self._DFS(node=self.nodes[_id], env=self.envs[_id])
-        
+
         self.order = self._topological_order()
 
         # Add all reverse links from child to parent nodes.
@@ -1869,13 +1898,13 @@ class _Graph(object):
         # Insert roots (they may be disconnected)
         order.extend([id for id in self.roots if id not in order])
         return order
-    
+
     def _reduce(self, id):
         r"""Reduce the node."""
         raise NotImplementedError
         node = self.nodes[id]
         if node.isreducible(roots=self.roots):
-            replacements = {node.name:node.rep}
+            replacements = {node.name: node.rep}
             for parent in node.parents:
                 pnode = self.nodes[parent]
                 pnode.rep = _replace_rep(pnode.rep, replacements,
@@ -1909,7 +1938,7 @@ class _Graph(object):
             for c in node.children:
                 paths.extend([[node] + p for p in self.paths(c)])
         return paths
-        
+
 
 def _unzip(q, n=3):
     r"""Unzip q to lists.
@@ -1930,6 +1959,7 @@ def _unzip(q, n=3):
     else:
         return map(list, zip(*q))
 
+
 class UniqueNames(object):
     """Profiling indicates that the generation of unique names is a significant
     bottleneck.  This class is used to manage unique names in an efficient
@@ -1945,7 +1975,7 @@ class UniqueNames(object):
         self.sep = sep
         self.extension_re = re.compile(r'(.*)%s(\d+)$' % re.escape(sep))
         self.names = set(names)
-        
+
         # This is a dictionary of numbers associated with each base such that
         # sep.join([base, num]) will be a unique name for all num >=
         # bases[base].
@@ -1966,7 +1996,7 @@ class UniqueNames(object):
             c = -1
         c += 1
         self.bases[base] = max(c, self.bases.get(base, c))
-        
+
     def unique(self, name, others=None):
         r"""Return a unique version of `name` with the same base.
 
@@ -2067,12 +2097,14 @@ class UniqueNames(object):
             c = self.bases[base]
             uname = self.sep.join([base, str(c)])
 
+
 class ReplacementError(Exception):
     r"""Replacements not consistent with parse tree."""
     def __init__(self, old, new, expected, actual):
         Exception.__init__(self,
-            "Replacement %s->%s: Expected %i, replaced %i"%(
-                old, new, expected, actual))
+                           "Replacement %s->%s: Expected %i, replaced %i" % (
+                               old, new, expected, actual))
+
 
 def _replace_rep(rep, replacements, check=False, robust=True):
     r"""Return rep with all replacements made.
@@ -2117,11 +2149,11 @@ def _replace_rep(rep, replacements, check=False, robust=True):
 
     identifier_tokens = string.letters + string.digits + "_"
 
-    if replacements: 
+    if replacements:
         # Replace all % characters so they are not interpreted as
         # format specifiers in the final replacement
         rep = rep.replace("%", "%%")
-       
+
     for old in replacements:
         replacement_str = "%(" + old + ")s"
         l = len(old)
@@ -2135,12 +2167,12 @@ def _replace_rep(rep, replacements, check=False, robust=True):
                 (not prev or prev not in identifier_tokens)):
 
                 # Now get previous and next non-whitespace characters
-                c = i+l
+                c = i + l
                 while c < len(rep) and rep[c] in string.whitespace:
                     c = c + 1
                 next = rep[c:c+1]
 
-                c = i-1
+                c = i - 1
                 while 0 <= c and rep[c] in string.whitespace:
                     c = c - 1
                 prev = rep[c:c+1]
@@ -2159,7 +2191,7 @@ def _replace_rep(rep, replacements, check=False, robust=True):
         parts.append(rep[i0:])
 
         rep = replacement_str.join(parts)
-    
+
         if check and not n_rep == counts[old]:
             raise ReplacementError(old, replacements[old], counts[old], n_rep)
 
@@ -2170,18 +2202,19 @@ def _replace_rep(rep, replacements, check=False, robust=True):
     return rep
     """
             re_ = r'''(?P<a>        # Refer to the group by name <a>
-                       [^\w\.]      # Either NOT a valid identifier 
+                       [^\w\.]      # Either NOT a valid identifier
                        | ^)         # OR the start of the string
                       (%s)          # The literal to be matched
                       (?P<b>[^\w=]  # Either NOT a valid identifer
                        | $)'''      # OR the end.
             regexp = re.compile(re_%(re.escape(old)), re.VERBOSE)
             n_rep = 0
-            while True: 
+            while True:
                 (rep, m) = regexp.subn(r"\g<a>%s\g<b>"%(replacements[old]), rep)
                 if m == 0: break
                 n_rep += m
    """
+
 
 def _replace_rep_robust(rep, replacements):
     r"""Return rep with all replacements made.
@@ -2210,8 +2243,8 @@ def _replace_rep_robust(rep, replacements):
     """
     if not replacements:
         return rep
-    names = [_n for _n in ast.walk(ast.parse(rep)) 
-             if _n.__class__ is ast.Name 
+    names = [_n for _n in ast.walk(ast.parse(rep))
+             if _n.__class__ is ast.Name
              and _n.ctx.__class__ is not ast.Store]
     if not names:
         return rep
@@ -2220,7 +2253,7 @@ def _replace_rep_robust(rep, replacements):
         print rep, replacements
     line_offsets = np.cumsum([0] + map(lambda _x:len(_x) + 1, # include \n
                                        rep.splitlines()))
-    splits = sorted((_n.lineno - 1, _n.col_offset, len(_n.id), _n.id) 
+    splits = sorted((_n.lineno - 1, _n.col_offset, len(_n.id), _n.id)
                      for _n in names)
     ind = 0
     results = []
@@ -2234,6 +2267,7 @@ def _replace_rep_robust(rep, replacements):
     results.append(rep[ind:])
     res = "".join(results)
     return res
+
 
 class AST(object):
     r"""Class to represent and explore the AST of expressions."""
@@ -2250,15 +2284,15 @@ class AST(object):
     def ast(self):
         r"""AST for expression"""
         return self.__dict__['ast']
-        
+
     @property
     def names(self):
         r"""Symbols references in expression."""
         return self.__dict__['names']
 
     def _get_names(self):
-        return [_n.id for _n in ast.walk(ast.parse(self.expr)) 
-                if _n.__class__ is ast.Name 
+        return [_n.id for _n in ast.walk(ast.parse(self.expr))
+                if _n.__class__ is ast.Name
                 and _n.ctx.__class__ is not ast.Store]
 
 class Arch(object):
@@ -2302,7 +2336,7 @@ class Arch(object):
                 "Variable name must not be archive_name = %s or start "
                 "with archive_prefix = %s.  Got name=%s." %
                 (self.archive_name, self.archive_prefix, name))
-     
+
     def insert(self, data=None, name=None, info=None):
         r"""Insert `data` into :attr:`data_dict` with name `name` and
         add the metadata `info` to :attr:`info_dict`.
@@ -2334,10 +2368,10 @@ class Arch(object):
         if module_name is None:
             raise ValueError(
                 "Need to specify module_name before calling write.")
-        
+
         arch = mmf.archive.Archive(datafile=os.path.join(path, 'data.hd5'))
         for name in self.data:
-            arch.insert(name=data)
+            arch.insert(name=self.data[name])
 
         mod_dir = os.path.join(path, module_name)
         if os.path.exists(mod_dir):
@@ -2347,17 +2381,18 @@ class Arch(object):
                     % mod_dir)
 
             # Directory already exists.  Update it.
-        else:                
+        else:
             os.mkdirs(mod_dir)
-            
-        
+
+
         f = open(os.path.join(mod_dir, '__init__.py'), 'w')
-        f.write(init_str)
+        #f.write(init_str)  #???
         f.close()
 
     def load(self, name):
         r"""Load the data associated with `name` into :attr:`data` and
         return this."""
+
 
 class DataSet(object):
     r"""Creates a module `module_name` in the directory `path`
@@ -2397,29 +2432,29 @@ class DataSet(object):
        >>> ds1 = DataSet(modname, 'r')
        >>> ds1.d                        # See?
        {'a': 1, 'b': 2}
-       
+
        This is dangerous... Do not do this.
-       
+
        >>> ds.d['a'] = 6                # No write!
        >>> ds1.d['a']                   # This was not updated
        1
-       
+
        Instead, do something like this: Store the mutable object in a
        local variable, manipulate it, then reassign it:
-       
+
        >>> d = ds.d
        >>> d['a'] = 6
        >>> ds.d = d                     # This assignment will write
        >>> ds1.d['a']
        6
-       >>> shutil.rmtree(t)       
-    
+       >>> shutil.rmtree(t)
+
     Examples
     --------
 
     First we make the directory that will hold the data.  Here we use
     the :mod:`tempfile` module to make a unique name.
-    
+
     >>> import tempfile, shutil       # Make a unique temporary module
     >>> t = tempfile.mkdtemp(dir='.')
     >>> os.rmdir(t)
@@ -2481,7 +2516,7 @@ class DataSet(object):
      ('x_1', (20, 1.2)),
      ('x_2', (10, 1.2)),
      ('x_3', (20, 2.5))]
-    >>> [(k, getattr(ds, k)) for k in sorted(ds)]     
+    >>> [(k, getattr(ds, k)) for k in sorted(ds)]
     [('mus', [1.2, 2.5]),
      ('nxs', [10, 20]),
      ('x_0', array([ 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5])),
@@ -2492,15 +2527,15 @@ class DataSet(object):
                      2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5]))]
 
     .. todo:: Fix module interface...
-    
+
     To load the archive, you can import it as a module::
-    
+
        >> mod1 = __import__(modname)
 
     The info is again available in `info_dict` and the actual data
     can be loaded using the `load()` method.  This allows for the data
     set to include large amounts of data, only loading what is needed::
-    
+
        >> mod1._info_dict['x_0'].info
        (20, 2.5)
        >> mod1._info_dict['x_0'].load()
@@ -2525,7 +2560,7 @@ class DataSet(object):
        <module '...' from '.../mmf/archive/.../__init__.py'>
 
     Here we open a read-only copy:
-    
+
     >>> ds2 = DataSet(modname)
     >>> ds2.x_0
     array([ 1.,  1.,  1.,  1.,  1.])
@@ -2537,6 +2572,7 @@ class DataSet(object):
 
     """
     _lock_file_name = "_locked"
+
     def __init__(self, module_name, mode='r', path=".",
                  synchronize=True,
                  verbose=False, _reload=False,
@@ -2580,14 +2616,8 @@ class DataSet(object):
            Time (in seconds) to wait for a writing lock to be released
            before raising an :exc:`IOException` exception.  (Default
            is 60s.)
-           
-        .. warning: Although you can change entries by using the `store`
-           method of the records, this will not write the "__init__.py"
-           file until :meth:`close` or :meth:`write` are called.  As a
-           safeguard, these are called when the object is deleted, but the
-           user should explicitly call these when new data is added.
 
-        .. warning: The locking mechanism is to prevent two archives
+        .. warning:: The locking mechanism is to prevent two archives
            from clobbering upon writing.  It is not designed to
            prevent reading invalid information from a partially
            written archive (the reading mechanism does not use the
@@ -2613,14 +2643,14 @@ class DataSet(object):
         else:
             # Establish lock now or fail...
             self._lock_file = self._lock()
-                
+
         mod_dir = os.path.join(path, module_name)
         key_file = os.path.join(mod_dir, '_this_dir_is_a_DataSet')
         if os.path.exists(mod_dir):
             if not os.path.exists(key_file):
                 raise ValueError(
-            ("Directory %s exists and is not a DataSet repository. "
-             "Please choose a unique location. ") % (mod_dir,))
+                    ("Directory %s exists and is not a DataSet repository. "
+                     "Please choose a unique location. ") % (mod_dir,))
 
             self._load()
         elif mode == 'w':
@@ -2638,7 +2668,6 @@ class DataSet(object):
         if sys.version < "2.6":
             self.__members__ = self._info_dict.keys()
 
-            
     def _load(self):
         r"""Create the data set from an existing repository."""
         curdir = os.path.abspath(os.curdir)
@@ -2658,7 +2687,7 @@ class DataSet(object):
         needed.  Return the lock file name on success"""
         lock_file = os.path.join(self._path, self._module_name,
                                  self._lock_file_name)
-        
+
         if os.path.exists(lock_file):
             tic = time.time()
             # Archive locked
@@ -2675,7 +2704,7 @@ class DataSet(object):
         else:
             open(lock_file, 'w').close()
             return lock_file
-        
+
     def _unlock(self):
         r"""Actually remove the lock file."""
         if self._lock_file:
@@ -2712,24 +2741,25 @@ class DataSet(object):
 
     def __iter__(self):
         return self._info_dict.__iter__()
-    
+
     def __dir__(self):
         r"""Provides :func:`get` support fr tab completion etc."""
         return [k for k in self]
+
     def __getattr__(self, name):
         r"""Load the specified attribute from disk."""
         if name.startswith('_') or not name in self:
-            # Provide access to state variables. 
+            # Provide access to state variables.
             raise AttributeError(
                 "'%s' object has no attribute '%s'" %
                 (self.__class__.__name__, name))
-        
+
         archive_file = os.path.join(self._path,
                                     self._module_name,
                                     "%s.py" % (name,))
         if os.path.exists(archive_file):
-            d ={}
-            __d = {Archive.data_name:d}
+            d = {}
+            __d = {Archive.data_name: d}
 
             datafile = os.path.join(self._path,
                                     self._module_name,
@@ -2763,11 +2793,11 @@ class DataSet(object):
     def __setattr__(self, name, value):
         r"""Store the specified attribute to disk."""
         if name.startswith('_'):
-            # Provide access to state variables. 
+            # Provide access to state variables.
             return object.__setattr__(self, name, value)
-            
+
         if self._mode == 'r':
-            raise ValueError("DataSet opened in read-only mode.")        
+            raise ValueError("DataSet opened in read-only mode.")
 
         with self._ds_lock():              # Establish lock
             if tables is not NotImplemented:
@@ -2796,7 +2826,7 @@ class DataSet(object):
                 if backup_name and not self._backup_data:
                     # Remove backup of data
                     os.remove(backup_name)
-                    
+
                 datafile = os.path.join(self._path,
                                         self._module_name,
                                         "data_%s.hd5" % (name,))
@@ -2808,8 +2838,8 @@ class DataSet(object):
                         backup_name = datafile + "_%i.bak" % (n)
                         n += 1
                     os.rename(datafile, backup_name)
-                
-                if arch.data:                
+
+                if arch.data:
                     f = tables.openFile(datafile, 'w')
                     for _name in arch.data:
                         f.createArray(f.root, _name, arch.data[_name])
@@ -2833,7 +2863,7 @@ class DataSet(object):
     def __contains__(self, name):
         r"""Fast containment test."""
         if self._synchronize:
-            self._load()        
+            self._load()
         return name in self._info_dict
 
     def __getitem__(self, name):
@@ -2853,7 +2883,7 @@ class DataSet(object):
                 self._load()
 
             self._info_dict[name] = info
-            
+
             if self._module_name:
                 arch = Archive(allowed_names=['_info_dict'])
                 arch.insert(_info_dict=self._info_dict)
@@ -2895,6 +2925,7 @@ class DataSet(object):
 
     def _keys(self):
         return self._info_dict.keys()
+
     def _insert(self, *v, **kw):
         r"""Store object and info in the archive under `name`.
         Returns a list of the names added.
@@ -2913,7 +2944,9 @@ class DataSet(object):
             info = kw.pop('info')
         else:
             info = None
-        mod_dir = os.path.join(self._path, self._module_name)
+
+        #Why did I do this?  I don't use it...
+        #mod_dir = os.path.join(self._path, self._module_name)
         for name in kw:
             self[name] = info
             self.__setattr__(name, kw[name])
@@ -2934,4 +2967,3 @@ class DataSet(object):
     def __del__(self):
         r"""Make sure we unlock archive."""
         self._unlock()
-
