@@ -234,8 +234,7 @@ import mmf.utils
 try:
     import tables
 except ImportError:
-    from __builtin__ import NotImplemented as tables
-
+    tables = None
 
 class ArchiveError(Exception):
     r"""Archiving error."""
@@ -448,7 +447,8 @@ class Archive(object):
 
     def __init__(self, flat=True, tostring=True,
                  check_on_insert=False, array_threshold=np.inf,
-                 datafile=None, pytables=True, allowed_names=None,
+                 datafile=None, pytables=bool(tables), 
+                 allowed_names=None,
                  gname_prefix='_g', scoped=True, robust_replace=True):
         self.tostring = tostring
         self.flat = flat
@@ -478,7 +478,7 @@ class Archive(object):
 
         self._maxint = -1       # Cache of maximum int label in archive
 
-        if pytables and tables is NotImplemented:
+        if pytables and not tables:
             raise ArchiveError(
                 "PyTables requested but could not be imported.")
 
@@ -951,7 +951,7 @@ class Archive(object):
 
         # Archive the data to file if requested.
         if self.data and self.datafile is not None:
-            if self.pytables and tables is not NotImplemented:
+            if self.pytables and tables:
                 backup_name = None
                 if os.path.exists(self.datafile):
                     backup_name = self.datafile + ".bak"
@@ -1090,7 +1090,7 @@ class Archive(object):
 
         # Archive the data to file if requested.
         if self.data and self.datafile is not None:
-            if self.pytables and tables is not NotImplemented:
+            if self.pytables and tables:
                 backup_name = None
                 if os.path.exists(self.datafile):
                     backup_name = self.datafile + ".bak"
@@ -2800,7 +2800,7 @@ class DataSet(object):
             raise ValueError("DataSet opened in read-only mode.")
 
         with self._ds_lock():              # Establish lock
-            if tables is not NotImplemented:
+            if tables:
                 arch = Archive(array_threshold=self._array_threshold)
                 arch.insert(**{name: value})
                 archive_file = os.path.join(self._path,
