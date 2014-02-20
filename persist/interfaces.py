@@ -1,21 +1,32 @@
 r"""Various Interfaces."""
 __all__ = ['IArchivable', 'Attribute', 'Interface', 'implements']
 
+import warnings
+
 try:
     from zope.interface import Interface, Attribute
     from zope.interface import implements
     
 except ImportError:
+    warnings.warn("Could not import zope.interface... using a dummy version." +
+                  " Interfaces may not work correctly.")
+
     class Interface(object):        # pragma: no cover 
         """This is a stub allowing the insertion later of an interface
         class.  An interface defines some properties and methods but
         maintains no data and should not be instantiated."""
+
+        @classmethod
+        def providedBy(cls, obj):
+            return False
+
     class Attribute(object):        # pragma: no cover 
         """This is a stub allowing the insertion later of an interface
         class.  An interface defines some properties and methods but
         maintains no data and should not be instantiated."""
         def __init__(self, doc):
             self.doc = doc
+
     def implements(interface):          # pragma: no cover
         pass
 
