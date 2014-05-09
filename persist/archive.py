@@ -366,9 +366,6 @@ class Archive(object):
     hdf5 : True, False, optional
        If `True` and `datafile` is provided, then use hdf5 via the h5py package
        to store the binary data.
-    pytables : True, False, optional (deprecated)
-       If `True` and `datafile` is provided, then use PyTables to
-       store the binary data.
     backup_data : bool
        If `True` and :attr:`datafile` already exists, then a backup of
        the data will first be made with an extension `'.bak'` or
@@ -477,8 +474,7 @@ class Archive(object):
 
     def __init__(self, flat=True, tostring=True,
                  check_on_insert=False, array_threshold=np.inf,
-                 datafile=None, hdf5=bool(h5py), pytables=bool(tables), 
-                 allowed_names=None,
+                 datafile=None, hdf5=bool(h5py), allowed_names=None,
                  gname_prefix='_g', scoped=True, robust_replace=True):
         self.tostring = tostring
         self.flat = flat
@@ -501,17 +497,12 @@ class Archive(object):
         self.check_on_insert = check_on_insert
         self.data = {}
         self.datafile = datafile
-        self.pytables = pytables
         self.hdf5 = hdf5
         self.array_threshold = array_threshold
         self.scoped = scoped
         self.robust_replace = robust_replace
 
         self._maxint = -1       # Cache of maximum int label in archive
-
-        if pytables and not tables:
-            raise ArchiveError(
-                "PyTables requested but could not be imported.")
 
         if hdf5 and not h5py:
             raise ArchiveError(
@@ -991,10 +982,6 @@ class Archive(object):
                     with h5py.File(self.datafile) as f:
                         for name in self.data:
                             f[name] = self.data[name]
-                elif self.pytables and tables:
-                    with tables.openFile(self.datafile, 'w') as f:
-                        for name in self.data:
-                            f.createArray(f.root, name, self.data[name])
                 else:
                     raise NotImplementedError(
                         "Data can presently only be saved with hdf5")
@@ -1123,10 +1110,6 @@ class Archive(object):
                     with h5py.File(self.datafile) as f:
                         for name in self.data:
                             f[name] = self.data[name]
-                elif self.pytables and tables:
-                    with tables.openFile(self.datafile, 'w') as f:
-                        for name in self.data:
-                            f.createArray(f.root, name, self.data[name])
                 else:
                     raise NotImplementedError(
                         "Data can presently only be saved with hdf5")
@@ -2787,14 +2770,9 @@ class DataSet(object):
                                     "data_%s.hd5" % (name,))
             f = None
             if os.path.exists(datafile):
-                if h5py:
-                    with h5py.File(datafile, 'r') as f:
-                        for k in f:
-                            d[k] = np.asarray(f[k])
-                else:
-                    with tables.openFile(datafile, 'r') as f:
-                        for k in f.root:
-                            d[k.name] = k.read()
+                with h5py.File(datafile, 'r') as f:
+                    for k in f:
+                        d[k] = np.asarray(f[k])
             try:
                 execfile(archive_file, __d)
             except KeyError, err:
@@ -2823,36 +2801,30 @@ class DataSet(object):
             raise ValueError("DataSet opened in read-only mode.")
 
         with self._ds_lock():              # Establish lock
-            if h5py or tables:
-                arch = Archive(array_threshold=self._array_threshold)
-                arch.insert(**{name: value})
-                archive_file = os.path.join(self._path,
-                                            self._module_name,
-                                            "%s.py" % (name,))
-                with backup(archive_file, keep=self._backup_data):
-                    # This conversion does all the work, and may throw
-                    # exceptions, so we do this before trying to write.
-                    arch_rep = str(arch)
-                    with open(archive_file, 'w') as f:
-                        f.write(arch_rep)
-
-                datafile = os.path.join(self._path,
+            arch = Archive(array_threshold=self._array_threshold)
+            arch.insert(**{name: value})
+            archive_file = os.path.join(self._path,
                                         self._module_name,
-                                        "data_%s.hd5" % (name,))
-                with backup(datafile, keep=self._backup_data):
-                    if arch.data:
-                        if self.hdf5 and h5py:
-                            with h5py.File(datafile) as f:
-                                for _name in arch.data:
-                                    f[_name] = arch.data[_name]
-                        elif self.pytables and tables:
-                            with tables.openFile(datafile, 'w') as f:
-                                for _name in arch.data:
-                                    f.createArray(f.root, _name, 
-                                                  arch.data[_name])
-                        else:
-                            raise NotImplementedError(
-                                "Data can presently only be saved with hdf5")
+                                        "%s.py" % (name,))
+            with backup(archive_file, keep=self._backup_data):
+                # This conversion does all the work, and may throw
+                # exceptions, so we do this before trying to write.
+                arch_rep = str(arch)
+                with open(archive_file, 'w') as f:
+                    f.write(arch_rep)
+
+            datafile = os.path.join(self._path,
+                                    self._module_name,
+                                    "data_%s.hd5" % (name,))
+            with backup(datafile, keep=self._backup_data):
+                if arch.data:
+                    if self.hdf5 and h5py:
+                        with h5py.File(datafile) as f:
+                            for _name in arch.data:
+                                f[_name] = arch.data[_name]
+                    else:
+                        raise NotImplementedError(
+                            "Data can presently only be saved with hdf5")
 
         # Needed for pre 2.6 python version to support tab completion
         if sys.version < "2.6":
