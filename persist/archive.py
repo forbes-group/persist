@@ -10,15 +10,13 @@ Here is a typical usage:
 
 Here you could write to a file::
 
-   f = open('file.py', 'w')
-   f.write(s)
-   f.close()
+   with open('file.py', 'w') as f:
+       f.write(s)
 
 And after you could read from the file again::
 
-   f = open('file.py')
-   s = f.read()
-   f.close()
+   with open('file.py') as f:
+       s = f.read()
 
 Now we can restore the archive:
 
@@ -232,6 +230,11 @@ import mmf.objects
 import mmf.utils
 
 try:
+    import h5py
+except ImportError:
+    h5py = None
+
+try:
     import tables
 except ImportError:
     tables = None
@@ -281,6 +284,30 @@ def restore(archive, env={}):
     ld.update(env)
     exec(archive, ld)
     return ld
+
+@contextmanager
+def backup(filename, keep=True):
+    """Context to temporarily backup `filename`.
+
+    Moves `filename` to `filename.bak` (or `filename_#.bak` with a number #
+    chosen as needed to prevent a clash), then executes the context.
+    If `keep` is `False` and no exceptions are raised, then the
+    file is removed when the context is finished.
+    """ 
+    backup_name = None
+    if os.path.exists(filename):
+        backup_name = filename + ".bak"
+        n = 1
+        while os.path.exists(backup_name):
+            backup_name = filename + "_%i.bak" % (n)
+            n += 1
+        os.rename(filename, backup_name)
+
+    yield backup_name
+
+    if backup_name and not keep:
+        # Remove backup of data
+        os.remove(backup_name)
 
 
 class Archive(object):
@@ -332,13 +359,13 @@ class Archive(object):
     datafile : None, str, optional
        If provided, then numpy arrays longer than
        :attr:`array_threshold` are archived in binary to this file.
-       (See also `pytables`).  Otherwise, they will be stored in
+       (See also `hdf5`).  Otherwise, they will be stored in
        :attr:`data` which must be manually archived and restored
        externally.  The data will be written when
        :meth:`make_persistent` is called.
-    pytables : True, False, optional
-       If `True` and `datafile` is provided, then use PyTables to
-       store the binary data.
+    hdf5 : True, False, optional
+       If `True` and `datafile` is provided, then use hdf5 via the h5py package
+       to store the binary data.
     backup_data : bool
        If `True` and :attr:`datafile` already exists, then a backup of
        the data will first be made with an extension `'.bak'` or
@@ -447,8 +474,7 @@ class Archive(object):
 
     def __init__(self, flat=True, tostring=True,
                  check_on_insert=False, array_threshold=np.inf,
-                 datafile=None, pytables=bool(tables), 
-                 allowed_names=None,
+                 datafile=None, hdf5=bool(h5py), allowed_names=None,
                  gname_prefix='_g', scoped=True, robust_replace=True):
         self.tostring = tostring
         self.flat = flat
@@ -471,16 +497,16 @@ class Archive(object):
         self.check_on_insert = check_on_insert
         self.data = {}
         self.datafile = datafile
-        self.pytables = pytables
+        self.hdf5 = hdf5
         self.array_threshold = array_threshold
         self.scoped = scoped
         self.robust_replace = robust_replace
 
         self._maxint = -1       # Cache of maximum int label in archive
 
-        if pytables and not tables:
+        if hdf5 and not h5py:
             raise ArchiveError(
-                "PyTables requested but could not be imported.")
+                "HDF5 requested but h5py could not be imported.")
 
     def names(self):
         r"""Return list of unique names in the archive."""
@@ -808,7 +834,7 @@ class Archive(object):
         r"""Return `(imports, defs)` representing the persistent
         version of the archive.  If :attr:`datafile` is specified and
         there is data in :attr:`data` (large arrays), then these are
-        also stored (requires :attr:`pytables`) at this time.
+        also stored (requires :attr:`hdf5`) at this time.
 
         Returns
         -------
@@ -951,25 +977,14 @@ class Archive(object):
 
         # Archive the data to file if requested.
         if self.data and self.datafile is not None:
-            if self.pytables and tables:
-                backup_name = None
-                if os.path.exists(self.datafile):
-                    backup_name = self.datafile + ".bak"
-                    n = 1
-                    while os.path.exists(backup_name):
-                        backup_name = self.datafile + "_%i.bak" % (n)
-                        n += 1
-                    os.rename(self.datafile, backup_name)
-                f = tables.openFile(self.datafile, 'w')
-                for name in self.data:
-                    f.createArray(f.root, name, self.data[name])
-                f.close()
-                if backup_name and not self.backup_data:
-                    # Remove backup of data
-                    os.remove(backup_name)
-            else:
-                raise NotImplementedError(
-                    "Data can presently only be saved with pytables")
+            with self._backup(self.datafile):
+                if self.hdf5 and h5py:
+                    with h5py.File(self.datafile) as f:
+                        for name in self.data:
+                            f[name] = self.data[name]
+                else:
+                    raise NotImplementedError(
+                        "Data can presently only be saved with hdf5")
 
         return (graph.imports, names_reps)
 
@@ -1090,25 +1105,14 @@ class Archive(object):
 
         # Archive the data to file if requested.
         if self.data and self.datafile is not None:
-            if self.pytables and tables:
-                backup_name = None
-                if os.path.exists(self.datafile):
-                    backup_name = self.datafile + ".bak"
-                    n = 1
-                    while os.path.exists(backup_name):
-                        backup_name = self.datafile + "_%i.bak" % (n)
-                        n += 1
-                    os.rename(self.datafile, backup_name)
-                f = tables.openFile(self.datafile, 'w')
-                for name in self.data:
-                    f.createArray(f.root, name, self.data[name])
-                f.close()
-                if backup_name and not self.backup_data:
-                    # Remove backup of data
-                    os.remove(backup_name)
-            else:
-                raise NotImplementedError(
-                    "Data can presently only be saved with pytables")
+            with backup(self.datafile, keep=self.backup_data):
+                if self.hdf5 and h5py:
+                    with h5py.File(self.datafile) as f:
+                        for name in self.data:
+                            f[name] = self.data[name]
+                else:
+                    raise NotImplementedError(
+                        "Data can presently only be saved with hdf5")
 
         gnames = ", ".join(_n for _n in names
                            if _n.startswith(self.gname_prefix)
@@ -2385,9 +2389,9 @@ class Arch(object):
             os.mkdirs(mod_dir)
 
 
-        f = open(os.path.join(mod_dir, '__init__.py'), 'w')
-        #f.write(init_str)  #???
-        f.close()
+        with open(os.path.join(mod_dir, '__init__.py'), 'w') as f:
+            #f.write(init_str)  #???
+            pass
 
     def load(self, name):
         r"""Load the data associated with `name` into :attr:`data` and
@@ -2766,12 +2770,9 @@ class DataSet(object):
                                     "data_%s.hd5" % (name,))
             f = None
             if os.path.exists(datafile):
-                f = tables.openFile(datafile, 'r')
-                for k in f.root:
-                    d[k.name] = k.read()
-
-                f.close()
-
+                with h5py.File(datafile, 'r') as f:
+                    for k in f:
+                        d[k] = np.asarray(f[k])
             try:
                 execfile(archive_file, __d)
             except KeyError, err:
@@ -2800,57 +2801,30 @@ class DataSet(object):
             raise ValueError("DataSet opened in read-only mode.")
 
         with self._ds_lock():              # Establish lock
-            if tables:
-                arch = Archive(array_threshold=self._array_threshold)
-                arch.insert(**{name: value})
-                archive_file = os.path.join(self._path,
-                                            self._module_name,
-                                            "%s.py" % (name,))
-
-                backup_name = None
-                if os.path.exists(archive_file):
-                    backup_name = archive_file + ".bak"
-                    n = 1
-                    while os.path.exists(backup_name):
-                        backup_name = archive_file + "_%i.bak" % (n)
-                        n += 1
-                    os.rename(archive_file, backup_name)
-
+            arch = Archive(array_threshold=self._array_threshold)
+            arch.insert(**{name: value})
+            archive_file = os.path.join(self._path,
+                                        self._module_name,
+                                        "%s.py" % (name,))
+            with backup(archive_file, keep=self._backup_data):
                 # This conversion does all the work, and may throw
                 # exceptions, so we do this before trying to write.
                 arch_rep = str(arch)
-                f = open(archive_file, 'w')
-                f.write(arch_rep)
-                f.close()
+                with open(archive_file, 'w') as f:
+                    f.write(arch_rep)
 
-                if backup_name and not self._backup_data:
-                    # Remove backup of data
-                    os.remove(backup_name)
-
-                datafile = os.path.join(self._path,
-                                        self._module_name,
-                                        "data_%s.hd5" % (name,))
-                backup_name = None
-                if os.path.exists(datafile):
-                    backup_name = datafile + ".bak"
-                    n = 1
-                    while os.path.exists(backup_name):
-                        backup_name = datafile + "_%i.bak" % (n)
-                        n += 1
-                    os.rename(datafile, backup_name)
-
+            datafile = os.path.join(self._path,
+                                    self._module_name,
+                                    "data_%s.hd5" % (name,))
+            with backup(datafile, keep=self._backup_data):
                 if arch.data:
-                    f = tables.openFile(datafile, 'w')
-                    for _name in arch.data:
-                        f.createArray(f.root, _name, arch.data[_name])
-                    f.close()
-
-                if backup_name and not self._backup_data:
-                    # Remove backup of data
-                    os.remove(backup_name)
-            else:
-                raise NotImplementedError(
-                    "Data can presently only be saved with pytables")
+                    if self.hdf5 and h5py:
+                        with h5py.File(datafile) as f:
+                            for _name in arch.data:
+                                f[_name] = arch.data[_name]
+                    else:
+                        raise NotImplementedError(
+                            "Data can presently only be saved with hdf5")
 
         # Needed for pre 2.6 python version to support tab completion
         if sys.version < "2.6":
@@ -2890,22 +2864,9 @@ class DataSet(object):
                 init_file = os.path.join(
                     self._path, self._module_name, '__init__.py')
 
-                backup_name = None
-                if os.path.exists(init_file):
-                    backup_name = init_file + ".bak"
-                    n = 1
-                    while os.path.exists(backup_name):
-                        backup_name = init_file + "_%i.bak" % (n)
-                        n += 1
-                    os.rename(init_file, backup_name)
-
-                f = open(init_file, 'w')
-                f.write(str(arch))
-                f.close()
-
-                if backup_name and not self._backup_data:
-                    # Remove backup of data
-                    os.remove(backup_name)
+                with backup(init_file):
+                    with open(init_file, 'w') as f:
+                        f.write(str(arch))
 
     def __str__(self):
         if self._synchronize:
