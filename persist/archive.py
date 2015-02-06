@@ -293,7 +293,7 @@ def backup(filename, keep=True):
     chosen as needed to prevent a clash), then executes the context.
     If `keep` is `False` and no exceptions are raised, then the
     file is removed when the context is finished.
-    """ 
+    """
     backup_name = None
     if os.path.exists(filename):
         backup_name = filename + ".bak"
@@ -2818,7 +2818,7 @@ class DataSet(object):
                                     "data_%s.hd5" % (name,))
             with backup(datafile, keep=self._backup_data):
                 if arch.data:
-                    if self.hdf5 and h5py:
+                    if arch.hdf5 and h5py:
                         with h5py.File(datafile) as f:
                             for _name in arch.data:
                                 f[_name] = arch.data[_name]
