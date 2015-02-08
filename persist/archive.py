@@ -143,7 +143,7 @@ After issue 12 arose, I decided to change the structure of archives to
 minimize the need to replace text.  New archives will evaluate objects in a
 local scope.  Here is an example, first in the old format::
 
-   from mmf.objects import Container as _Container
+   from objects import Container as _Container
    _y = [1, 2, 3, 4]
    l1 = [_y, [1, _y]]
    l2 = [_y, l1]
@@ -165,7 +165,7 @@ Now in an explicit local scoping format using dictionaries::
    _d = dict(x=1,
              _y=_g['_y'],
              l2=l2,
-             Container=__import__('mmf.objects',
+             Container=__import__('objects',
                                   fromlist=['Container']).Container)
    c = _g['_c'] = eval('Container(x=x, _y=_y, l=l2)', _d)
    del _g, _d
@@ -191,7 +191,7 @@ unreliable::
        return [y, l1]
    l2 = _d(y=_y)
    def _d(x):
-       from mmf.objects import Container as Container
+       from objects import Container as Container
        return Container(x=x, _y=_y, l=l2)
    c = _d(x=1)
    del _d
@@ -224,10 +224,9 @@ import numpy as np
 import scipy.sparse
 sp = scipy
 
-import contrib.RADLogic.topsort as topsort
-import mmf.interfaces as interfaces
-import mmf.objects
-import mmf.utils
+import _contrib.RADLogic.topsort as topsort
+import interfaces
+import objects
 
 try:
     import h5py
@@ -238,6 +237,7 @@ try:
     import tables
 except ImportError:
     tables = None
+
 
 class ArchiveError(Exception):
     r"""Archiving error."""
@@ -264,6 +264,35 @@ class DuplicateError(ArchiveError):
         ArchiveError.__init__(self, msg)
 
 
+def unique_list(l, preserve_order=True):
+    """Make list contain only unique elements but preserve order.
+
+    >>> l = [1,2,4,3,2,3,1,0]
+    >>> unique_list(l)
+    [1, 2, 4, 3, 0]
+    >>> l
+    [1, 2, 4, 3, 2, 3, 1, 0]
+    >>> unique_list([[1],[2],[2],[1],[3]])
+    [[1], [2], [3]]
+
+    See Also
+    --------
+    http://www.peterbe.com/plog/uniqifiers-benchmark
+    """
+    try:
+        if preserve_order:
+            s = set()
+            return [x for x in l if x not in s and not s.add(x)]
+        else:
+            return list(set(l))
+    except TypeError:  # Special case for non-hashable types
+        res = []
+        for x in l:
+            if x not in res:
+                res.append(x)
+        return res
+
+
 def restore(archive, env={}):
     r"""Return dictionary obtained by evaluating the string arch.
 
@@ -284,6 +313,7 @@ def restore(archive, env={}):
     ld.update(env)
     exec(archive, ld)
     return ld
+
 
 @contextmanager
 def backup(filename, keep=True):
@@ -439,15 +469,15 @@ class Archive(object):
 
     >>> s = str(arch)
     >>> print s
-    from mmf.archive... import restore as _restore
+    from persist.archive import restore as _restore
     from numpy import sin as _sin
     from __builtin__ import dict as _dict
     _l_5 = ['a', 'b']
     l = [1, 2, 3, _l_5]
     d = _dict([('s', 'hi'), ('l', l), ('l0', _l_5)])
+    x = 4
     g = _restore
     f = _sin
-    x = 4
     del _restore
     del _sin
     del _dict
@@ -521,7 +551,7 @@ class Archive(object):
         """
         if (interfaces.IArchivable.providedBy(obj) or
             isinstance(obj, interfaces.IArchivable) or
-            isinstance(obj, mmf.objects.Archivable)):
+            isinstance(obj, objects.Archivable)):
             return obj.archive_1(env)
 
         for class_ in self._dispatch:
@@ -708,11 +738,11 @@ class Archive(object):
         'A'
         >>> print a                     # doctest: +SKIP
         import numpy as _numpy
-        x_1 = 3
-        a = 4
         x = 2
+        x_0 = 3
+        A = _numpy.fromstring('\x01\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00', dtype='<i8').reshape((3,))
         b = 5
-        A = _numpy.fromstring('\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00', dtype='<i4').reshape((3,))
+        a = 4
         del _numpy
         try: del __builtins__
         except NameError: pass
@@ -720,7 +750,7 @@ class Archive(object):
         For testing purposes we have to sort the lines of the output:
 
         >>> print "\n".join(sorted(str(a).splitlines()))
-        A = _numpy.fromstring('\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00', dtype='<i4').reshape((3,))
+        A = _numpy.fromstring('\x01\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00', dtype='<i8').reshape((3,))
         a = 4
         b = 5
         del _numpy
@@ -750,8 +780,8 @@ class Archive(object):
           ('numpy', 'nan', '_nan')],
          [('c', '_numpy.array([ 1.+0.j,  2.+3.j,  3.+0.j])'),
           ('cc', '[c, c, [3]]'),
-          ('A', '_numpy.array([1, 2, 3])'),
-          ('x', '2')])
+          ('x', '2'),
+          ('A', '_numpy.array([1, 2, 3])')])
 
         Names must not start with an underscore:
 
@@ -771,8 +801,8 @@ class Archive(object):
           ('numpy', 'nan', '_nan')],
          [('c', '_numpy.array([ 1.+0.j,  2.+3.j,  3.+0.j])'),
           ('cc', '[c, c, [3]]'),
-          ('A', '_numpy.array([1, 2, 3])'),
           ('x', '2'),
+          ('A', '_numpy.array([1, 2, 3])'),
           ('_x', '5')])
         """
         if env is None:
@@ -781,8 +811,7 @@ class Archive(object):
         names = []
         for name in kwargs:
             obj = kwargs[name]
-            if (name.startswith('_')
-                and name not in self.allowed_names):
+            if (name.startswith('_') and name not in self.allowed_names):
                 raise ValueError("name must not start with '_'")
 
             # First check to see if object is already in archive:
@@ -1133,7 +1162,7 @@ def get_imports(obj, env=None):
        from module import iname as uiname
        obj = uiname(...)
 
-    This may be useful when writing :meth:`~mmf.IArchivable.archive_1`
+    This may be useful when writing :meth:`~IArchivable.archive_1`
     methods.
 
     Examples
@@ -1664,7 +1693,7 @@ class Graph(object):
         for id in self.nodes:
             node = self.nodes[id]
             children = node.children
-            assert children == mmf.utils.unique_list(children)
+            assert children == unique_list(children)
             for child in children:
                 cnode = self.nodes[child]
                 assert id in cnode.parents
@@ -1926,7 +1955,7 @@ class _Graph(object):
         for id in self.nodes:
             node = self.nodes[id]
             children = node.children
-            assert children == mmf.utils.unique_list(children)
+            assert children == unique_list(children)
             for child in children:
                 cnode = self.nodes[child]
                 assert id in cnode.parents
@@ -2373,7 +2402,7 @@ class Arch(object):
             raise ValueError(
                 "Need to specify module_name before calling write.")
 
-        arch = mmf.archive.Archive(datafile=os.path.join(path, 'data.hd5'))
+        arch = archive.Archive(datafile=os.path.join(path, 'data.hd5'))
         for name in self.data:
             arch.insert(name=self.data[name])
 
@@ -2561,7 +2590,7 @@ class DataSet(object):
     This should work, but fails within doctests.  Don't know why...::
 
        >> reload(mod1)                    # doctest: +SKIP
-       <module '...' from '.../mmf/archive/.../__init__.py'>
+       <module '...' from '.../archive/.../__init__.py'>
 
     Here we open a read-only copy:
 

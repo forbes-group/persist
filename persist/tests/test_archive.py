@@ -10,10 +10,10 @@ import nose.tools
 import numpy as np
 import scipy as sp
 
-import mmf.objects
-import mmf.interfaces
+from persist import objects
+from persist import interfaces
 
-archive = sys.modules['mmf.archive._archive']
+archive = sys.modules['persist.archive']
 
 
 def skipknownfailure(f):
@@ -49,7 +49,7 @@ class B(object):
         return "B(d=%r, l=%r)" % (self.d, self.l)
 
 
-class C(mmf.objects.Archivable):
+class C(objects.Archivable):
     """Example of a class inheriting from Archivable."""
     def __init__(self, d, l):
         self.d = d
@@ -99,7 +99,7 @@ class MyTuple(tuple):
     """Class to test archiving of derived classes."""
 
 
-class NoStrNoRepr(mmf.objects.Archivable):
+class NoStrNoRepr(objects.Archivable):
     r"""This class provides its own archive_1 function, so __str__ and __repr__
     should never be called."""
     def archive_1(self, env):
@@ -411,12 +411,12 @@ class TestSuite(object):
         r"""Regression for usage of archive_1().  Exceptions raised
         should not be ignored."""
         class A(object):
-            mmf.interfaces.implements(mmf.interfaces.IArchivable)
+            interfaces.implements(interfaces.IArchivable)
 
             def archive_1(self, env=None):
                 raise Exception()
 
-        arch = mmf.archive.Archive()
+        arch = archive.Archive()
         a = A()
         arch.insert(a=a)
         str(arch)
@@ -436,8 +436,8 @@ class TestSuite(object):
         This is the same example as test__replace_rep_regression_1a but shows
         how it comes about from a high level.
         """
-        c = mmf.objects.Container(Q=1.0, alpha=np.array(1.1360639305457525))
-        arch = mmf.archive.Archive()
+        c = objects.Container(Q=1.0, alpha=np.array(1.1360639305457525))
+        arch = archive.Archive()
         arch.insert(c=c)
         d = {}
         exec(str(arch), d)
@@ -446,7 +446,7 @@ class TestSuite(object):
     def test_scoped_too_many_args_issue_12(self):
         r"""Regression test for scoped representations with too many
         arguments."""
-        arch = mmf.archive.Archive(scoped=True)
+        arch = archive.Archive(scoped=True)
         ls = [[] for _n in xrange(500)]
         arch.insert(ls=ls)
         d = {}
@@ -541,7 +541,7 @@ class TestPerformance(object):
     def _test_large_array(self):
         r"""Test archiving a large list.  This was giving some performance
         issues."""
-        #c = mmf.objects.Container(x=[1 for _l in xrange(820*6)])
+        #c = objects.Container(x=[1 for _l in xrange(820*6)])
         #ds = archive.DataSet(self.ds_name, 'w')
         #ds.c = c
 
