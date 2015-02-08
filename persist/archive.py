@@ -3,9 +3,7 @@ Here is a typical usage:
 
 >>> a = Archive()
 >>> a.insert(x=3)
-'x'
 >>> a.insert(y=4)
-'y'
 >>> s = str(a)
 
 Here you could write to a file::
@@ -58,7 +56,6 @@ The idea is to save state in a file that looks like the following::
 
    >>> a = Archive()
    >>> a.insert(x=3)
-   'x'
    >>> s = str(a)
    >>> d = {}
    >>> exec(s, d)
@@ -76,8 +73,9 @@ archived for example).
 
 Limitations
 -----------
-Archives must not contain explicit circular dependencies.  These must be managed
-by constructors:
+
+Archives must not contain explicit circular dependencies.  These must be
+managed by constructors:
 
 >>> l1 = []
 >>> l2 = [l1]
@@ -86,7 +84,6 @@ by constructors:
 [[[...]]]
 >>> a = Archive()
 >>> a.insert(l=l1)
-'l'
 >>> str(a)
 Traceback (most recent call last):
     ...
@@ -219,14 +216,18 @@ import time
 import types
 import warnings
 from contextlib import contextmanager
-
-import numpy as np
-import scipy.sparse
-sp = scipy
-
 import _contrib.RADLogic.topsort as topsort
-import interfaces
-import objects
+
+try:
+    import numpy as np
+except ImportError:
+    np = None
+
+try:
+    import scipy.sparse
+    sp = scipy
+except ImportError:
+    sp = None
 
 try:
     import h5py
@@ -237,6 +238,9 @@ try:
     import tables
 except ImportError:
     tables = None
+
+import interfaces
+import objects
 
 
 class ArchiveError(Exception):
@@ -303,7 +307,6 @@ def restore(archive, env={}):
     --------
     >>> a = Archive()
     >>> a.insert(a=1, b=2)
-    ['a', 'b']
     >>> arch = str(a)
     >>> d = restore(arch)
     >>> print "%(a)i, %(b)i"%d
@@ -363,7 +366,8 @@ class Archive(object):
        Dictionary mapping names to id's.  If the name corresponds to a
        module, then this is `None`.
     flat : bool, optional
-       If `True`, then
+       If `True`, then use a depth-first algorithm to reduce the dependency
+       graph, otherwise use a tree.  (See :meth:`make_persist`.)
     tostring : True, False, optional
        If `True`, then use :meth:`numpy.ndarray.tostring` to
        format numpy strings.  This is more robust, but not
@@ -432,14 +436,12 @@ class Archive(object):
 
     >>> arch = Archive(scoped=False) # Old form of scoped
     >>> arch.insert(x=4)
-    'x'
 
     We can include functions and classes: These are stored by their
     names and imports.
 
     >>> import numpy as np
     >>> arch.insert(f=np.sin, g=restore)
-    ['g', 'f']
 
     Here we include a list and a dictionary containing that list.  The
     resulting archive will only have one copy of the list since it is
@@ -449,7 +451,6 @@ class Archive(object):
     >>> l = [1, 2, 3, l0]
     >>> d = dict(l0=l0, l=l, s='hi')
     >>> arch.insert(d=d, l=l)
-    ['d', 'l']
 
     Presently the archive is just a graph of objects and string
     representations of the objects that have been directly inserted.
@@ -503,7 +504,7 @@ class Archive(object):
     data_name = '_arrays'
 
     def __init__(self, flat=True, tostring=True,
-                 check_on_insert=False, array_threshold=np.inf,
+                 check_on_insert=False, array_threshold=None,
                  datafile=None, hdf5=bool(h5py), allowed_names=None,
                  gname_prefix='_g', scoped=True, robust_replace=True):
         self.tostring = tostring
@@ -517,18 +518,23 @@ class Archive(object):
         self.gname_prefix = gname_prefix
 
         self._section_sep = ""  # string to separate the sections
-        self._numpy_printoptions = {'infstr': 'Inf',
-                                    'threshold': np.inf,
-                                    'suppress': False,
-                                    'linewidth': 200,
-                                    'edgeitems': 3,
-                                    'precision': 16,
-                                    'nanstr': 'NaN'}
+        if np:
+            self._numpy_printoptions = {'infstr': 'Inf',
+                                        'threshold': np.inf,
+                                        'suppress': False,
+                                        'linewidth': 200,
+                                        'edgeitems': 3,
+                                        'precision': 16,
+                                        'nanstr': 'NaN'}
+            if array_threshold is None:
+                array_threshold = np.inf
+
+        self.array_threshold = array_threshold
+
         self.check_on_insert = check_on_insert
         self.data = {}
         self.datafile = datafile
         self.hdf5 = hdf5
-        self.array_threshold = array_threshold
         self.scoped = scoped
         self.robust_replace = robust_replace
 
@@ -634,9 +640,9 @@ class Archive(object):
         return (rep, args, imports)
 
     def _archive_spmatrix(self, obj, env):
-        if (sp.sparse.isspmatrix_csc(obj) or
-            sp.sparse.isspmatrix_csr(obj) or
-            sp.sparse.isspmatrix_bsr(obj)):
+        if (sp.sparse.isspmatrix_csc(obj)
+                or sp.sparse.isspmatrix_csr(obj)
+                or sp.sparse.isspmatrix_bsr(obj)):
             args = (obj.data, obj.indices, obj.indptr)
         elif sp.sparse.isspmatrix_dia(obj):
             args = (obj.data, obj.offsets)
@@ -668,9 +674,6 @@ class Archive(object):
         return archive_1_type(obj, env)
 
     _dispatch = {
-        sp.sparse.base.spmatrix: _archive_spmatrix,
-        np.ndarray: _archive_ndarray,
-        np.ufunc: _archive_func,
         types.BuiltinFunctionType: _archive_func,
         types.FunctionType: _archive_func,
         list: _archive_list,
@@ -680,19 +683,28 @@ class Archive(object):
         complex: _archive_float,
         type: _archive_type}
 
+    if np:
+        _dispatch.update({
+            np.ndarray: _archive_ndarray,
+            np.ufunc: _archive_func})
+
+    if sp:
+        _dispatch.update({
+            sp.sparse.base.spmatrix: _archive_spmatrix
+        })
+
     def unique_name(self, name):
         r"""Return a unique name not contained in the archive."""
         names = _unzip(self.arch)[0]
         return UniqueNames(names).unique(name)
 
     def insert(self, env=None, **kwargs):
-        r"""`res = insert(name=obj)` or `res = insert(obj)`: Add the
-        `obj` to archive and return a list of `(uname, obj)` pairs.
+        r"""Insert named object pairs (kwargs) into the archive.
 
         If `self.check_on_insert`, then try generating rep (may raise
         an exception).
 
-        If name already exists in the archive, then a DuplicateError
+        If name already exists in the archive, then a `DuplicateError`
         exception is thrown.
 
         Parameters
@@ -705,13 +717,6 @@ class Archive(object):
            Dictionary used to resolve names found in repr strings
            (using repr is the last resort option).
 
-        Returns
-        -------
-        uname : str
-           Unique name used to refer to the object.
-        obj : object
-           The object
-
         Raises
         ------
         DuplicateError
@@ -723,19 +728,14 @@ class Archive(object):
         --------
         >>> a = Archive(scoped=False) # Old format for doctest
         >>> a.insert(x=2)
-        'x'
         >>> a.insert(x=2)       # Duplicates are okay.
-        'x'
         >>> a.insert(x=3)       # Changes are not...
         Traceback (most recent call last):
            ...
         DuplicateError: Object with name 'x' already exists in archive.
         >>> a.insert(**{a.unique_name('x'):3}) # ...but can make unique label
-        'x_0'
         >>> a.insert(a=4, b=5)   # Can insert multiple items
-        ['a', 'b']
         >>> a.insert(A=np.array([1, 2, 3]))
-        'A'
         >>> print a                     # doctest: +SKIP
         import numpy as _numpy
         x = 2
@@ -766,14 +766,10 @@ class Archive(object):
 
         >>> a = Archive(tostring=False)
         >>> a.insert(x=2)
-        'x'
         >>> a.insert(A=np.array([1, 2, 3]))
-        'A'
         >>> c = np.array([1, 2.0+3j, 3])
         >>> a.insert(c=c)
-        'c'
         >>> a.insert(cc=[c, c, [3]])
-        'cc'
         >>> a.make_persistent() # doctest: +NORMALIZE_WHITESPACE
         ([('numpy', None, '_numpy'),
           ('numpy', 'inf', '_inf'),
@@ -794,7 +790,6 @@ class Archive(object):
 
         >>> a.allowed_names.append('_x')
         >>> a.insert(_x=5)
-        '_x'
         >>> a.make_persistent() # doctest: +NORMALIZE_WHITESPACE
         ([('numpy', None, '_numpy'),
           ('numpy', 'inf', '_inf'),
@@ -851,13 +846,6 @@ class Archive(object):
             uname, obj, env = self.arch[ind]
             names.append(uname)
             self.ids[uname] = id(obj)
-
-        if 1 < len(names):
-            return names
-        elif 1 == len(names):
-            return names[0]
-        else:                   # pragma: no cover
-            return None
 
     def make_persistent(self):
         r"""Return `(imports, defs)` representing the persistent
@@ -935,8 +923,8 @@ class Archive(object):
         the graph in the sense that we remove a node from the
         list of computed quantities, and include it directly in
         the evaluation of another node.  This can only be done if
-        the node has less than two parents.  Two calgorithms can be
-        used as specified by :attr:`flat`:
+        the node has less than two parents.  In the future, different
+        algorithms can be specified with :attr:`flat`:
 
            `'flat'`: The flat algorithm recursively processes the archive
               in a depth first manner, adding each object with a
@@ -1444,8 +1432,7 @@ def is_simple(obj):
                 None.__class__]
             or
             (class_ in [float, complex]
-             and not np.isinf(obj)
-             and not np.isnan(obj)))
+             and not (np and (np.isinf(obj)) or np.isnan(obj))))
     else:                       # pragma: no cover
         result = False
     if result:
@@ -1742,7 +1729,6 @@ class Graph(object):
        >>> D = [G]; E = [G]; C = [F, D, E]; B = [F]; A = [B, C]
        >>> a = Archive(scoped=False);
        >>> a.insert(A=A)
-       'A'
        >>> g = Graph(a.arch, a.archive_1)
        >>> len(g.nodes)
        7
@@ -1771,7 +1757,6 @@ class Graph(object):
        >>> D = [G]; E = [G]; C = [F, D, E]; B = [F]; A = [B, C]
        >>> a = Archive(scoped=False);
        >>> a.insert(A=A)
-       'A'
        >>> g = Graph(a.arch, a.archive_1)
        >>> len(g.nodes)
        9
@@ -1789,7 +1774,6 @@ class Graph(object):
        If we explicitly add a node, then it can no longer be reduced:
 
        >>> a.insert(B=B)
-       'B'
        >>> g = Graph(a.arch, a.archive_1)
        >>> len(g.nodes)
        9
@@ -2284,10 +2268,13 @@ def _replace_rep_robust(rep, replacements):
     if '_inf_numpy' in rep:
         import pdb;pdb.set_trace()
         print rep, replacements
-    line_offsets = np.cumsum([0] + map(lambda _x:len(_x) + 1, # include \n
-                                       rep.splitlines()))
+
+    line_offsets = [0]
+    for _line in rep.splitlines():
+        offset = line_offsets[-1] + len(_line) + 1  # include \n
+        line_offsets.append(offset)
     splits = sorted((_n.lineno - 1, _n.col_offset, len(_n.id), _n.id)
-                     for _n in names)
+                    for _n in names)
     ind = 0
     results = []
     for _line, _col, _len, _id in splits:

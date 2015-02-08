@@ -459,9 +459,7 @@ class DocTests(object):
         """Regression Test 1.
         >>> a = archive.Archive()
         >>> a.insert(x_1=None)
-        'x_1'
         >>> a.insert(x_2=None)
-        'x_2'
         >>> print a
         x_2 = None
         x_1 = x_2
