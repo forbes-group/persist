@@ -58,15 +58,14 @@ class Archivable(object):
         """
         return (k for (k, v) in self.items())
 
-    def archive_1(self, env=None):      # pylint: disable-msg=W0613
+    def get_persistent_rep(self, env=None):      # pylint: disable-msg=W0613
         r"""Return (rep, args, imports).
 
-        Defines a representation rep of the instance self where the
-        instance can be reconstructed from the string rep evaluated in
-        the context of dict args with the specified imports = list of
-        (module, iname, uiname) where one has either "import module as
-        uiname", "from module import iname" or "from module import
-        iname as uiname".
+        Define a persistent representation `rep` of the instance self where
+        the instance can be reconstructed from the string rep evaluated in the
+        context of dict args with the specified imports = list of `(module,
+        iname, uiname)` where one has either `import module as uiname`, `from
+        module import iname` or `from module import iname as uiname`.
         """
         args = dict(self.items())
         module = self.__class__.__module__

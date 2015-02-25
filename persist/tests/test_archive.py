@@ -1,9 +1,9 @@
-import sys
 import math
-
 import os
-import tempfile
 import shutil
+import sys
+import tempfile
+import warnings
 
 import nose.tools
 
@@ -30,7 +30,7 @@ class A(object):
         self.d = d
         self.l = l
 
-    def archive_1(self, env=None):
+    def get_persistent_rep(self, env=None):
         """Example of an archive function."""
         imports = archive.get_imports(self)
         args = dict(d=self.d, l=self.l)
@@ -100,9 +100,9 @@ class MyTuple(tuple):
 
 
 class NoStrNoRepr(objects.Archivable):
-    r"""This class provides its own archive_1 function, so __str__ and __repr__
-    should never be called."""
-    def archive_1(self, env):
+    r"""This class provides its own get_persistent_rep function, so __str__ and
+    __repr__ should never be called."""
+    def get_persistent_rep(self, env):
         rep = 'NoStrNoRepr()'
         args = {}
         imports = []
@@ -355,7 +355,7 @@ class TestSuite(object):
     def test_check_on_insert(self):
         """Make sure check_on_insert works."""
         class A():
-            def archive_1(self, env=None):
+            def get_persistent_rep(self, env=None):
                 raise TestException()
         arch = archive.Archive()
         arch.check_on_insert = True
@@ -407,13 +407,13 @@ class TestSuite(object):
         assert p.x == p1.x
 
     @nose.tools.raises(Exception)
-    def test_archive_1_regression_1(self):
-        r"""Regression for usage of archive_1().  Exceptions raised
+    def test_get_persistent_rep_regression_1(self):
+        r"""Regression for usage of get_persistent_rep().  Exceptions raised
         should not be ignored."""
         class A(object):
             interfaces.implements(interfaces.IArchivable)
 
-            def archive_1(self, env=None):
+            def get_persistent_rep(self, env=None):
                 raise Exception()
 
         arch = archive.Archive()
@@ -454,6 +454,65 @@ class TestSuite(object):
         assert len(d['ls']) == 500
 
 
+class TestDeprecationWarning(object):
+    def setUp(self):
+        warnings.filterwarnings('error', category=DeprecationWarning)
+
+    def tearDown(self):
+        warnings.filters.pop(0)
+
+    @nose.tools.raises(DeprecationWarning)
+    def test_deprecation_warning(self):
+        """Test archive_1 deprecation warning"""
+        class A():
+            def archive_1(self, env=None):
+                return ('A', {}, [])
+        arch = archive.Archive()
+        arch.insert(a=A())
+        str(arch)
+
+
+class TestWarnings(object):
+    def setUp(self):
+        warnings.filterwarnings(
+            'ignore',
+            r"archive_1 is deprecated: use get_persistent_rep",
+            category=DeprecationWarning)
+        warnings.filterwarnings(
+            'error',
+            r"Found archive_1\(\) but got TypeError:.*",
+            category=Warning)
+        warnings.filterwarnings(
+            'error',
+            r"Found get_persistent_rep\(\) but got TypeError:.*",
+            category=Warning)
+
+    def tearDown(self):
+        warnings.filters.pop(0)
+        warnings.filters.pop(0)
+        warnings.filters.pop(0)
+
+    @nose.tools.raises(Warning)
+    def test_archive_1_warning(self):
+        """Test archive_1 warning"""
+        class A():
+            def archive_1(self):
+                return ('A', {}, [])
+        arch = archive.Archive()
+        arch.insert(a=A())
+        str(arch)
+
+    @nose.tools.raises(Warning)
+    def test_archive_1_warning(self):
+        """Test get_persistent_rep warning"""
+        class A():
+            def get_persistent_rep(self):
+                return ('A', {}, [])
+        arch = archive.Archive()
+        arch.insert(a=A())
+        str(arch)
+
+
 class DocTests(object):
     def regression_1(self):
         """Regression Test 1.
@@ -475,7 +534,7 @@ class DocTests(object):
 
         >>> import __builtin__
         >>> __builtin__._ = np.array([1, 2])
-        >>> archive.archive_1_type(type(None), {})
+        >>> archive.get_persistent_rep_type(type(None), {})
         ('NoneType', {}, [('types', 'NoneType', 'NoneType')])
         """
 
@@ -512,6 +571,16 @@ class TestDataSet(object):
         r"""Test that str and repr are not called unnecessarily."""
         ds = archive.DataSet(self.ds_name, 'w')
         ds.a = NoStrNoRepr()
+
+    def test_large_array(self):
+        """Test large array in dataset"""
+        a = np.arange(1000, dtype=float)
+        ds = archive.DataSet(self.ds_name, 'w')
+        ds.a = a
+        del ds
+        ds = archive.DataSet(self.ds_name, 'r')
+        assert np.allclose(a, ds.a)
+
 
 
 class TestPerformance(object):

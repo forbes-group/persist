@@ -33,7 +33,7 @@ except ImportError:
 
 class IArchivable(Interface):   # pragma: no cover
     """Interface for objects that support archiving."""
-    def archive_1(env=None):
+    def get_persistent_rep(env=None):
         """Return `(rep, args, imports)`.
 
         Define a persistent representation `rep` of the instance self where

@@ -27,12 +27,14 @@ Now we can restore the archive:
 
 Objects can aid this by implementing an archive method, for example::
 
-    def archive_1(self):
-        '''Return (rep, args, imports) where obj can be reconstructed
-        from the string rep evaluated in the context of args with the
-        specified imports = list of (module, iname, uiname) where one
-        has either "import module as uiname", "from module import
-        iname" or "from module import iname as uiname".
+    def get_persistent_rep(self):
+        '''Return `(rep, args, imports)`.
+
+        Define a persistent representation `rep` of the instance self where
+        the instance can be reconstructed from the string rep evaluated in the
+        context of dict args with the specified imports = list of `(module,
+        iname, uiname)` where one has either `import module as uiname`, `from
+        module import iname` or `from module import iname as uiname`.
         '''
         args = dict(a=self.a, b=self.b, ...)
 
@@ -220,23 +222,23 @@ import _contrib.RADLogic.topsort as topsort
 
 try:
     import numpy as np
-except ImportError:
+except ImportError:             # pragma: no cover
     np = None
 
 try:
     import scipy.sparse
     sp = scipy
-except ImportError:
+except ImportError:             # pragma: no cover
     sp = None
 
 try:
     import h5py
-except ImportError:
+except ImportError:             # pragma: no cover
     h5py = None
 
 try:
     import tables
-except ImportError:
+except ImportError:             # pragma: no cover
     tables = None
 
 import interfaces
@@ -276,6 +278,8 @@ def unique_list(l, preserve_order=True):
     [1, 2, 4, 3, 0]
     >>> l
     [1, 2, 4, 3, 2, 3, 1, 0]
+    >>> unique_list(l, preserve_order=False)
+    [0, 1, 2, 3, 4]
     >>> unique_list([[1],[2],[2],[1],[3]])
     [[1], [2], [3]]
 
@@ -548,43 +552,52 @@ class Archive(object):
         r"""Return list of unique names in the archive."""
         return [k[0] for k in self.arch]
 
-    def archive_1(self, obj, env):
+    def get_persistent_rep(self, obj, env):
         r"""Return `(rep, args, imports)` where `obj` can be reconstructed
         from the string `rep` evaluated in the context of `args` with the
         specified `imports` = list of `(module, iname, uiname)` where one
         has either `import module as uiname`, `from module import
         iname` or `from module import iname as uiname`.
         """
-        if (interfaces.IArchivable.providedBy(obj) or
-            isinstance(obj, interfaces.IArchivable) or
-            isinstance(obj, objects.Archivable)):
-            return obj.archive_1(env)
+        if (interfaces.IArchivable.providedBy(obj)
+                or isinstance(obj, objects.Archivable)):
+            return obj.get_persistent_rep(env)
 
         for class_ in self._dispatch:
             if isinstance(obj, class_):
                 return self._dispatch[class_](self, obj, env=env)
 
-        if inspect.isclass(obj):
-            return archive_1_obj(obj, env)
-
         if inspect.ismethod(obj):
-            return archive_1_method(obj, env)
+            return get_persistent_rep_method(obj, env)
+
+        if hasattr(obj, 'get_persistent_rep'):
+            try:
+                return obj.get_persistent_rep(env)
+            except TypeError, e:
+                warnings.warn("\n".join([
+                    "Found get_persistent_rep() but got TypeError:",
+                    str(e)]))
 
         if hasattr(obj, 'archive_1'):
+            warnings.warn("archive_1 is deprecated: use get_persistent_rep",
+                          DeprecationWarning)
             try:
                 return obj.archive_1(env)
-            except TypeError:   # pragma: no cover
-                1 + 1           # Needed to deal with coverage bug
+            except TypeError, e:
+                warnings.warn("\n".join([
+                    "Found archive_1() but got TypeError:",
+                    str(e)]))
 
         rep = repr(obj)
         if rep.startswith('<'):
             try:
-                return archive_1_pickle(obj, env)
+                return get_persistent_rep_pickle(obj, env)
             except cPickle.PickleError, err:
                 raise ArchiveError(
-                    "Could not archive object %s.  Even tried pickling!")
+                    "Could not archive object {}.  Even tried pickling!"
+                    .format(rep))
         else:
-            return archive_1_repr(obj, env, rep=rep)
+            return get_persistent_rep_repr(obj, env, rep=rep)
 
     def _archive_ndarray(self, obj, env):
         """Archival of numpy arrays."""
@@ -656,22 +669,22 @@ class Archive(object):
 
     def _archive_func(self, obj, env):
         r"""Attempt to archive the func."""
-        return archive_1_obj(obj, env)
+        return get_persistent_rep_obj(obj, env)
 
     def _archive_list(self, obj, env):
-        return archive_1_list(obj, env)
+        return get_persistent_rep_list(obj, env)
 
     def _archive_tuple(self, obj, env):
-        return archive_1_tuple(obj, env)
+        return get_persistent_rep_tuple(obj, env)
 
     def _archive_dict(self, obj, env):
-        return archive_1_dict(obj, env)
+        return get_persistent_rep_dict(obj, env)
 
     def _archive_float(self, obj, env):
-        return archive_1_float(obj, env)
+        return get_persistent_rep_float(obj, env)
 
     def _archive_type(self, obj, env):
-        return archive_1_type(obj, env)
+        return get_persistent_rep_type(obj, env)
 
     _dispatch = {
         types.BuiltinFunctionType: _archive_func,
@@ -681,7 +694,8 @@ class Archive(object):
         dict: _archive_dict,
         float: _archive_float,
         complex: _archive_float,
-        type: _archive_type}
+        type: _archive_type,
+        types.ClassType: _archive_type}
 
     if np:
         _dispatch.update({
@@ -837,7 +851,7 @@ class Archive(object):
                 pass
             else:
                 if self.check_on_insert:
-                    (rep, args, imports) = self.archive_1(obj, env)
+                    (rep, args, imports) = self.get_persistent_rep(obj, env)
 
                 self.arch.append((uname, obj, env))
                 ind = len(self.arch) - 1
@@ -879,7 +893,7 @@ class Archive(object):
         that can be evaluated using `eval()` in the context provided by
         `args` and `imports`.
 
-        The :meth:`archive_1` method provides this functionality,
+        The :meth:`get_persistent_rep` method provides this functionality,
         effectively defining a suite describing the dependencies of
         the object.
 
@@ -972,7 +986,7 @@ class Archive(object):
         # Generate dependency graph
         try:
             graph = Graph(objects=self.arch,
-                          archive_1=self.archive_1,
+                          get_persistent_rep=self.get_persistent_rep,
                           robust_replace=self.robust_replace)
         except topsort.CycleError, err:
             msg = "Archive contains cyclic dependencies."
@@ -1074,7 +1088,7 @@ class Archive(object):
         # Generate dependency graph
         try:
             graph = _Graph(objects=self.arch,
-                           archive_1=self.archive_1,
+                           get_persistent_rep=self.get_persistent_rep,
                            gname_prefix=self.gname_prefix)
         except topsort.CycleError, err:
             msg = "Archive contains cyclic dependencies."
@@ -1150,7 +1164,7 @@ def get_imports(obj, env=None):
        from module import iname as uiname
        obj = uiname(...)
 
-    This may be useful when writing :meth:`~IArchivable.archive_1`
+    This may be useful when writing :meth:`~IArchivable.get_persistent_rep`
     methods.
 
     Examples
@@ -1204,7 +1218,7 @@ def get_toplevel_imports(obj, env=None):
 def repr_(obj, robust=True):
     r"""Return representation of `obj`.
 
-    Stand-in `repr` function for objects that support the `archive_1`
+    Stand-in `repr` function for objects that support the `get_persistent_rep`
     method.
 
     Examples
@@ -1212,14 +1226,14 @@ def repr_(obj, robust=True):
     >>> class A(object):
     ...     def __init__(self, x):
     ...         self.x = x
-    ...     def archive_1(self):
+    ...     def get_persistent_rep(self):
     ...         return ('A(x=x)', dict(x=self.x), [])
     ...     def __repr__(self):
     ...         return repr_(self)
     >>> A(x=[1])
     A(x=[1])
     """
-    (rep, args, imports) = obj.archive_1()
+    (rep, args, imports) = obj.get_persistent_rep()
     replacements = dict((k, repr(args[k])) for k in args)
     rep = _replace_rep(rep, replacements=replacements, robust=robust)
     return rep
@@ -1234,7 +1248,7 @@ def get_module(obj):
         return None
 
 
-def archive_1_args(obj, args):
+def get_persistent_rep_args(obj, args):
     r"""Return `(rep, args, imports)`.
 
     Constructs `rep` and `imports` dynamically from `obj` and `args`.
@@ -1244,7 +1258,7 @@ def archive_1_args(obj, args):
     >>> a = 1
     >>> b = 2
     >>> l = [a, b]
-    >>> archive_1_args(l, dict(a=a, b=b))
+    >>> get_persistent_rep_args(l, dict(a=a, b=b))
     ('list(a=a, b=b)', {'a': 1, 'b': 2}, [('__builtin__', 'list', 'list')])
     """
     module = obj.__class__.__module__
@@ -1256,7 +1270,7 @@ def archive_1_args(obj, args):
     return (rep, args, imports)
 
 
-def archive_1_repr(obj, env, rep=None):
+def get_persistent_rep_repr(obj, env, rep=None):
     r"""Return `(rep, args, imports)`.
 
     This is the fallback: try to make a rep from the `repr` call.
@@ -1285,7 +1299,7 @@ def archive_1_repr(obj, env, rep=None):
     return (rep, args, imports)
 
 
-def archive_1_pickle(obj, env):
+def get_persistent_rep_pickle(obj, env):
     r"""Last resort - archive by pickle."""
     rep = "loads(%s)" % repr(
         cPickle.dumps(obj, protocol=cPickle.HIGHEST_PROTOCOL))
@@ -1294,7 +1308,7 @@ def archive_1_pickle(obj, env):
     return (rep, args, imports)
 
 
-def archive_1_type(obj, env):
+def get_persistent_rep_type(obj, env):
     name = None
     args = {}
     for module in [__builtin__, types]:
@@ -1307,12 +1321,12 @@ def archive_1_type(obj, env):
             break
     if name is None:
         # default
-        return archive_1_obj(obj, env)
+        return get_persistent_rep_obj(obj, env)
 
     return (rep, args, imports)
 
 
-def archive_1_float(obj, env):
+def get_persistent_rep_float(obj, env):
     r"""Deal with float types, including `inf` or `nan`.
 
     These are floats, but the symbols require the import of
@@ -1320,7 +1334,7 @@ def archive_1_float(obj, env):
 
     Examples
     --------
-    >>> archive_1_float(np.inf, {})
+    >>> get_persistent_rep_float(np.inf, {})
     ('inf', {}, [('numpy', 'inf', 'inf')])
     """
     rep = repr(obj)
@@ -1330,14 +1344,14 @@ def archive_1_float(obj, env):
     return (rep, args, imports)
 
 
-def archive_1_obj(obj, env):
+def get_persistent_rep_obj(obj, env):
     r"""Archive objects at the top level of a module."""
     ##module = get_module(obj)
     imports, rep = get_toplevel_imports(obj, env)
     return (rep, {}, imports)
 
 
-def archive_1_method(obj, env):
+def get_persistent_rep_method(obj, env):
     r"""Archive methods."""
     cls = obj.im_class
     instance = obj.im_self
@@ -1364,7 +1378,7 @@ def _get_rep(obj, arg_rep):
     return (rep, (module, cname, cname))
 
 
-def archive_1_list(l, env):
+def get_persistent_rep_list(l, env):
     args = {}
     imports = []
     name = '_l_0'
@@ -1386,8 +1400,8 @@ def archive_1_list(l, env):
     return (rep, args, imports)
 
 
-def archive_1_tuple(t, env):
-    rep, args, imports = archive_1_list(list(t), env=env)
+def get_persistent_rep_tuple(t, env):
+    rep, args, imports = get_persistent_rep_list(list(t), env=env)
     if len(t) == 1:
         rep = "(%s, )"%(rep[1:-1])
     else:
@@ -1400,8 +1414,8 @@ def archive_1_tuple(t, env):
     return (rep, args, imports)
 
 
-def archive_1_dict(d, env):
-    rep, args, imports = archive_1_list(d.items(), env)
+def get_persistent_rep_dict(d, env):
+    rep, args, imports = get_persistent_rep_list(d.items(), env)
 
     if d.__class__ is not list:
         rep, imp = _get_rep(d, rep)
@@ -1516,7 +1530,7 @@ class Graph(object):
     This is a graph of objects in memory: these are identified by
     their python :func:`id`.
     """
-    def __init__(self, objects, archive_1, robust_replace=True):
+    def __init__(self, objects, get_persistent_rep, robust_replace=True):
         r"""Initialize the dependency graph with some reserved
         names.
 
@@ -1527,9 +1541,9 @@ class Graph(object):
            List of top-level objects and names `[(name, obj, env)]`.
            Generated names will be from these and the graph will be
            generated from thes dependents of these objects as
-           determined by applying :attr:`archive_1`.  It is assumed that all
+           determined by applying :attr:`get_persistent_rep`.  It is assumed that all
            these names are unique.
-        archive_1 : function
+        get_persistent_rep : function
            Function of `(obj, env)` that returns `(rep, args,
            imports)` where `rep` is a representation of `objs`
            descending a single level.  This representation is a string
@@ -1546,7 +1560,7 @@ class Graph(object):
         self.imports = []
         self.names = UniqueNames(set([name for (name, obj, env)
                                       in objects]))
-        self.archive_1 = archive_1
+        self.get_persistent_rep = get_persistent_rep
         self.robust_replace = robust_replace
 
         # First insert the root nodes
@@ -1598,7 +1612,7 @@ class Graph(object):
         specified `name`  If `name` is specified, then we assume
         that the `name` is to be exported.  Also process the
         imports of the node."""
-        rep, args, imports = self.archive_1(obj, env)
+        rep, args, imports = self.get_persistent_rep(obj, env)
         rep = self._process_imports(rep, args, imports)
         return Node(obj=obj, rep=rep, args=args, name=name)
 
@@ -1729,7 +1743,7 @@ class Graph(object):
        >>> D = [G]; E = [G]; C = [F, D, E]; B = [F]; A = [B, C]
        >>> a = Archive(scoped=False);
        >>> a.insert(A=A)
-       >>> g = Graph(a.arch, a.archive_1)
+       >>> g = Graph(a.arch, a.get_persistent_rep)
        >>> len(g.nodes)
        7
        >>> g.reduce()
@@ -1757,7 +1771,7 @@ class Graph(object):
        >>> D = [G]; E = [G]; C = [F, D, E]; B = [F]; A = [B, C]
        >>> a = Archive(scoped=False);
        >>> a.insert(A=A)
-       >>> g = Graph(a.arch, a.archive_1)
+       >>> g = Graph(a.arch, a.get_persistent_rep)
        >>> len(g.nodes)
        9
        >>> g.reduce()
@@ -1774,7 +1788,7 @@ class Graph(object):
        If we explicitly add a node, then it can no longer be reduced:
 
        >>> a.insert(B=B)
-       >>> g = Graph(a.arch, a.archive_1)
+       >>> g = Graph(a.arch, a.get_persistent_rep)
        >>> len(g.nodes)
        9
        >>> g.reduce()
@@ -1810,7 +1824,7 @@ class _Graph(object):
        To improve performance, it is assumed that the names of `objects`
        are unique and do not start with an underscore `_`.
     """
-    def __init__(self, objects, archive_1,
+    def __init__(self, objects, get_persistent_rep,
                  gname_prefix='_g', allowed_names=set()):
         r"""Initialize the dependency graph with some reserved
         names.
@@ -1822,9 +1836,9 @@ class _Graph(object):
            List of top-level objects and names `[(name, obj, env)]`.
            Generated names will be from these and the graph will be
            generated from thes dependents of these objects as
-           determined by applying :attr:`archive_1`.  It is assumed that all
+           determined by applying :attr:`get_persistent_rep`.  It is assumed that all
            these names are unique.
-        archive_1 : function
+        get_persistent_rep : function
            Function of `(obj, env)` that returns `(rep, args,
            imports)` where `rep` is a representation of `objs`
            descending a single level.  This representation is a string
@@ -1842,7 +1856,7 @@ class _Graph(object):
         self.gname_num = 0
         self.gname_prefix = gname_prefix
         self.allowed_names = allowed_names
-        self.archive_1 = archive_1
+        self.get_persistent_rep = get_persistent_rep
         self.names = set()
 
         # First insert the root nodes
@@ -1876,7 +1890,7 @@ class _Graph(object):
             assert not name.startswith(self.gname_prefix)
             assert name not in self.names
         self.names.add(name)
-        rep, args, imports = self.archive_1(obj, env)
+        rep, args, imports = self.get_persistent_rep(obj, env)
         return Node(obj=obj, rep=rep, args=args, name=name, imports=imports)
 
     @property

@@ -9,8 +9,8 @@ stored in hdf5 format for efficiency.
 
 # Author: Michael McNeil Forbes <mforbes@physics.ubc.ca>
 
-from distribute_setup import use_setuptools
-use_setuptools()
+#from distribute_setup import use_setuptools
+#use_setuptools()
 
 dependencies = []
 
