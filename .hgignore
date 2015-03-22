@@ -1,2 +1,5 @@
 _coverage
-.coverage
+\.coverage
+\.tox
+\.eggs
+persist\.egg-info

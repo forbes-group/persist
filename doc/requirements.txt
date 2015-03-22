@@ -1,0 +1,13 @@
+coverage>=4.0
+flake8>=2.4.0
+h5py>=2.3.1
+matplotlib>=1.4.3
+nose>=1.3.4
+numpy>=1.9.1
+numpydoc>=0.4
+scipy>=0.15.1
+Sphinx>=1.3.1
+sphinx-rtd-theme>=0.1.7
+sphinxcontrib-zopeext>=0.2.1
+tox>=1.9.0
+zope.interface>=4.1.1

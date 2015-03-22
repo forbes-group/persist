@@ -17,7 +17,7 @@ VERSION = persist.__version__
 # Remove mmfutils so that it gets properly covered in tests. See
 # http://stackoverflow.com/questions/11279096
 for mod in sys.modules.keys():
-    if mod.startswith('mmfutils'):
+    if mod.startswith('persist'):
         del sys.modules[mod]
 del mod
 

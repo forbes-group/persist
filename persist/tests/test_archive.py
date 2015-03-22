@@ -10,6 +10,8 @@ import nose.tools
 import numpy as np
 import scipy as sp
 
+import h5py
+
 from persist import objects
 from persist import interfaces
 
@@ -139,7 +141,7 @@ class TestSuite(object):
         arch.insert(x=obj)
         s = str(arch)
         ld = {}
-        exec(s, ld)
+        exec s in ld
         nose.tools.assert_equals(1, len(ld))
         nose.tools.assert_equals(obj, ld['x'])
 
@@ -152,7 +154,7 @@ class TestSuite(object):
         arch.insert(a=a)
         s = str(arch)
         ld = {}
-        exec(s, ld)
+        exec s in ld
         assert (ld['a'].l == a.l and id(ld['a'].l) != id(a.l))
         assert (ld['a'].d == a.d and id(ld['a'].d) != id(a.d))
 
@@ -165,7 +167,7 @@ class TestSuite(object):
         arch.insert(a=a)
         s = str(arch)
         ld = {}
-        exec(s, ld)
+        exec s in ld
         assert (ld['a'].l == a.l and id(ld['a'].l) != id(a.l))
         assert (ld['a'].d == a.d and id(ld['a'].d) != id(a.d))
 
@@ -176,7 +178,7 @@ class TestSuite(object):
         a = C(d=d, l=l)
         s = a.archive('a')
         ld = {}
-        exec(s, ld)
+        exec s in ld
         assert (ld['a'].l == a.l and id(ld['a'].l) != id(a.l))
         assert (ld['a'].d == a.d and id(ld['a'].d) != id(a.d))
 
@@ -187,7 +189,7 @@ class TestSuite(object):
         arch.insert(a=a)
         s = str(arch)
         ld = {}
-        exec(s, ld)
+        exec s in ld
         assert (ld['a'] is C)
 
     def test_simple_types(self):
@@ -217,7 +219,7 @@ class TestSuite(object):
         arch.insert(d=d, l=l, t=t)
         s = str(arch)
         ld = {}
-        exec(s, ld)
+        exec s in ld
         assert (ld['d']['a'] == d['a'])
         assert isinstance(ld['d'], MyDict)
         assert (ld['l'] == l)
@@ -238,7 +240,7 @@ class TestSuite(object):
         arch.insert(x=obj)
         s = str(arch)
         ld = {}
-        exec(s, ld)
+        exec s in ld
         nose.tools.assert_equals(1, len(ld))
         nose.tools.assert_true(np.isnan(ld['x']['nan']))
         nose.tools.assert_equals(np.inf, (ld['x']['inf']))
@@ -269,7 +271,7 @@ class TestSuite(object):
         arch.insert(x=obj)
         s = str(arch)
         ld = {}
-        exec(s, ld)
+        exec s in ld
         nose.tools.assert_equals(1, len(ld))
         nose.tools.assert_true(np.isnan(ld['x']['nan']))
         nose.tools.assert_equals(np.inf, (ld['x']['inf']))
@@ -295,7 +297,7 @@ class TestSuite(object):
         arch.insert(x=obj)
         s = str(arch)
         ld = {}
-        exec(s, ld)
+        exec s in ld
         nose.tools.assert_equals(1, len(ld))
         x = ld['x']
         nose.tools.assert_true(sp.sparse.isspmatrix_csr(x['csr']))
@@ -322,7 +324,7 @@ class TestSuite(object):
         arch.insert(x=obj)
         s = str(arch)
         ld = {}
-        exec(s, ld)
+        exec s in ld
         nose.tools.assert_equals(1, len(ld))
         x = ld['x']
         nose.tools.assert_true(sp.sparse.isspmatrix_lil(x['lil']))
@@ -342,7 +344,7 @@ class TestSuite(object):
         arch.insert(z=z)
         s = str(arch)
         ld = {}
-        exec(s, ld)
+        exec s in ld
         assert ld['z'][0] is ld['z'][2]
 
     @nose.tools.raises(ValueError)
@@ -377,7 +379,7 @@ class TestSuite(object):
         arch.insert(f=F.f, g=Functions.f)
         s = str(arch)
         ld = {}
-        exec(s, ld)
+        exec s in ld
         nose.tools.assert_equals(F.f(2), ld['f'](2))
         nose.tools.assert_equals(F.f(2), ld['g'](F, 2))
 
@@ -389,7 +391,7 @@ class TestSuite(object):
         arch.insert(f=F.f, g=NestedClasses.NestedFunctions.f)
         s = str(arch)
         ld = {}
-        exec(s, ld)
+        exec s in ld
         nose.tools.assert_equals(F.f(2), ld['f'](2))
         nose.tools.assert_equals(F.f(2), ld['g'](F, 2))
 
@@ -411,6 +413,7 @@ class TestSuite(object):
         r"""Regression for usage of get_persistent_rep().  Exceptions raised
         should not be ignored."""
         import zope.interface
+
         class A(object):
             zope.interface.implements(interfaces.IArchivable)
 
@@ -424,12 +427,13 @@ class TestSuite(object):
 
     def test__replace_rep_regression_issue_11a(self):
         r"""Regression test of bad replacement in numpy array rep."""
-        rep = "dict(Q=_Q, a=_numpy.fromstring('`\\xbf=_Q-\\xf2?', dtype='<f8'))"
+        rep = ("dict(Q=_Q, a=_numpy.fromstring(" +
+               "'`\\xbf=_Q-\\xf2?', dtype='<f8'))")
         replacements = {'_Q': '1.0'}
         rep = archive._replace_rep(rep, replacements)
-        assert (
-            rep ==
-            "dict(Q=1.0, a=_numpy.fromstring('`\\xbf=_Q-\\xf2?', dtype='<f8'))")
+        assert (rep ==
+                "dict(Q=1.0, a=_numpy.fromstring(" +
+                "'`\\xbf=_Q-\\xf2?', dtype='<f8'))")
 
     def test__replace_rep_regression_issue_11b(self):
         r"""Regression test of bad replacement in numpy array rep.
@@ -441,7 +445,7 @@ class TestSuite(object):
         arch = archive.Archive()
         arch.insert(c=c)
         d = {}
-        exec(str(arch), d)
+        exec str(arch) in d
         assert d['c'].alpha == c.alpha
 
     def test_scoped_too_many_args_issue_12(self):
@@ -453,6 +457,49 @@ class TestSuite(object):
         d = {}
         exec str(arch) in d
         assert len(d['ls']) == 500
+
+    def test_data_duplicate_regression(self):
+        """Regression against a bug where multiple calls to make_persistent()
+        would insert multiple copies of data into self.data"""
+
+        a = archive.Archive(array_threshold=2)
+        M = np.random.rand(10)
+        a.insert(M=M)
+        a.make_persistent()
+        assert len(a.data) == 1
+        a.make_persistent()
+        assert len(a.data) == 1
+
+
+class TestDatafile(object):
+    def setUp(self):
+        f = tempfile.NamedTemporaryFile(suffix='.hd5', delete=False)
+        self.datafile = f.name
+        f.close()
+
+    def tearDown(self):
+        if os.path.exists(self.datafile):
+            os.unlink(self.datafile)
+
+    def test_datafile(self):
+        """Test saving large arrays to disk."""
+        a = archive.Archive(array_threshold=2, datafile=self.datafile,
+                            backup_data=False)
+        M = np.random.rand(10)
+        a.insert(M=M)
+        a.make_persistent()
+
+        assert len(a.data) == 1
+        array_name = a.data.keys()[0]
+        with h5py.File(self.datafile) as f:
+            assert np.allclose(f[array_name], M)
+
+        s = str(a)
+        assert len(a.data) == 1
+
+        ld = {a.data_name: {array_name: M}}
+        exec s in ld
+        assert np.allclose(ld['M'], M)
 
 
 class TestDeprecationWarning(object):
@@ -504,7 +551,7 @@ class TestWarnings(object):
         str(arch)
 
     @nose.tools.raises(Warning)
-    def test_archive_1_warning(self):
+    def test_get_persistent_rep_warning(self):
         """Test get_persistent_rep warning"""
         class A():
             def get_persistent_rep(self):
@@ -582,6 +629,26 @@ class TestDataSet(object):
         ds = archive.DataSet(self.ds_name, 'r')
         assert np.allclose(a, ds.a)
 
+    def test_import1(self):
+        """Test import of dataset"""
+        module_name = 'module'
+
+        ds_name = os.path.join(self.ds_name, module_name)
+
+        a = np.arange(1000, dtype=float)
+        ds = archive.DataSet(ds_name, 'w')
+        ds.a = a
+        ds['b'] = 'b'
+        ds.c = 1
+        del ds
+
+        # Try importing
+        sys.path.append(self.ds_name)
+        ds = __import__(module_name)
+
+        assert ds._info_dict == dict(a=None, b='b', c=None)
+        assert np.allclose(ds.a, np.arange(1000, dtype=float))
+        assert ds.c == 1
 
 
 class TestPerformance(object):
@@ -614,8 +681,47 @@ class TestPerformance(object):
         #ds.c = c
 
 
+class TestCoverageDoctests(object):
+    """Ensure coverage.
+
+    >>> a = archive.Archive()
+    >>> a.insert(x=1)
+    >>> a.insert(y=2)
+    >>> a.names()
+    ['x', 'y']
+
+    >>> class A(object):
+    ...     "Class with a bad repr to trigger exception."
+    ...     def __repr__(self):
+    ...         return "<object>"
+    >>> a = archive.Archive()
+    >>> a.insert(a=A())
+    >>> a
+    Traceback (most recent call last):
+    ...
+    ArchiveError: Could not archive object <object>.  Even tried pickling!
+
+    >>> a = archive.Archive(array_threshold=2)
+    >>> a.data['array_0'] = None   # Do not do this!  Just to trigger coverage
+    >>> a.insert(a=np.zeros(4))
+    >>> a
+    a = _arrays['array_1']
+    try: del __builtins__
+    except NameError: pass
+
+    >>> archive.get_persistent_rep_repr(1, {})
+    ('1', {}, [])
+
+    >>> archive._replace_rep_robust('1', dict(a="c"))
+    '1'
+
+    >>> type(archive.AST('[1,2,3]').ast)
+    <class '_ast.Module'>
+    """
+    # Don't include regular tests here - they may be skipped.
+
+
 class TestCoverage(object):
-    """Ensure coverage."""
     def test_repr(self):
         """Cover repr."""
         repr(archive.Archive())
@@ -624,3 +730,70 @@ class TestCoverage(object):
         """Cover AST.expr"""
         s = '[1, 2]'
         assert s == archive.AST(s).expr
+
+    def test_array_name_clash(self):
+        a = archive.Archive()
+        a.insert(np.zeros(2))
+
+    @nose.tools.raises(NotImplementedError)
+    def test_datafile_nohdf5_1(self):
+        """Test saving large arrays to disk without hdf5."""
+        a = archive.Archive(array_threshold=2, datafile="/dev/null",
+                            hdf5=False)
+        M = np.random.rand(10)
+        a.insert(M=M)
+        a.make_persistent()
+
+    @nose.tools.raises(NotImplementedError)
+    def test_datafile_nohdf5_2(self):
+        """Test saving large arrays to disk without hdf5."""
+        a = archive.Archive(array_threshold=2, datafile="/dev/null",
+                            hdf5=False)
+        M = np.random.rand(10)
+        a.insert(M=M)
+        a.scoped__str__()
+
+
+class TestCoverageMissingModules(object):
+    """Coverage of some missing module checks"""
+    def setUp(self):
+        self.h5py = archive.h5py
+        archive.h5py = None
+
+    def tearDown(self):
+        archive.h5py = self.h5py
+
+    @nose.tools.raises(archive.ArchiveError)
+    def test_missing_hdf5(self):
+        archive.Archive(hdf5=True)
+
+
+class TestGraph(object):
+    def test_graph(self):
+        """Example graph from docs."""
+        objs = 'A,B,C,D,E,F,G'.split(',')
+        A, B, C, D, E, F, G = objs
+
+        deps = dict(A=[B, C], B=[F], C=[F, D, E], D=[G], E=[G], F=[], G=[])
+
+        def get_persistent_rep(obj, env={}):
+            args = dict(zip(deps[obj], deps[obj]))
+            return (obj, args, [])
+
+        ids = dict((id(_obj), _obj) for _obj in objs)
+
+        graph = archive.Graph([('A', A, {})], get_persistent_rep)
+        paths = graph.paths()
+
+        # Convert to simple strings
+        paths = set([''.join(map(ids.__getitem__, _p)) for _p in paths])
+        _paths = set(['ABF', 'ACF', 'ACDG', 'ACEG'])
+        assert _paths == paths
+
+        graph = archive._Graph([('A', A, {})], get_persistent_rep)
+        paths = graph.paths()
+
+        # Convert to simple strings
+        paths = set([''.join(map(ids.__getitem__, _p)) for _p in paths])
+        _paths = set(['ABF', 'ACF', 'ACDG', 'ACEG'])
+        assert _paths == paths

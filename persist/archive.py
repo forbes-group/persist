@@ -76,20 +76,29 @@ archived for example).
 Limitations
 -----------
 
-Archives must not contain explicit circular dependencies.  These must be
-managed by constructors:
+- Archives must not contain explicit circular dependencies.  These must be
+  managed by constructors:
 
->>> l1 = []
->>> l2 = [l1]
->>> l1.append(l2)
->>> l1                          # repr does not even work...
-[[[...]]]
->>> a = Archive()
->>> a.insert(l=l1)
->>> str(a)
-Traceback (most recent call last):
-    ...
-CycleError: Archive contains cyclic dependencies.
+    >>> l1 = []
+    >>> l2 = [l1]
+    >>> l1.append(l2)
+    >>> l1                          # repr does not even work...
+    [[[...]]]
+    >>> a = Archive()
+    >>> a.insert(l=l1)
+    >>> str(a)
+    Traceback (most recent call last):
+        ...
+    CycleError: Archive contains cyclic dependencies.
+
+- Only some sparse matrices are supported:
+
+     >>> M = np.random.random((10, 10))
+     >>> a = Archive()
+     >>> a.insert(lil=sp.sparse.lil_matrix(M))
+     >>> a
+     Traceback (most recent call last):
+     NotImplementedError: lil_matrix
 
 Large Archives
 --------------
@@ -251,15 +260,13 @@ class ArchiveError(Exception):
 
 class CycleError(ArchiveError):
     r"""Cycle found in archive."""
+    message = "Archive contains cyclic dependencies."
+
     def __init__(self, *v):
-        if 0 < len(v):
-            self.message = v[0]
+        self.args = v
 
     def __str__(self):
         return self.message
-
-    def __repr__(self):
-        return repr(self.args)
 
 
 class DuplicateError(ArchiveError):
@@ -507,15 +514,16 @@ class Archive(object):
     """
     data_name = '_arrays'
 
-    def __init__(self, flat=True, tostring=True,
-                 check_on_insert=False, array_threshold=None,
-                 datafile=None, hdf5=bool(h5py), allowed_names=None,
-                 gname_prefix='_g', scoped=True, robust_replace=True):
+    def __init__(self, flat=True, tostring=True, check_on_insert=False,
+                 array_threshold=None, datafile=None, hdf5=bool(h5py),
+                 backup_data=True, allowed_names=None, gname_prefix='_g',
+                 scoped=True, robust_replace=True):
         self.tostring = tostring
         self.flat = flat
         self.imports = []
         self.arch = []
         self.ids = {}
+        self.backup_data = backup_data
         if not allowed_names:
             allowed_names = []
         self.allowed_names = allowed_names
@@ -603,17 +611,27 @@ class Archive(object):
         """Archival of numpy arrays."""
         if self.array_threshold < np.prod(obj.shape):
             # Data should be archived to a data file.
-            array_prefix = 'array_'
-            i = self._maxint + 1
-            array_name = array_prefix + str(i)
-            while array_name in self.data:
-                # This should only execute a few times if the user, for
-                # example, included manually an element with name "array_<n>"
-                # for example.
-                i += 1
+            array_name = None
+            for array_name in self.data:
+                # Check if array exists first
+                if self.data[array_name] is obj:
+                    break
+                else:
+                    array_name = None
+
+            if array_name is None:
+                array_prefix = 'array_'
+                i = self._maxint + 1
                 array_name = array_prefix + str(i)
-            self._maxint = i
-            self.data[array_name] = obj
+                while array_name in self.data:
+                    # This should only execute a few times if the user, for
+                    # example, included manually an element with name
+                    # "array_<n>" for example.
+                    i += 1
+                    array_name = array_prefix + str(i)
+                    self._maxint = i
+                self.data[array_name] = obj
+
             rep = "%s['%s']" % (self.data_name, array_name)
             args = {}
             imports = []
@@ -989,8 +1007,7 @@ class Archive(object):
                           get_persistent_rep=self.get_persistent_rep,
                           robust_replace=self.robust_replace)
         except topsort.CycleError, err:
-            msg = "Archive contains cyclic dependencies."
-            raise CycleError, (msg, ) + err.args , sys.exc_info()[-1]
+            raise CycleError, err.args , sys.exc_info()[-1]
 
         # Optionally: at this stage perform a graph reduction.
         graph.reduce()
@@ -1008,14 +1025,14 @@ class Archive(object):
 
         # Archive the data to file if requested.
         if self.data and self.datafile is not None:
-            with self._backup(self.datafile):
-                if self.hdf5 and h5py:
+            if self.hdf5 and h5py:
+                with backup(self.datafile, keep=self.backup_data):
                     with h5py.File(self.datafile) as f:
                         for name in self.data:
                             f[name] = self.data[name]
-                else:
-                    raise NotImplementedError(
-                        "Data can presently only be saved with hdf5")
+            else:
+                raise NotImplementedError(
+                    "Data can presently only be saved with hdf5")
 
         return (graph.imports, names_reps)
 
@@ -1091,11 +1108,10 @@ class Archive(object):
                            get_persistent_rep=self.get_persistent_rep,
                            gname_prefix=self.gname_prefix)
         except topsort.CycleError, err:
-            msg = "Archive contains cyclic dependencies."
-            raise CycleError, (msg, ) + err.args, sys.exc_info()[-1]
+            raise CycleError, err.args, sys.exc_info()[-1]
 
         # Optionally: at this stage perform a graph reduction.
-        #graph.reduce()
+        # graph.reduce()
 
         results = []
         names = set()
@@ -1136,14 +1152,14 @@ class Archive(object):
 
         # Archive the data to file if requested.
         if self.data and self.datafile is not None:
-            with backup(self.datafile, keep=self.backup_data):
-                if self.hdf5 and h5py:
+            if self.hdf5 and h5py:
+                with backup(self.datafile, keep=self.backup_data):
                     with h5py.File(self.datafile) as f:
                         for name in self.data:
                             f[name] = self.data[name]
-                else:
-                    raise NotImplementedError(
-                        "Data can presently only be saved with hdf5")
+            else:
+                raise NotImplementedError(
+                    "Data can presently only be saved with hdf5")
 
         gnames = ", ".join(_n for _n in names
                            if _n.startswith(self.gname_prefix)
@@ -1540,9 +1556,9 @@ class Graph(object):
         objects : list
            List of top-level objects and names `[(name, obj, env)]`.
            Generated names will be from these and the graph will be
-           generated from thes dependents of these objects as
-           determined by applying :attr:`get_persistent_rep`.  It is assumed that all
-           these names are unique.
+           generated from the dependents of these objects as
+           determined by applying :attr:`get_persistent_rep`.  It is assumed
+           that all these names are unique.
         get_persistent_rep : function
            Function of `(obj, env)` that returns `(rep, args,
            imports)` where `rep` is a representation of `objs`
@@ -1629,11 +1645,11 @@ class Graph(object):
     def _process_imports(self, rep, args, imports):
         r"""Process imports and add them to self.imports,
         changing names as needed so there are no conflicts
-        between `args = {name: obj}` and `self.names`."""
+        between `args = {name: obj}` and `self.names`.
+        """
         arg_names = args.keys()
-        # Check for duplicate imports
 
-        ##new_imports = []
+        # Check for duplicate imports
         replacements = {}
         for (module_, iname_, uiname_) in imports:
             mod_inames = zip(*_unzip(self.imports)[:2])
@@ -1699,16 +1715,20 @@ class Graph(object):
                 cnode = self.nodes[child]
                 assert id in cnode.parents
 
-    def paths(self, node=None):
-        """Return a list of all paths through the graph starting from
-        `node`."""
+    def paths(self, id=None):
+        """Return a list of all paths through the graph starting from `id`."""
         paths = []
-        if node is None:
+        if id is None:
             for r in self.roots:
                 paths.extend(self.paths(r))
         else:
-            for c in node.children:
-                paths.extend([[node] + p for p in self.paths(c)])
+            children = self.nodes[id].children
+            if not children:
+                paths.append([id])
+            else:
+                for c in children:
+                    paths.extend([[id] + p for p in self.paths(c)])
+
         return paths
 
     def reduce(self):
@@ -1812,7 +1832,7 @@ class Graph(object):
         self.order = self._topological_order()
 
 
-class _Graph(object):
+class _Graph(Graph):
     r"""Simplified dependency graph for use with scoped files.
 
     This is a graph of objects in memory: these are identified by
@@ -1835,9 +1855,9 @@ class _Graph(object):
         objects : list
            List of top-level objects and names `[(name, obj, env)]`.
            Generated names will be from these and the graph will be
-           generated from thes dependents of these objects as
-           determined by applying :attr:`get_persistent_rep`.  It is assumed that all
-           these names are unique.
+           generated from the dependents of these objects as
+           determined by applying :attr:`get_persistent_rep`.  It is assumed
+           that all these names are unique.
         get_persistent_rep : function
            Function of `(obj, env)` that returns `(rep, args,
            imports)` where `rep` is a representation of `objs`
@@ -1914,61 +1934,16 @@ class _Graph(object):
                 self.nodes[id_] = new_node
                 self._DFS(new_node, env)
 
-    def edges(self):
-        r"""Return a list of edges `(id1, id2)` where object `id1` depends
-        on object `id2`."""
-        return [(id_, id(obj))
-                for id_ in self.nodes
-                for (name, obj) in self.nodes[id_].args.iteritems()]
+    # edges = Graph.edges
+    # _topological_order = Graph._topological_order
+    # check = Graph.check
+    # paths = Graph.paths
 
-    def _topological_order(self):
-        r"""Return a list of the ids for all nodes in the graph in a
-        topological order."""
-        order = topsort.topsort(self.edges())
-        order.reverse()
-        # Insert roots (they may be disconnected)
-        order.extend([id for id in self.roots if id not in order])
-        return order
-
-    def _reduce(self, id):
-        r"""Reduce the node."""
+    def _reduce(self, id):      # pragma: no cover
         raise NotImplementedError
-        node = self.nodes[id]
-        if node.isreducible(roots=self.roots):
-            replacements = {node.name: node.rep}
-            for parent in node.parents:
-                pnode = self.nodes[parent]
-                pnode.rep = _replace_rep(pnode.rep, replacements,
-                                         robust=self.robust_replace)
-                del pnode.args[node.name]
-                pnode.args.update(node.args)
-            for child in node.children:
-                cnode = self.nodes[child]
-                cnode.parents.remove(id)
-                cnode.parents.update(node.parents)
-            del self.nodes[id]
 
-    def check(self):
-        r"""Check integrity of graph."""
-        for id in self.nodes:
-            node = self.nodes[id]
-            children = node.children
-            assert children == unique_list(children)
-            for child in children:
-                cnode = self.nodes[child]
-                assert id in cnode.parents
-
-    def paths(self, node=None):
-        """Return a list of all paths through the graph starting from
-        `node`."""
-        paths = []
-        if node is None:
-            for r in self.roots:
-                paths.extend(self.paths(r))
-        else:
-            for c in node.children:
-                paths.extend([[node] + p for p in self.paths(c)])
-        return paths
+    def reduce(self):           # pragma: no cover
+        raise NotImplementedError
 
 
 def _unzip(q, n=3):
@@ -2279,9 +2254,6 @@ def _replace_rep_robust(rep, replacements):
              and _n.ctx.__class__ is not ast.Store]
     if not names:
         return rep
-    if '_inf_numpy' in rep:
-        import pdb;pdb.set_trace()
-        print rep, replacements
 
     line_offsets = [0]
     for _line in rep.splitlines():
@@ -2329,104 +2301,6 @@ class AST(object):
         return [_n.id for _n in ast.walk(ast.parse(self.expr))
                 if _n.__class__ is ast.Name
                 and _n.ctx.__class__ is not ast.Store]
-
-
-class Arch(object):
-    r"""Maintains a collection of objects and provides a mechanism for
-    storing them on disk.
-
-    Attributes
-    ----------
-    archive_name : str
-       Special name of the archive in the imported module.  Variables
-       of this name are not permitted in the archive.
-    archive_prefix : str
-       Private variables used to store unnamed objects start with
-       this.  Variables names starting with this prefix are not
-       permitted in the archive.
-    autoname_prefix : str
-       Variables inserted without a name are given an automatically
-       generated name that starts with this.
-    data : dict
-       This is the dictionary of `(info, data, rep)` pairs where `info` is
-       metadata.  If `data` is `NotImplemented` then it has not yet
-       been loaded, and it should be loaded by executing the string
-       `rep` which specifies where the data is stored.
-    """
-    def __init__(self, module_name=None, path='.',
-                 archive_prefix='_', archive_name='archive',
-                 autoname_prefix='x_'):
-        self.path = path
-        self.module_name = module_name
-        self.archive_name = archive_name
-        self.archive_prefix = archive_prefix
-        self.autoname_prefix = autoname_prefix
-        self.data = {}
-
-    def _check_name_okay(self, name):
-        r"""Raise :exc:`ValueError` if `name` clashes with
-        :attr:`archive_prefix` or :attr:`archive_name`."""
-        if (name == self.archive_name
-                or name.startswith(self.archive_prefix)):
-            raise ValueError(
-                "Variable name must not be archive_name = %s or start "
-                "with archive_prefix = %s.  Got name=%s." %
-                (self.archive_name, self.archive_prefix, name))
-
-    def insert(self, data=None, name=None, info=None):
-        r"""Insert `data` into :attr:`data_dict` with name `name` and
-        add the metadata `info` to :attr:`info_dict`.
-        """
-        self._check_name(name)
-        self.data[name] = (info, data)
-
-    def __setitem__(self, name, data):
-        r"""Add the entry to :attr:`data`.  Note that this does not
-        allow metadata to be specified."""
-        self.insert(data=data, name=name)
-
-    def __getitem__(self, name):
-        r"""Return the data associated with `name`.  If the data has
-        not yet been loaded from disk, then this triggers the load."""
-
-        (info, data) = self.data[name]
-        if data is NotImplemented:
-            return self.load(name)
-        else:
-            return data
-
-    def write(self, module_name=None, path=None):
-        r"""Write the archive to disk."""
-        if path is None:
-            path = self.path
-        if module_name is None:
-            module_name = self.module_name
-        if module_name is None:
-            raise ValueError(
-                "Need to specify module_name before calling write.")
-
-        arch = Archive(datafile=os.path.join(path, 'data.hd5'))
-        for name in self.data:
-            arch.insert(name=self.data[name])
-
-        mod_dir = os.path.join(path, module_name)
-        if os.path.exists(mod_dir):
-            if not os.path.isdir(mod_dir):
-                raise ValueError(
-                    "Module directory %s exists as a file!"
-                    % mod_dir)
-
-            # Directory already exists.  Update it.
-        else:
-            os.mkdirs(mod_dir)
-
-        with open(os.path.join(mod_dir, '__init__.py'), 'w') as _f:
-            # _f.write(init_str)  #???
-            pass
-
-    def load(self, name):
-        r"""Load the data associated with `name` into :attr:`data` and
-        return this."""
 
 
 class DataSet(object):
@@ -2888,16 +2762,67 @@ class DataSet(object):
                 self._load()
 
             self._info_dict[name] = info
+            self.__write_init()
 
-            if self._module_name:
-                arch = Archive(allowed_names=['_info_dict'])
-                arch.insert(_info_dict=self._info_dict)
-                init_file = os.path.join(
-                    self._path, self._module_name, '__init__.py')
+    def __write_init(self):
+        """Write the ``__init__.py`` file for the dataset.
 
-                with backup(init_file):
-                    with open(init_file, 'w') as f:
-                        f.write(str(arch))
+        This file has two portions: the start is just the string representation
+        of an archive with :attr:`_info_dict`.  The second part is the
+        following code which defines a function to load each of the data
+        attributes.  This latter part is only executed if the module is
+        imported directly, allowing one to import the modules without the
+        :pkg:`persist` package.
+
+        However, this will immediately read all arrays into memory.  If you
+        load the dataset with ``DataSet(filename)``, then you will get the
+        benefits of delayed loading etc.
+        """
+        INIT_IMPORT = ("""
+if __name__ == '{__NAME__}':
+    def _load(name):
+        import os.path
+        dir = os.path.dirname(__file__)
+        data_file = os.path.join(dir, '{DATA_PRE}{{}}{DATA_EXT}'.format(name))
+        pyfile = os.path.join(dir, '{{}}.py'.format(name))
+
+        d = {{}}
+        if os.path.exists(data_file):
+            import numpy, h5py
+            {DATA_NAME} = {{}}
+            with h5py.File(data_file, 'r') as f:
+                for k in f:
+                    {DATA_NAME}[k] = numpy.asarray(f[k])
+            d['{DATA_NAME}'] = _arrays
+        with open(pyfile) as f:
+            exec f.read() in d
+        return d[name]
+""", """
+    try: {name} = _load('{name}')
+    except: pass
+""", """
+    del _load
+""")
+
+        if self._module_name:
+            arch = Archive(allowed_names=['_info_dict'])
+            arch.insert(_info_dict=self._info_dict)
+
+            init_file = os.path.join(
+                self._path, self._module_name, '__init__.py')
+
+            with backup(init_file):
+                with open(init_file, 'w') as f:
+                    f.write(str(arch))
+                    f.write(INIT_IMPORT[0].format(
+                        __NAME__=os.path.basename(self._module_name),
+                        DATA_PRE='data_',
+                        DATA_EXT='.hd5',
+                        DATA_NAME=arch.data_name,
+                    ))
+                    for name in self._info_dict:
+                        f.write(INIT_IMPORT[1].format(name=name))
+                    f.write(INIT_IMPORT[2])
 
     def __str__(self):
         if self._synchronize:

@@ -1,11 +1,11 @@
 r"""Various Interfaces."""
-__all__ = ['IArchivable', 'Interface']
+__all__ = ['IArchivable', 'Interface', 'implements']
 
 import warnings
 
 try:
-    from zope.interface import Interface
-except ImportError:
+    from zope.interface import Interface, implements
+except ImportError:             # pragma: no cover
     warnings.warn("Could not import zope.interface... using a dummy version." +
                   " Interfaces may not work correctly.")
 
@@ -13,6 +13,9 @@ except ImportError:
         @classmethod
         def providedBy(cls, obj):
             return False
+
+    def implements(interface):          # pragma: no cover
+        pass
 
 
 class IArchivable(Interface):   # pragma: no cover
