@@ -131,8 +131,8 @@ data-file.
    - Performance: There have been some performance issues:
      c9e9fff8662f: A major improvement was made (this is not in archive!?!).
      daa21ec81421: Another bottleneck was removed.
-     23999d0c395e: Some of the code to make unique indices was running in O(n^2)
-     time because of expensive "in" lookups.  This was fixed by adding a
+     23999d0c395e: Some of the code to make unique indices was running in
+     O(n^2) time because of expensive "in" lookups.  This was fixed by adding a
      `_maxint` cache. The remaining performance issues appear to be in
      `_replace_rep`.
 
@@ -176,8 +176,8 @@ classes or functions: preliminary profiling shows functions to be slightly
 faster - and there is no need for using `global` - so I am using that for now.
 Local variables are assigned using keyword arguments.  The idea is to establish
 a one-to-one correspondence between functions and each object so that the
-representation can be evaluated without requiring textual replacements that have
-been the source of errors.
+representation can be evaluated without requiring textual replacements that
+have been the source of errors.
 
 The old format is clearer, but the replacements require render it somewhat
 unreliable::
@@ -418,12 +418,12 @@ class Archive(object):
     gname_prefix : str, optional
        This string is used to prefix all global variables.
     scoped : bool, optional
-       If `True`, then the representation is "scoped": i.e. a series of function
-       definitions.  This allows each entry to be evaluated in a local scope
-       without the need for textual replacements in the representation (which
-       can be either costly or error-prone).  The resulting output is not as
-       compact (can be on the order of 4 times larger), nor as legible, but
-       archiving can be much faster.
+       If `True`, then the representation is "scoped": i.e. a series of
+       function definitions.  This allows each entry to be evaluated in a local
+       scope without the need for textual replacements in the representation
+       (which can be either costly or error-prone).  The resulting output is
+       not as compact (can be on the order of 4 times larger), nor as legible,
+       but archiving can be much faster.
     robust_replace : bool, optional
        If `True`, then :func:`_replace_rep_robust` instead of
        :func:`_replace_rep`.  This is much more robust, but can be much slower
@@ -592,7 +592,7 @@ class Archive(object):
         if rep.startswith('<'):
             try:
                 return get_persistent_rep_pickle(obj, env)
-            except cPickle.PickleError, err:
+            except cPickle.PickleError:
                 raise ArchiveError(
                     "Could not archive object {}.  Even tried pickling!"
                     .format(rep))
@@ -607,9 +607,9 @@ class Archive(object):
             i = self._maxint + 1
             array_name = array_prefix + str(i)
             while array_name in self.data:
-                # This should only execute a few times if the user, for example,
-                # included manually an element with name "array_<n>" for
-                # example.
+                # This should only execute a few times if the user, for
+                # example, included manually an element with name "array_<n>"
+                # for example.
                 i += 1
                 array_name = array_prefix + str(i)
             self._maxint = i
@@ -1986,7 +1986,7 @@ def _unzip(q, n=3):
 
     """
     if 0 == len(q):
-        return [[] for n in range(n)]
+        return [[]] * n
     else:
         return map(list, zip(*q))
 
@@ -2309,6 +2309,7 @@ class AST(object):
         self.__dict__['expr'] = expr
         self.__dict__['ast'] = ast.parse(expr)
         self.__dict__['names'] = self._get_names()
+
     @property
     def expr(self):
         r"""Expression"""
@@ -2328,6 +2329,7 @@ class AST(object):
         return [_n.id for _n in ast.walk(ast.parse(self.expr))
                 if _n.__class__ is ast.Name
                 and _n.ctx.__class__ is not ast.Store]
+
 
 class Arch(object):
     r"""Maintains a collection of objects and provides a mechanism for
@@ -2351,7 +2353,7 @@ class Arch(object):
        been loaded, and it should be loaded by executing the string
        `rep` which specifies where the data is stored.
     """
-    def __init__(self, module_name=None, path = '.',
+    def __init__(self, module_name=None, path='.',
                  archive_prefix='_', archive_name='archive',
                  autoname_prefix='x_'):
         self.path = path
@@ -2365,7 +2367,7 @@ class Arch(object):
         r"""Raise :exc:`ValueError` if `name` clashes with
         :attr:`archive_prefix` or :attr:`archive_name`."""
         if (name == self.archive_name
-            or name.startswith(self.archive_prefix)):
+                or name.startswith(self.archive_prefix)):
             raise ValueError(
                 "Variable name must not be archive_name = %s or start "
                 "with archive_prefix = %s.  Got name=%s." %
@@ -2403,7 +2405,7 @@ class Arch(object):
             raise ValueError(
                 "Need to specify module_name before calling write.")
 
-        arch = archive.Archive(datafile=os.path.join(path, 'data.hd5'))
+        arch = Archive(datafile=os.path.join(path, 'data.hd5'))
         for name in self.data:
             arch.insert(name=self.data[name])
 
@@ -2418,9 +2420,8 @@ class Arch(object):
         else:
             os.mkdirs(mod_dir)
 
-
-        with open(os.path.join(mod_dir, '__init__.py'), 'w') as f:
-            #f.write(init_str)  #???
+        with open(os.path.join(mod_dir, '__init__.py'), 'w') as _f:
+            # _f.write(init_str)  #???
             pass
 
     def load(self, name):
@@ -2763,7 +2764,7 @@ class DataSet(object):
             else:
                 # Lock should have been established upon construction
                 if (not self._lock_file
-                    or not os.path.exists(self._lock_file)):
+                        or not os.path.exists(self._lock_file)):
                     raise IOError("Lost lock on %s!" % self._lock_file)
             yield
         except:
@@ -2782,7 +2783,7 @@ class DataSet(object):
 
     def __getattr__(self, name):
         r"""Load the specified attribute from disk."""
-        if name.startswith('_') or not name in self:
+        if name.startswith('_') or name not in self:
             # Provide access to state variables.
             raise AttributeError(
                 "'%s' object has no attribute '%s'" %
@@ -2805,7 +2806,7 @@ class DataSet(object):
                         d[k] = np.asarray(f[k])
             try:
                 execfile(archive_file, __d)
-            except KeyError, err:
+            except KeyError:
                 if f is None:
                     raise
                 else:

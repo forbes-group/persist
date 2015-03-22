@@ -410,8 +410,9 @@ class TestSuite(object):
     def test_get_persistent_rep_regression_1(self):
         r"""Regression for usage of get_persistent_rep().  Exceptions raised
         should not be ignored."""
+        import zope.interface
         class A(object):
-            interfaces.implements(interfaces.IArchivable)
+            zope.interface.implements(interfaces.IArchivable)
 
             def get_persistent_rep(self, env=None):
                 raise Exception()

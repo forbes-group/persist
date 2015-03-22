@@ -53,7 +53,9 @@ setup(name='persist',
           'sphinx>=1.3.1',
           'nose>=1.3',
           'coverage',
-          'flake8'],
+          'flake8',
+          'sphinxcontrib-zopeext'
+      ],
 
       # Metadata
       author='Michael McNeil Forbes',
