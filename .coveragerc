@@ -1,0 +1,8 @@
+[run]
+branch = True
+data_file = .coverage
+omit = persist/_contrib/*
+source = persist
+
+[html]
+directory = build/_coverage
