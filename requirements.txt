@@ -1,5 +1,0 @@
-Sphinx>=1.1.3
-sphinxcontrib-zopeext>=0.2.1
-
-h5py>=2.1.1
-nose>=1.2.1
