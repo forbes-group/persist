@@ -33,7 +33,12 @@ class test(original_test):
         # Call this to do complicated distribute stuff.
         original_test.run(self)
 
-        for cmd in ['nosetests', 'flake8', 'check']:
+        from nose.core import TestProgram
+        if not TestProgram(argv=['nosetests', '--config', 'setup.cfg'],
+                           exit=False).success:
+            raise sys.exit(1)
+
+        for cmd in ['flake8', 'check']:
             try:
                 self.run_command(cmd)
             except SystemExit, e:

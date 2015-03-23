@@ -7,10 +7,31 @@ import warnings
 
 import nose.tools
 
-import numpy as np
-import scipy as sp
 
-import h5py
+class SkipModule(object):
+    """Class to raise SkipTest if module not installed."""
+    def __init__(self, module):
+        self.module = module
+
+    def __getattribute__(self, key):
+        _dict = object.__getattribute__(self, '__dict__')
+        msg = '{module} not installed, skipping test'.format(**_dict)
+        raise nose.SkipTest(msg)
+
+try:
+    import numpy as np
+except ImportError:
+    np = SkipModule('numpy')
+
+try:
+    import scipy as sp
+except ImportError:
+    sp = None
+
+try:
+    import h5py
+except ImportError:
+    h5py = None
 
 from persist import objects
 from persist import interfaces
@@ -23,6 +44,34 @@ def skipknownfailure(f):
     """
     def skipper(*args, **kwargs):
         raise nose.SkipTest, 'This test is known to fail'
+        return f(*args, **kwargs)
+    return nose.tools.make_decorator(f)(skipper)
+
+
+def needs_numpy(f):
+    """Decorator to raise SkipTest if there is no numpy."""
+    def skipper(*args, **kwargs):
+        if np is None:
+            raise nose.SkipTest, 'Numpy not installed, skipping test'
+        return f(*args, **kwargs)
+    return nose.tools.make_decorator(f)(skipper)
+
+
+def needs_scipy(f):
+    """Decorator to raise SkipTest if there is no scipy."""
+    def skipper(*args, **kwargs):
+        if sp is None:
+            raise nose.SkipTest, 'Scipy not installed, skipping test'
+        return f(*args, **kwargs)
+    return nose.tools.make_decorator(f)(skipper)
+
+
+def needs_h5py(f):
+    """Decorator to raise SkipTest if there is no scipy."""
+    def skipper(*args, **kwargs):
+        if h5py is None:
+            raise nose.SkipTest, 'H5py not installed, skipping test'
+        return f(*args, **kwargs)
     return nose.tools.make_decorator(f)(skipper)
 
 
@@ -130,11 +179,8 @@ class Pickleable(object):
         self.pickled = True
 
 
-class TestSuite(object):
-    """Test the functionality of the archive module."""
-    def setUp(self):
-        np.random.seed(3)
-
+class ToolsMixin(object):
+    """Some testing tools"""
     def _test_archiving(self, obj):
         """Fail if obj does not acrhive properly."""
         arch = archive.Archive()
@@ -145,6 +191,9 @@ class TestSuite(object):
         nose.tools.assert_equals(1, len(ld))
         nose.tools.assert_equals(obj, ld['x'])
 
+
+class TestSuite(ToolsMixin):
+    """Test the functionality of the archive module."""
     def test_1(self):
         """Test archiving of instance A()"""
         l = [1, 2, 3]
@@ -205,7 +254,6 @@ class TestSuite(object):
         self._test_archiving([1])
         self._test_archiving([1, 2])
         self._test_archiving((1, 1))
-        self._test_archiving(np.sin)
         self._test_archiving(math.sin)
         self._test_archiving(None)
         self._test_archiving(type(None))
@@ -226,114 +274,6 @@ class TestSuite(object):
         assert isinstance(ld['l'], MyList)
         assert (ld['t'] == t)
         assert isinstance(ld['t'], MyTuple)
-
-    def test_numpy_types(self):
-        """Test archiving of numpy types"""
-        obj = dict(inf=np.inf,
-                   neg_inf=-np.inf,
-                   nan=np.nan,
-                   array=np.array([1, np.inf, np.nan]),
-                   ndarray=np.array([[1, 2], [3, 4]]),
-                   matrix=np.matrix([[1, 2], [3, 4]]))
-
-        arch = archive.Archive()
-        arch.insert(x=obj)
-        s = str(arch)
-        ld = {}
-        exec s in ld
-        nose.tools.assert_equals(1, len(ld))
-        nose.tools.assert_true(np.isnan(ld['x']['nan']))
-        nose.tools.assert_equals(np.inf, (ld['x']['inf']))
-        nose.tools.assert_equals(-np.inf, (ld['x']['neg_inf']))
-
-        a0 = obj['array']
-        a1 = ld['x']['array']
-
-        nose.tools.assert_equals(a0[0], a1[0])
-        nose.tools.assert_equals(a0[1], a1[1])
-        nose.tools.assert_true(np.isnan(a1[2]))
-
-        a0 = obj['ndarray']
-        a1 = ld['x']['ndarray']
-
-        nose.tools.assert_true((a0 == a1).all())
-        nose.tools.assert_true(a0.shape == a1.shape)
-
-    @skipknownfailure
-    def test_numpy_types2(self):
-        """Test archiving of complex numpy types"""
-        obj = dict(inf=1+1j*np.inf,
-                   neg_inf=1-1j*np.inf,
-                   nan=1-1j*np.nan,
-                   array=np.array([1, 1+1j*np.inf, 1+1j*np.nan]))
-
-        arch = archive.Archive()
-        arch.insert(x=obj)
-        s = str(arch)
-        ld = {}
-        exec s in ld
-        nose.tools.assert_equals(1, len(ld))
-        nose.tools.assert_true(np.isnan(ld['x']['nan']))
-        nose.tools.assert_equals(np.inf, (ld['x']['inf']))
-        nose.tools.assert_equals(-np.inf, (ld['x']['neg_inf']))
-
-        a0 = obj['array']
-        a1 = ld['x']['array']
-
-        nose.tools.assert_equals(a0[0], a1[0])
-        nose.tools.assert_equals(a0[1], a1[1])
-        nose.tools.assert_true(np.isnan(a1[2]))
-
-    def test_spmatrix_types(self):
-        """Test archiving of scipy.sparse.spmatrix types"""
-        A = np.random.random((2, 2))
-
-        obj = dict(csr=sp.sparse.csr_matrix(A),
-                   csc=sp.sparse.csc_matrix(A),
-                   bsr=sp.sparse.bsr_matrix(A),
-                   dia=sp.sparse.dia_matrix(A))
-
-        arch = archive.Archive()
-        arch.insert(x=obj)
-        s = str(arch)
-        ld = {}
-        exec s in ld
-        nose.tools.assert_equals(1, len(ld))
-        x = ld['x']
-        nose.tools.assert_true(sp.sparse.isspmatrix_csr(x['csr']))
-        nose.tools.assert_true(sp.sparse.isspmatrix_csc(x['csc']))
-        nose.tools.assert_true(sp.sparse.isspmatrix_bsr(x['bsr']))
-        nose.tools.assert_true(sp.sparse.isspmatrix_dia(x['dia']))
-
-        nose.tools.assert_true((A - x['csr'] == 0).all())
-        nose.tools.assert_true((A - x['csc'] == 0).all())
-        nose.tools.assert_true((A - x['bsr'] == 0).all())
-        nose.tools.assert_true((A - x['dia'] == 0).all())
-
-    @skipknownfailure
-    def test_spmatrix_types2(self):
-        """Test archiving of unsupported scipy.sparse.spmatrix
-        types."""
-        A = np.random.random((10, 10))
-
-        obj = dict(lil=sp.sparse.lil_matrix(A),
-                   dok=sp.sparse.dok_matrix(A),
-                   coo=sp.sparse.coo_matrix(A))
-
-        arch = archive.Archive()
-        arch.insert(x=obj)
-        s = str(arch)
-        ld = {}
-        exec s in ld
-        nose.tools.assert_equals(1, len(ld))
-        x = ld['x']
-        nose.tools.assert_true(sp.sparse.isspmatrix_lil(x['lil']))
-        nose.tools.assert_true(sp.sparse.isspmatrix_dok(x['dok']))
-        nose.tools.assert_true(sp.sparse.isspmatrix_coo(x['coo']))
-
-        nose.tools.assert_true((A - x['lil'] == 0).all())
-        nose.tools.assert_true((A - x['dok'] == 0).all())
-        nose.tools.assert_true((A - x['coo'] == 0).all())
 
     def test_mutual_deps(self):
         """Test non-reduction of non-simple mutual dependence."""
@@ -435,6 +375,82 @@ class TestSuite(object):
                 "dict(Q=1.0, a=_numpy.fromstring(" +
                 "'`\\xbf=_Q-\\xf2?', dtype='<f8'))")
 
+    def test_scoped_too_many_args_issue_12(self):
+        r"""Regression test for scoped representations with too many
+        arguments."""
+        arch = archive.Archive(scoped=True)
+        ls = [[] for _n in xrange(500)]
+        arch.insert(ls=ls)
+        d = {}
+        exec str(arch) in d
+        assert len(d['ls']) == 500
+
+
+class TestNumpy(ToolsMixin):
+    """Run numpy specific tests"""
+    @needs_numpy
+    def setUp(self):
+        np.random.seed(3)
+
+    def test_numpy_types(self):
+        """Test archiving of numpy types"""
+        self._test_archiving(np.sin)
+
+        obj = dict(inf=np.inf,
+                   neg_inf=-np.inf,
+                   nan=np.nan,
+                   array=np.array([1, np.inf, np.nan]),
+                   ndarray=np.array([[1, 2], [3, 4]]),
+                   matrix=np.matrix([[1, 2], [3, 4]]))
+
+        arch = archive.Archive()
+        arch.insert(x=obj)
+        s = str(arch)
+        ld = {}
+        exec s in ld
+        nose.tools.assert_equals(1, len(ld))
+        nose.tools.assert_true(np.isnan(ld['x']['nan']))
+        nose.tools.assert_equals(np.inf, (ld['x']['inf']))
+        nose.tools.assert_equals(-np.inf, (ld['x']['neg_inf']))
+
+        a0 = obj['array']
+        a1 = ld['x']['array']
+
+        nose.tools.assert_equals(a0[0], a1[0])
+        nose.tools.assert_equals(a0[1], a1[1])
+        nose.tools.assert_true(np.isnan(a1[2]))
+
+        a0 = obj['ndarray']
+        a1 = ld['x']['ndarray']
+
+        nose.tools.assert_true((a0 == a1).all())
+        nose.tools.assert_true(a0.shape == a1.shape)
+
+    @skipknownfailure
+    def test_numpy_types2(self):
+        """Test archiving of complex numpy types"""
+        obj = dict(inf=1+1j*np.inf,
+                   neg_inf=1-1j*np.inf,
+                   nan=1-1j*np.nan,
+                   array=np.array([1, 1+1j*np.inf, 1+1j*np.nan]))
+
+        arch = archive.Archive()
+        arch.insert(x=obj)
+        s = str(arch)
+        ld = {}
+        exec s in ld
+        nose.tools.assert_equals(1, len(ld))
+        nose.tools.assert_true(np.isnan(ld['x']['nan']))
+        nose.tools.assert_equals(np.inf, (ld['x']['inf']))
+        nose.tools.assert_equals(-np.inf, (ld['x']['neg_inf']))
+
+        a0 = obj['array']
+        a1 = ld['x']['array']
+
+        nose.tools.assert_equals(a0[0], a1[0])
+        nose.tools.assert_equals(a0[1], a1[1])
+        nose.tools.assert_true(np.isnan(a1[2]))
+
     def test__replace_rep_regression_issue_11b(self):
         r"""Regression test of bad replacement in numpy array rep.
 
@@ -447,16 +463,6 @@ class TestSuite(object):
         d = {}
         exec str(arch) in d
         assert d['c'].alpha == c.alpha
-
-    def test_scoped_too_many_args_issue_12(self):
-        r"""Regression test for scoped representations with too many
-        arguments."""
-        arch = archive.Archive(scoped=True)
-        ls = [[] for _n in xrange(500)]
-        arch.insert(ls=ls)
-        d = {}
-        exec str(arch) in d
-        assert len(d['ls']) == 500
 
     def test_data_duplicate_regression(self):
         """Regression against a bug where multiple calls to make_persistent()
@@ -471,7 +477,66 @@ class TestSuite(object):
         assert len(a.data) == 1
 
 
+class TestScipy(ToolsMixin):
+    """Run scipy specific tests"""
+    @needs_scipy
+    def setUp(self):
+        np.random.seed(3)
+
+    def test_spmatrix_types(self):
+        """Test archiving of scipy.sparse.spmatrix types"""
+        A = np.random.random((2, 2))
+
+        obj = dict(csr=sp.sparse.csr_matrix(A),
+                   csc=sp.sparse.csc_matrix(A),
+                   bsr=sp.sparse.bsr_matrix(A),
+                   dia=sp.sparse.dia_matrix(A))
+
+        arch = archive.Archive()
+        arch.insert(x=obj)
+        s = str(arch)
+        ld = {}
+        exec s in ld
+        nose.tools.assert_equals(1, len(ld))
+        x = ld['x']
+        nose.tools.assert_true(sp.sparse.isspmatrix_csr(x['csr']))
+        nose.tools.assert_true(sp.sparse.isspmatrix_csc(x['csc']))
+        nose.tools.assert_true(sp.sparse.isspmatrix_bsr(x['bsr']))
+        nose.tools.assert_true(sp.sparse.isspmatrix_dia(x['dia']))
+
+        nose.tools.assert_true((A - x['csr'] == 0).all())
+        nose.tools.assert_true((A - x['csc'] == 0).all())
+        nose.tools.assert_true((A - x['bsr'] == 0).all())
+        nose.tools.assert_true((A - x['dia'] == 0).all())
+
+    @skipknownfailure
+    def test_spmatrix_types2(self):
+        """Test archiving of unsupported scipy.sparse.spmatrix
+        types."""
+        A = np.random.random((10, 10))
+
+        obj = dict(lil=sp.sparse.lil_matrix(A),
+                   dok=sp.sparse.dok_matrix(A),
+                   coo=sp.sparse.coo_matrix(A))
+
+        arch = archive.Archive()
+        arch.insert(x=obj)
+        s = str(arch)
+        ld = {}
+        exec s in ld
+        nose.tools.assert_equals(1, len(ld))
+        x = ld['x']
+        nose.tools.assert_true(sp.sparse.isspmatrix_lil(x['lil']))
+        nose.tools.assert_true(sp.sparse.isspmatrix_dok(x['dok']))
+        nose.tools.assert_true(sp.sparse.isspmatrix_coo(x['coo']))
+
+        nose.tools.assert_true((A - x['lil'] == 0).all())
+        nose.tools.assert_true((A - x['dok'] == 0).all())
+        nose.tools.assert_true((A - x['coo'] == 0).all())
+
+
 class TestDatafile(object):
+    @needs_h5py
     def setUp(self):
         f = tempfile.NamedTemporaryFile(suffix='.hd5', delete=False)
         self.datafile = f.name
@@ -594,7 +659,8 @@ class TestDataSet(object):
         os.rmdir(self.ds_name)
 
     def tearDown(self):
-        shutil.rmtree(self.ds_name)
+        if os.path.exists(self.ds_name):
+            shutil.rmtree(self.ds_name)
 
     def test_failure1(self):
         r"""Regression test for a bug that left a DataSet in a bad
@@ -620,8 +686,12 @@ class TestDataSet(object):
         ds = archive.DataSet(self.ds_name, 'w')
         ds.a = NoStrNoRepr()
 
+    @needs_numpy
     def test_large_array(self):
         """Test large array in dataset"""
+        if np is None:
+            raise nose.SkipTest, 'Skipping numpy dependent test'
+
         a = np.arange(1000, dtype=float)
         ds = archive.DataSet(self.ds_name, 'w')
         ds.a = a
@@ -629,8 +699,12 @@ class TestDataSet(object):
         ds = archive.DataSet(self.ds_name, 'r')
         assert np.allclose(a, ds.a)
 
+    @needs_numpy
     def test_import1(self):
         """Test import of dataset"""
+        if np is None:
+            raise nose.SkipTest, 'Skipping numpy dependent test'
+
         module_name = 'module'
 
         ds_name = os.path.join(self.ds_name, module_name)
@@ -731,13 +805,21 @@ class TestCoverage(object):
         s = '[1, 2]'
         assert s == archive.AST(s).expr
 
+    @needs_numpy
     def test_array_name_clash(self):
+        if np is None:
+            raise nose.SkipTest, 'Skipping numpy dependent test'
+
         a = archive.Archive()
         a.insert(np.zeros(2))
 
     @nose.tools.raises(NotImplementedError)
+    @needs_numpy
     def test_datafile_nohdf5_1(self):
         """Test saving large arrays to disk without hdf5."""
+        if np is None:
+            raise nose.SkipTest, 'Skipping numpy dependent test'
+
         a = archive.Archive(array_threshold=2, datafile="/dev/null",
                             hdf5=False)
         M = np.random.rand(10)
@@ -745,8 +827,10 @@ class TestCoverage(object):
         a.make_persistent()
 
     @nose.tools.raises(NotImplementedError)
+    @needs_numpy
     def test_datafile_nohdf5_2(self):
         """Test saving large arrays to disk without hdf5."""
+        if np is None: raise nose.SkipTest, 'Skipping numpy dependent test'
         a = archive.Archive(array_threshold=2, datafile="/dev/null",
                             hdf5=False)
         M = np.random.rand(10)
