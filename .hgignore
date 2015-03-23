@@ -1,5 +1,6 @@
+syntax: glob
 _coverage
-\.coverage
-\.tox
-\.eggs
-persist\.egg-info
+.coverage
+.tox
+.eggs
+persist.egg-info

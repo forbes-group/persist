@@ -1,6 +1,5 @@
 import math
 import os
-import shutil
 import sys
 import tempfile
 import warnings
@@ -44,33 +43,6 @@ def skipknownfailure(f):
     """
     def skipper(*args, **kwargs):
         raise nose.SkipTest, 'This test is known to fail'
-        return f(*args, **kwargs)
-    return nose.tools.make_decorator(f)(skipper)
-
-
-def needs_numpy(f):
-    """Decorator to raise SkipTest if there is no numpy."""
-    def skipper(*args, **kwargs):
-        if np is None:
-            raise nose.SkipTest, 'Numpy not installed, skipping test'
-        return f(*args, **kwargs)
-    return nose.tools.make_decorator(f)(skipper)
-
-
-def needs_scipy(f):
-    """Decorator to raise SkipTest if there is no scipy."""
-    def skipper(*args, **kwargs):
-        if sp is None:
-            raise nose.SkipTest, 'Scipy not installed, skipping test'
-        return f(*args, **kwargs)
-    return nose.tools.make_decorator(f)(skipper)
-
-
-def needs_h5py(f):
-    """Decorator to raise SkipTest if there is no scipy."""
-    def skipper(*args, **kwargs):
-        if h5py is None:
-            raise nose.SkipTest, 'H5py not installed, skipping test'
         return f(*args, **kwargs)
     return nose.tools.make_decorator(f)(skipper)
 
@@ -388,7 +360,8 @@ class TestSuite(ToolsMixin):
 
 class TestNumpy(ToolsMixin):
     """Run numpy specific tests"""
-    @needs_numpy
+    np.__version__              # Will raise SkipTest if np not here
+
     def setUp(self):
         np.random.seed(3)
 
@@ -479,7 +452,8 @@ class TestNumpy(ToolsMixin):
 
 class TestScipy(ToolsMixin):
     """Run scipy specific tests"""
-    @needs_scipy
+    sp.__version__              # Will raise SkipTest if sp not here
+
     def setUp(self):
         np.random.seed(3)
 
@@ -536,7 +510,8 @@ class TestScipy(ToolsMixin):
 
 
 class TestDatafile(object):
-    @needs_h5py
+    h5py.__version__            # Will raise SkipTest if np not here
+
     def setUp(self):
         f = tempfile.NamedTemporaryFile(suffix='.hd5', delete=False)
         self.datafile = f.name
@@ -652,79 +627,6 @@ class DocTests(object):
         """
 
 
-class TestDataSet(object):
-    def setUp(self):
-        # Make a temporary directory for tests.
-        self.ds_name = tempfile.mkdtemp(dir='.')[2:]
-        os.rmdir(self.ds_name)
-
-    def tearDown(self):
-        if os.path.exists(self.ds_name):
-            shutil.rmtree(self.ds_name)
-
-    def test_failure1(self):
-        r"""Regression test for a bug that left a DataSet in a bad
-        state."""
-        ds = archive.DataSet(self.ds_name, 'w')
-
-        class A(object):
-            def __repr__(self):
-                raise Exception()
-
-        a = A()
-        try:
-            ds['a'] = a
-        except:
-            pass
-
-        # Archive should still be in an okay state
-        ds['x'] = 1
-        nose.tools.assert_equals(1, ds['x'])
-
-    def test_no_str_no_repr(self):
-        r"""Test that str and repr are not called unnecessarily."""
-        ds = archive.DataSet(self.ds_name, 'w')
-        ds.a = NoStrNoRepr()
-
-    @needs_numpy
-    def test_large_array(self):
-        """Test large array in dataset"""
-        if np is None:
-            raise nose.SkipTest, 'Skipping numpy dependent test'
-
-        a = np.arange(1000, dtype=float)
-        ds = archive.DataSet(self.ds_name, 'w')
-        ds.a = a
-        del ds
-        ds = archive.DataSet(self.ds_name, 'r')
-        assert np.allclose(a, ds.a)
-
-    @needs_numpy
-    def test_import1(self):
-        """Test import of dataset"""
-        if np is None:
-            raise nose.SkipTest, 'Skipping numpy dependent test'
-
-        module_name = 'module'
-
-        ds_name = os.path.join(self.ds_name, module_name)
-
-        a = np.arange(1000, dtype=float)
-        ds = archive.DataSet(ds_name, 'w')
-        ds.a = a
-        ds['b'] = 'b'
-        ds.c = 1
-        del ds
-
-        # Try importing
-        sys.path.append(self.ds_name)
-        ds = __import__(module_name)
-
-        assert ds._info_dict == dict(a=None, b='b', c=None)
-        assert np.allclose(ds.a, np.arange(1000, dtype=float))
-        assert ds.c == 1
-
-
 class TestPerformance(object):
     """Tests that could illustrate bad performance."""
     def test_1(self):
@@ -805,7 +707,6 @@ class TestCoverage(object):
         s = '[1, 2]'
         assert s == archive.AST(s).expr
 
-    @needs_numpy
     def test_array_name_clash(self):
         if np is None:
             raise nose.SkipTest, 'Skipping numpy dependent test'
@@ -814,7 +715,6 @@ class TestCoverage(object):
         a.insert(np.zeros(2))
 
     @nose.tools.raises(NotImplementedError)
-    @needs_numpy
     def test_datafile_nohdf5_1(self):
         """Test saving large arrays to disk without hdf5."""
         if np is None:
@@ -827,7 +727,6 @@ class TestCoverage(object):
         a.make_persistent()
 
     @nose.tools.raises(NotImplementedError)
-    @needs_numpy
     def test_datafile_nohdf5_2(self):
         """Test saving large arrays to disk without hdf5."""
         if np is None: raise nose.SkipTest, 'Skipping numpy dependent test'

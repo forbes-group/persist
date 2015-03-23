@@ -219,6 +219,7 @@ import ast
 import cPickle
 import copy
 import inspect
+import logging
 import os
 import re
 import string
@@ -2216,7 +2217,7 @@ def _replace_rep(rep, replacements, check=False, robust=True):
             regexp = re.compile(re_%(re.escape(old)), re.VERBOSE)
             n_rep = 0
             while True:
-                (rep, m) = regexp.subn(r"\g<a>%s\g<b>"%(replacements[old]), rep)
+                (rep, m) = regexp.subn(r"\g<a>%s\g<b>"%(replacements[old]),rep)
                 if m == 0: break
                 n_rep += m
    """
@@ -2484,7 +2485,7 @@ class DataSet(object):
 
     def __init__(self, module_name, mode='r', path=".",
                  synchronize=True,
-                 verbose=False, _reload=False,
+                 _reload=False,
                  array_threshold=100, backup_data=False,
                  name_prefix='x_',
                  timeout=60):
@@ -2499,7 +2500,7 @@ class DataSet(object):
            state on disk.  The resulting data set (with the new
            changes) will then be saved on disk.  During the write, the
            archive will be locked so that only one :class:`DataSet`
-           and write at a time.
+           can write at a time.
 
            If it is `False`, then locking is performed once a writable
            :class:`DataSet` is opened and only one writable instance
@@ -2514,8 +2515,6 @@ class DataSet(object):
         name_prefix : str
            This -- appended with an integer -- is used to form unique
            names when :meth:`insert` is called without specifying a name.
-        verbose : bool
-           If `True`, then report actions.
         array_threshold : int
            Threshold size above which arrays are stored as hd5 files.
         backup_data : bool
@@ -2534,7 +2533,6 @@ class DataSet(object):
         """
         self._synchronize = synchronize
         self._mode = mode
-        self._verbose = verbose
         self._array_threshold = array_threshold
         self._module_name = module_name
         self._path = path
@@ -2543,38 +2541,37 @@ class DataSet(object):
         self._info_dict = {}
         self._timeout = timeout
         self._maxint = -1
-
-        # If a writing lock is established, then the name of the lock
-        # file will be set here.  This serves as a flag.  Locking is
-        # implemented through the with mechanism.
-        if synchronize:
-            self._lock_file = ""
-        else:
-            # Establish lock now or fail...
-            self._lock_file = self._lock()
+        self._closed = False
+        self._lock_file = ""
 
         mod_dir = os.path.join(path, module_name)
         key_file = os.path.join(mod_dir, '_this_dir_is_a_DataSet')
+
         if os.path.exists(mod_dir):
             if not os.path.exists(key_file):
                 raise ValueError(
-                    ("Directory %s exists and is not a DataSet repository. "
+                    ("Directory %s exists and is not a DataSet repository. " +
                      "Please choose a unique location. ") % (mod_dir,))
 
-            self._load()
-        elif mode == 'w':
-            if self._verbose:
-                print("Making directory %s for output." % (mod_dir,))
-            os.makedirs(mod_dir)
-            open(key_file, 'w').close()
-        else:
+        elif mode == 'r':
             raise ValueError(
                 ("Default mode is read-only but directory %s does "
                  "not exist. Please choose an existing DataSet or "
                  "specify write mode with mode='w'.") % (mod_dir,))
+        elif mode == 'w':
+            logging.info("Making directory %s for output." % (mod_dir,))
+            os.makedirs(mod_dir)
+            open(key_file, 'w').close()
+        else:
+            raise NotImplementedError("mode=%s not supported" % (mode,))
+
+        if not synchronize:
+            self._lock()
+
+        self._load()
 
         # Needed for pre 2.6 python version to support tab completion
-        if sys.version < "2.6":
+        if sys.version < "2.6":  # pragma: no cover
             self.__members__ = self._info_dict.keys()
 
     def _load(self):
@@ -2592,19 +2589,25 @@ class DataSet(object):
         os.chdir(curdir)
 
     def _lock(self):
-        r"""Actually write the lock file, waiting for timeout if
-        needed.  Return the lock file name on success"""
+        r"""Actually write the lock file, waiting for timeout if  needed.
+
+        Store the lock file name in `self._lock`.
+        """
+        if self._closed:
+            raise IOError("DataSet has been closed")
+
         lock_file = os.path.join(self._path, self._module_name,
                                  self._lock_file_name)
 
         if os.path.exists(lock_file):
             tic = time.time()
             # Archive locked
-            while tic + self._timeout < time.time():
+            while time.time() - tic < self._timeout:
                 if not os.path.exists(lock_file):
                     # Lock release, so make lock-file
                     open(lock_file, 'w').close()
-                    return lock_file
+                    self._lock_file = lock_file
+                    return
                 time.sleep(0.5)
             # Timeout
             raise IOError(
@@ -2612,7 +2615,7 @@ class DataSet(object):
                 (lock_file,))
         else:
             open(lock_file, 'w').close()
-            return lock_file
+            self._lock_file = lock_file
 
     def _unlock(self):
         r"""Actually remove the lock file."""
@@ -2631,18 +2634,16 @@ class DataSet(object):
             if self._synchronize:
                 if self._lock_file:
                     raise NotImplementedError(
-                        "Lock already established! "
+                        "Lock already established! " +
                         "(Reentry not supported)")
                 else:
-                    self._lock_file = self._lock()
+                    self._lock()
             else:
                 # Lock should have been established upon construction
                 if (not self._lock_file
                         or not os.path.exists(self._lock_file)):
                     raise IOError("Lost lock on %s!" % self._lock_file)
             yield
-        except:
-            raise
         finally:
             r"""Reset the data set writing lock."""
             if self._synchronize:
@@ -2658,7 +2659,10 @@ class DataSet(object):
     def __getattr__(self, name):
         r"""Load the specified attribute from disk."""
         if name.startswith('_') or name not in self:
-            # Provide access to state variables.
+            if name == "close":
+                # Special case to allow access to _close without polluting the
+                # namespace
+                return self._close
             raise AttributeError(
                 "'%s' object has no attribute '%s'" %
                 (self.__class__.__name__, name))
@@ -2668,7 +2672,7 @@ class DataSet(object):
                                     "%s.py" % (name,))
         if os.path.exists(archive_file):
             d = {}
-            __d = {Archive.data_name: d}
+            _d = {Archive.data_name: d}
 
             datafile = os.path.join(self._path,
                                     self._module_name,
@@ -2679,7 +2683,7 @@ class DataSet(object):
                     for k in f:
                         d[k] = np.asarray(f[k])
             try:
-                execfile(archive_file, __d)
+                execfile(archive_file, _d)
             except KeyError:
                 if f is None:
                     raise
@@ -2689,9 +2693,9 @@ class DataSet(object):
                         (datafile, name)])
                     f.close()
                     raise KeyError(msg)
-            res = __d[name]
+            res = _d[name]
             del d
-            del __d
+            del _d
         else:
             res = None
         return res
@@ -2836,7 +2840,6 @@ if __name__ == '{__NAME__}':
                 ", ".join(["%s=%s" % (k, repr(getattr(self, '_' + k)))
                            for k in ['module_name', 'path',
                                      'synchronize',
-                                     'verbose',
                                      'array_threshold', 'backup_data',
                                      'name_prefix', ]]))
 
@@ -2881,6 +2884,10 @@ if __name__ == '{__NAME__}':
             names.add(name)
         return list(names)
 
+    def _close(self):
+        self._unlock()
+        self._closed = True
+
     def __del__(self):
         r"""Make sure we unlock archive."""
-        self._unlock()
+        self._close()
