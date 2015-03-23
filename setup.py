@@ -54,12 +54,20 @@ setup(name='persist',
           "zope.interface>=3.8.0"
       ],
 
-      setup_requires=[
-          'sphinx>=1.3.1',
+      extras_require={
+          'docs': [
+              'sphinx>=1.3.1',
+              'sphinxcontrib-zopeext',
+          ]
+      },
+
+      tests_require=[
           'nose>=1.3',
           'coverage',
           'flake8',
-          'sphinxcontrib-zopeext'
+          'numpy',
+          'scipy',
+          'h5py',
       ],
 
       # Metadata
