@@ -104,6 +104,23 @@ class TestDataSet(object):
         assert np.allclose(ds.a, a)
         assert ds.c == 1
 
+    def test_non_scoped(self):
+        ds = archive.DataSet(self.ds_name, 'w', scoped=False)
+        a = np.arange(1000, dtype=float)
+        ds.a = a
+        ds['a'] = a.shape
+        ds['b'] = 'b'
+        ds.c = 1
+
+        del ds
+
+        ds = archive.DataSet(self.ds_name, 'r')
+
+        assert ds._info_dict == dict(a=a.shape, b='b', c=None)
+        assert np.allclose(ds.a, a)
+        assert ds.c == 1
+
+
     @nose.tools.raises(IOError)
     def test_timeout1(self):
         """Test lock timeout."""

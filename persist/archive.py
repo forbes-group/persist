@@ -379,7 +379,7 @@ class Archive(object):
        module, then this is `None`.
     flat : bool, optional
        If `True`, then use a depth-first algorithm to reduce the dependency
-       graph, otherwise use a tree.  (See :meth:`make_persist`.)
+       graph, otherwise use a tree.  (See :meth:`make_persistent`.)
     tostring : True, False, optional
        If `True`, then use :meth:`numpy.ndarray.tostring` to
        format numpy strings.  This is more robust, but not
@@ -2488,7 +2488,8 @@ class DataSet(object):
                  _reload=False,
                  array_threshold=100, backup_data=False,
                  name_prefix='x_',
-                 timeout=60):
+                 timeout=60,
+                 scoped=True):
         r"""Constructor.  Note that all of the parameters are stored
         as attributes with a leading underscore appended to the name.
 
@@ -2524,6 +2525,13 @@ class DataSet(object):
            Time (in seconds) to wait for a writing lock to be released
            before raising an :exc:`IOException` exception.  (Default
            is 60s.)
+        scoped : bool, optional
+           If `True`, then the representation is "scoped": i.e. a series of
+           function definitions.  This allows each entry to be evaluated in a
+           local scope without the need for textual replacements in the
+           representation (which can be either costly or error-prone).  The
+           resulting output is not as compact (can be on the order of 4 times
+           larger), nor as legible, but archiving can be much faster.
 
         .. warning:: The locking mechanism is to prevent two archives
            from clobbering upon writing.  It is not designed to
@@ -2543,6 +2551,7 @@ class DataSet(object):
         self._maxint = -1
         self._closed = False
         self._lock_file = ""
+        self._scoped = scoped
 
         mod_dir = os.path.join(path, module_name)
         key_file = os.path.join(mod_dir, '_this_dir_is_a_DataSet')
@@ -2710,7 +2719,8 @@ class DataSet(object):
             raise ValueError("DataSet opened in read-only mode.")
 
         with self._ds_lock():              # Establish lock
-            arch = Archive(array_threshold=self._array_threshold)
+            arch = Archive(array_threshold=self._array_threshold,
+                           scoped=self._scoped)
             arch.insert(**{name: value})
             archive_file = os.path.join(self._path,
                                         self._module_name,
@@ -2809,7 +2819,8 @@ if __name__ == '{__NAME__}':
 """)
 
         if self._module_name:
-            arch = Archive(allowed_names=['_info_dict'])
+            arch = Archive(allowed_names=['_info_dict'],
+                           scoped=self._scoped)
             arch.insert(_info_dict=self._info_dict)
 
             init_file = os.path.join(

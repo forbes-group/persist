@@ -4,3 +4,4 @@ _coverage
 .tox
 .eggs
 persist.egg-info
+*.egg
