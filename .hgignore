@@ -1,0 +1,7 @@
+syntax: glob
+_coverage
+.coverage
+.tox
+.eggs
+persist.egg-info
+*.egg

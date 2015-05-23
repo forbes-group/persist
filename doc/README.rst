@@ -1,0 +1,53 @@
+
+Persistent Archival of Python Objects
+=====================================
+
+Persistent archival of python objects in an importable format.
+
+This package provides a method for archiving python objects to disk for
+long-term persistent storage. The archives are importable python
+packages with large data stored in
+`HDF5 <http://www.hdfgroup.org/HDF5/>`__ files using the
+`h5py <http://www.h5py.org>`__ package (if it is installed). The
+original goal was to overcomes several disadvatages of pickles:
+
+1. Archives are relatively stable to code changes. Unlike pickles,
+   changing the underlying code for a class will not change the ability
+   to read an archive if the API does not change.
+2. In the presence of API changes, the archives can be edited by hand to
+   fix them since they are simply python code. (Note: for reliability,
+   the generated code is highly structured and not so "pretty", but can
+   still be edited or debugged in the case of errors due to API
+   changes.)
+3. Efficient storage of large arrays.
+
+**Documentation:** http://persist.readthedocs.org
+
+**Source:** https://bitbucket.org/mforbes/persist
+
+**Issues:** https://bitbucket.org/mforbes/persist/issues
+
+Installing
+----------
+
+This package can be installed from `from the bitbucket
+project <https://bitbucket.org/mforbes/persist>`__:
+
+.. code:: bash
+
+    pip install hg+https://bitbucket.org/mforbes/persist
+
+API
+===
+
+.. toctree::
+   :maxdepth: 3
+
+   api/persist   
+
+Indices and Tables
+==================
+
+* :ref:`genindex`
+* :ref:`modindex`
+* :ref:`search`
