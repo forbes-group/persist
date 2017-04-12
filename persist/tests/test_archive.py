@@ -1,36 +1,13 @@
+from __future__ import print_function
+
 import math
 import os
 import sys
 import tempfile
 import warnings
 
-import nose.tools
+import pytest
 
-
-class SkipModule(object):
-    """Class to raise SkipTest if module not installed."""
-    def __init__(self, module):
-        self.module = module
-
-    def __getattribute__(self, key):
-        _dict = object.__getattribute__(self, '__dict__')
-        msg = '{module} not installed, skipping test'.format(**_dict)
-        raise nose.SkipTest(msg)
-
-try:
-    import numpy as np
-except ImportError:
-    np = SkipModule('numpy')
-
-try:
-    import scipy as sp
-except ImportError:
-    sp = None
-
-try:
-    import h5py
-except ImportError:
-    h5py = None
 
 from persist import objects
 from persist import interfaces
@@ -38,13 +15,38 @@ from persist import interfaces
 archive = sys.modules['persist.archive']
 
 
-def skipknownfailure(f):
-    r"""Decorator to raise SkipTest for test known to fail
-    """
-    def skipper(*args, **kwargs):
-        raise nose.SkipTest, 'This test is known to fail'
-        return f(*args, **kwargs)
-    return nose.tools.make_decorator(f)(skipper)
+@pytest.fixture
+def hdf5_datafile():
+    with tempfile.NamedTemporaryFile(suffix='.hd5', delete=True) as f:
+        yield f.name
+
+
+@pytest.fixture
+def np():
+    try:
+        import numpy
+        numpy.random.seed(3)
+        return numpy
+    except ImportError:         # pragma: no cover
+        pytest.skip("Skipping test that depends on numpy")
+
+
+@pytest.fixture
+def sp():
+    try:
+        import scipy
+        return scipy
+    except ImportError:         # pragma: no cover
+        pytest.skip("Skipping test that depends on scipy")
+
+
+@pytest.fixture
+def h5py():
+    try:
+        import h5py
+        return h5py
+    except ImportError:         # pragma: no cover
+        pytest.skip("Skipping test that depends on h5py")
 
 
 class A(object):
@@ -106,7 +108,7 @@ class NestedClasses(object):
         """Example of a nested class."""
 
 
-class TestException(Exception):
+class TException(Exception):
     pass
 
 
@@ -128,7 +130,8 @@ class NoStrNoRepr(objects.Archivable):
     def get_persistent_rep(self, env):
         rep = 'NoStrNoRepr()'
         args = {}
-        imports = []
+        imports = [
+            (archive.get_module(self).__name__, 'NoStrNoRepr', 'NoStrNoRepr')]
         return (rep, args, imports)
 
     def __str__(self):
@@ -160,8 +163,8 @@ class ToolsMixin(object):
         s = str(arch)
         ld = {}
         exec s in ld
-        nose.tools.assert_equals(1, len(ld))
-        nose.tools.assert_equals(obj, ld['x'])
+        assert 1 == len(ld)
+        assert obj == ld['x']
 
 
 class TestSuite(ToolsMixin):
@@ -259,30 +262,30 @@ class TestSuite(ToolsMixin):
         exec s in ld
         assert ld['z'][0] is ld['z'][2]
 
-    @nose.tools.raises(ValueError)
     def test_insert_1(self):
         """Check for _name exception."""
         arch = archive.Archive()
-        arch.insert(_a=1)
+        with pytest.raises(ValueError):
+            arch.insert(_a=1)
 
-    @nose.tools.raises(TestException)
     def test_check_on_insert(self):
         """Make sure check_on_insert works."""
         class A():
             def get_persistent_rep(self, env=None):
-                raise TestException()
+                raise TException()
         arch = archive.Archive()
         arch.check_on_insert = True
-        arch.insert(a=A())
+        with pytest.raises(TException):
+            arch.insert(a=A())
 
-    @nose.tools.raises(archive.CycleError)
     def test_cyclic_exception(self):
         """Make sure cyclic deps raise an error."""
         A = []
         A.append(A)
         arch = archive.Archive()
         arch.insert(a=A)
-        arch.make_persistent()
+        with pytest.raises(archive.CycleError):
+            arch.make_persistent()
 
     def test_archivable_members(self):
         """Test the archiving of bound class members."""
@@ -292,11 +295,11 @@ class TestSuite(ToolsMixin):
         s = str(arch)
         ld = {}
         exec s in ld
-        nose.tools.assert_equals(F.f(2), ld['f'](2))
-        nose.tools.assert_equals(F.f(2), ld['g'](F, 2))
+        assert F.f(2) == ld['f'](2)
+        assert F.f(2), ld['g'](F == 2)
 
-    @skipknownfailure
-    def test_nested_classes(self):
+    @pytest.mark.skip(reason="Known Failure")
+    def test_nested_classes(self):  # pragma: nocover
         """Test the archiving of nested classes."""
         F = NestedClasses.NestedFunctions(a=2)
         arch = archive.Archive()
@@ -304,8 +307,17 @@ class TestSuite(ToolsMixin):
         s = str(arch)
         ld = {}
         exec s in ld
-        nose.tools.assert_equals(F.f(2), ld['f'](2))
-        nose.tools.assert_equals(F.f(2), ld['g'](F, 2))
+        assert F.f(2) == ld['f'](2)
+        assert F.f(2), ld['g'](F == 2)
+
+    def test_builtins(self):
+        arch = archive.Archive()
+        arch.insert(m=math.sin, p=print)
+        s = str(arch)
+        ld = {}
+        exec s in ld
+        assert ld['m'] is math.sin
+        assert ld['p'] is print
 
     def test_pickle(self):
         r"""Test archiving of picklable objects as a last resort."""
@@ -320,7 +332,6 @@ class TestSuite(ToolsMixin):
         assert p1.pickled
         assert p.x == p1.x
 
-    @nose.tools.raises(Exception)
     def test_get_persistent_rep_regression_1(self):
         r"""Regression for usage of get_persistent_rep().  Exceptions raised
         should not be ignored."""
@@ -335,7 +346,8 @@ class TestSuite(ToolsMixin):
         arch = archive.Archive()
         a = A()
         arch.insert(a=a)
-        str(arch)
+        with pytest.raises(Exception):
+            str(arch)
 
     def test__replace_rep_regression_issue_11a(self):
         r"""Regression test of bad replacement in numpy array rep."""
@@ -360,12 +372,7 @@ class TestSuite(ToolsMixin):
 
 class TestNumpy(ToolsMixin):
     """Run numpy specific tests"""
-    np.__version__              # Will raise SkipTest if np not here
-
-    def setUp(self):
-        np.random.seed(3)
-
-    def test_numpy_types(self):
+    def test_numpy_types(self, np):
         """Test archiving of numpy types"""
         self._test_archiving(np.sin)
 
@@ -381,26 +388,26 @@ class TestNumpy(ToolsMixin):
         s = str(arch)
         ld = {}
         exec s in ld
-        nose.tools.assert_equals(1, len(ld))
-        nose.tools.assert_true(np.isnan(ld['x']['nan']))
-        nose.tools.assert_equals(np.inf, (ld['x']['inf']))
-        nose.tools.assert_equals(-np.inf, (ld['x']['neg_inf']))
+        assert 1 == len(ld)
+        assert np.isnan(ld['x']['nan'])
+        assert np.inf == (ld['x']['inf'])
+        assert -np.inf == (ld['x']['neg_inf'])
 
         a0 = obj['array']
         a1 = ld['x']['array']
 
-        nose.tools.assert_equals(a0[0], a1[0])
-        nose.tools.assert_equals(a0[1], a1[1])
-        nose.tools.assert_true(np.isnan(a1[2]))
+        assert a0[0] == a1[0]
+        assert a0[1] == a1[1]
+        assert np.isnan(a1[2])
 
         a0 = obj['ndarray']
         a1 = ld['x']['ndarray']
 
-        nose.tools.assert_true((a0 == a1).all())
-        nose.tools.assert_true(a0.shape == a1.shape)
+        assert (a0 == a1).all()
+        assert a0.shape == a1.shape
 
-    @skipknownfailure
-    def test_numpy_types2(self):
+    @pytest.mark.skip(reason="Known Failure")
+    def test_numpy_types2(self, np):  # pragma: nocover
         """Test archiving of complex numpy types"""
         obj = dict(inf=1+1j*np.inf,
                    neg_inf=1-1j*np.inf,
@@ -412,19 +419,19 @@ class TestNumpy(ToolsMixin):
         s = str(arch)
         ld = {}
         exec s in ld
-        nose.tools.assert_equals(1, len(ld))
-        nose.tools.assert_true(np.isnan(ld['x']['nan']))
-        nose.tools.assert_equals(np.inf, (ld['x']['inf']))
-        nose.tools.assert_equals(-np.inf, (ld['x']['neg_inf']))
+        assert 1 == len(ld)
+        assert np.isnan(ld['x']['nan'])
+        assert np.inf == (ld['x']['inf'])
+        assert -np.inf == (ld['x']['neg_inf'])
 
         a0 = obj['array']
         a1 = ld['x']['array']
 
-        nose.tools.assert_equals(a0[0], a1[0])
-        nose.tools.assert_equals(a0[1], a1[1])
-        nose.tools.assert_true(np.isnan(a1[2]))
+        assert a0[0] == a1[0]
+        assert a0[1] == a1[1]
+        assert np.isnan(a1[2])
 
-    def test__replace_rep_regression_issue_11b(self):
+    def test__replace_rep_regression_issue_11b(self, np):
         r"""Regression test of bad replacement in numpy array rep.
 
         This is the same example as test__replace_rep_regression_1a but shows
@@ -437,7 +444,7 @@ class TestNumpy(ToolsMixin):
         exec str(arch) in d
         assert d['c'].alpha == c.alpha
 
-    def test_data_duplicate_regression(self):
+    def test_data_duplicate_regression(self, np):
         """Regression against a bug where multiple calls to make_persistent()
         would insert multiple copies of data into self.data"""
 
@@ -452,12 +459,7 @@ class TestNumpy(ToolsMixin):
 
 class TestScipy(ToolsMixin):
     """Run scipy specific tests"""
-    sp.__version__              # Will raise SkipTest if sp not here
-
-    def setUp(self):
-        np.random.seed(3)
-
-    def test_spmatrix_types(self):
+    def test_spmatrix_types(self, np, sp):
         """Test archiving of scipy.sparse.spmatrix types"""
         A = np.random.random((2, 2))
 
@@ -471,20 +473,20 @@ class TestScipy(ToolsMixin):
         s = str(arch)
         ld = {}
         exec s in ld
-        nose.tools.assert_equals(1, len(ld))
+        assert 1 == len(ld)
         x = ld['x']
-        nose.tools.assert_true(sp.sparse.isspmatrix_csr(x['csr']))
-        nose.tools.assert_true(sp.sparse.isspmatrix_csc(x['csc']))
-        nose.tools.assert_true(sp.sparse.isspmatrix_bsr(x['bsr']))
-        nose.tools.assert_true(sp.sparse.isspmatrix_dia(x['dia']))
+        assert sp.sparse.isspmatrix_csr(x['csr'])
+        assert sp.sparse.isspmatrix_csc(x['csc'])
+        assert sp.sparse.isspmatrix_bsr(x['bsr'])
+        assert sp.sparse.isspmatrix_dia(x['dia'])
 
-        nose.tools.assert_true((A - x['csr'] == 0).all())
-        nose.tools.assert_true((A - x['csc'] == 0).all())
-        nose.tools.assert_true((A - x['bsr'] == 0).all())
-        nose.tools.assert_true((A - x['dia'] == 0).all())
+        assert (A - x['csr'] == 0).all()
+        assert (A - x['csc'] == 0).all()
+        assert (A - x['bsr'] == 0).all()
+        assert (A - x['dia'] == 0).all()
 
-    @skipknownfailure
-    def test_spmatrix_types2(self):
+    @pytest.mark.skip(reason="Known Failure")
+    def test_spmatrix_types2(self, np, sp):  # pragma: nocover
         """Test archiving of unsupported scipy.sparse.spmatrix
         types."""
         A = np.random.random((10, 10))
@@ -498,32 +500,21 @@ class TestScipy(ToolsMixin):
         s = str(arch)
         ld = {}
         exec s in ld
-        nose.tools.assert_equals(1, len(ld))
+        assert 1 == len(ld)
         x = ld['x']
-        nose.tools.assert_true(sp.sparse.isspmatrix_lil(x['lil']))
-        nose.tools.assert_true(sp.sparse.isspmatrix_dok(x['dok']))
-        nose.tools.assert_true(sp.sparse.isspmatrix_coo(x['coo']))
+        assert sp.sparse.isspmatrix_lil(x['lil'])
+        assert sp.sparse.isspmatrix_dok(x['dok'])
+        assert sp.sparse.isspmatrix_coo(x['coo'])
 
-        nose.tools.assert_true((A - x['lil'] == 0).all())
-        nose.tools.assert_true((A - x['dok'] == 0).all())
-        nose.tools.assert_true((A - x['coo'] == 0).all())
+        assert (A - x['lil'] == 0).all()
+        assert (A - x['dok'] == 0).all()
+        assert (A - x['coo'] == 0).all()
 
 
 class TestDatafile(object):
-    h5py.__version__            # Will raise SkipTest if np not here
-
-    def setUp(self):
-        f = tempfile.NamedTemporaryFile(suffix='.hd5', delete=False)
-        self.datafile = f.name
-        f.close()
-
-    def tearDown(self):
-        if os.path.exists(self.datafile):
-            os.unlink(self.datafile)
-
-    def test_datafile(self):
+    def test_datafile(self, hdf5_datafile, np, h5py):
         """Test saving large arrays to disk."""
-        a = archive.Archive(array_threshold=2, datafile=self.datafile,
+        a = archive.Archive(array_threshold=2, datafile=hdf5_datafile,
                             backup_data=False)
         M = np.random.rand(10)
         a.insert(M=M)
@@ -531,7 +522,7 @@ class TestDatafile(object):
 
         assert len(a.data) == 1
         array_name = a.data.keys()[0]
-        with h5py.File(self.datafile) as f:
+        with h5py.File(hdf5_datafile) as f:
             assert np.allclose(f[array_name], M)
 
         s = str(a)
@@ -543,13 +534,6 @@ class TestDatafile(object):
 
 
 class TestDeprecationWarning(object):
-    def setUp(self):
-        warnings.filterwarnings('error', category=DeprecationWarning)
-
-    def tearDown(self):
-        warnings.filters.pop(0)
-
-    @nose.tools.raises(DeprecationWarning)
     def test_deprecation_warning(self):
         """Test archive_1 deprecation warning"""
         class A():
@@ -557,48 +541,67 @@ class TestDeprecationWarning(object):
                 return ('A', {}, [])
         arch = archive.Archive()
         arch.insert(a=A())
-        str(arch)
+        with pytest.deprecated_call():
+            str(arch)
+
+
+class A_archive_1():
+    """Class with deprecated and erroneous form of archive_1."""
+    def archive_1(self):        # pragma: nocover
+        return ('A', {}, [])
+
+
+class A_get_persistent_rep():
+    def get_persistent_rep(self):  # pragma: nocover
+        return ('A', {}, [])
 
 
 class TestWarnings(object):
-    def setUp(self):
-        warnings.filterwarnings(
-            'ignore',
-            r"archive_1 is deprecated: use get_persistent_rep",
-            category=DeprecationWarning)
-        warnings.filterwarnings(
-            'error',
-            r"Found archive_1\(\) but got TypeError:.*",
-            category=Warning)
-        warnings.filterwarnings(
-            'error',
-            r"Found get_persistent_rep\(\) but got TypeError:.*",
-            category=Warning)
-
-    def tearDown(self):
-        warnings.filters.pop(0)
-        warnings.filters.pop(0)
-        warnings.filters.pop(0)
-
-    @nose.tools.raises(Warning)
     def test_archive_1_warning(self):
         """Test archive_1 warning"""
-        class A():
-            def archive_1(self):
-                return ('A', {}, [])
         arch = archive.Archive()
-        arch.insert(a=A())
-        str(arch)
+        arch.insert(a=A_archive_1())
+        with pytest.deprecated_call():
+            with pytest.warns(UserWarning) as w:
+                str(arch)
+        assert len(w) == 2
+        assert w[0].message[0] == (
+            'archive_1 is deprecated: use get_persistent_rep')
+        assert w[1].message[0] == (
+            '\n'.join(['Found archive_1() but got TypeError:',
+                       'archive_1() takes exactly 1 argument (2 given)']))
 
-    @nose.tools.raises(Warning)
     def test_get_persistent_rep_warning(self):
         """Test get_persistent_rep warning"""
+        arch = archive.Archive()
+        arch.insert(a=A_get_persistent_rep())
+        with pytest.warns(UserWarning) as w:
+            str(arch)
+        assert len(w) == 1
+        assert w[0].message[0] == (
+            '\n'.join(['Found get_persistent_rep() but got TypeError:',
+                       'get_persistent_rep() takes exactly 1 argument (2 given)']))
+
+    def test_nested_class(self):
+        """Can't pickle nested classes."""
         class A():
-            def get_persistent_rep(self):
+            def archive_1(self):  # pragma: nocover
                 return ('A', {}, [])
         arch = archive.Archive()
         arch.insert(a=A())
-        str(arch)
+        with pytest.warns(UserWarning) as w:
+            with pytest.raises(archive.ArchiveError) as e:
+                str(arch)
+
+        assert len(w) == 2
+        assert w[0].message[0] == (
+            'archive_1 is deprecated: use get_persistent_rep')
+        assert w[1].message[0] == (
+            '\n'.join(['Found archive_1() but got TypeError:',
+                       'archive_1() takes exactly 1 argument (2 given)']))
+        assert e.value[0].startswith(
+            'Could not archive object <')
+        assert e.value[0].endswith('>.  Even tried pickling!')
 
 
 class DocTests(object):
@@ -607,24 +610,27 @@ class DocTests(object):
         >>> a = archive.Archive()
         >>> a.insert(x_1=None)
         >>> a.insert(x_2=None)
-        >>> print a
+        >>> print(a)
         x_2 = None
         x_1 = x_2
         try: del __builtins__
         except NameError: pass
+        >>> a.names()
+        ['x_1', 'x_2']
         """
 
-    def regression_2(self):
+
+class TestRegression(object):
+    def test_regression_1(self, np):
         r"""Here is a regression test for an old bug.  Sometimes the member
         `_` of the `__builtins__` model can have an array in it which
         causes tests like `if obj in vals` to fail.  Fix is to use
         `id()`.
-
-        >>> import __builtin__
-        >>> __builtin__._ = np.array([1, 2])
-        >>> archive.get_persistent_rep_type(type(None), {})
-        ('NoneType', {}, [('types', 'NoneType', 'NoneType')])
         """
+        import __builtin__
+        __builtin__._ = np.array([1, 2])
+        rep = archive.get_persistent_rep_type(type(None), {})
+        assert rep == ('NoneType', {}, [('types', 'NoneType', 'NoneType')])
 
 
 class TestPerformance(object):
@@ -647,7 +653,15 @@ class TestPerformance(object):
         arch = archive.Archive()
         arch.insert(a=NoStrNoRepr())
         s = str(arch)
+        ld = {}
+        exec s in ld
+        assert isinstance(ld['a'], NoStrNoRepr)
+        with pytest.raises(NotImplementedError):
+            str(ld['a'])
+        with pytest.raises(NotImplementedError):
+            repr(ld['a'])
         del s
+
 
     def _test_large_array(self):
         r"""Test archiving a large list.  This was giving some performance
@@ -657,7 +671,7 @@ class TestPerformance(object):
         #ds.c = c
 
 
-class TestCoverageDoctests(object):
+def coverage_doctests():
     """Ensure coverage.
 
     >>> a = archive.Archive()
@@ -677,14 +691,6 @@ class TestCoverageDoctests(object):
     ...
     ArchiveError: Could not archive object <object>.  Even tried pickling!
 
-    >>> a = archive.Archive(array_threshold=2)
-    >>> a.data['array_0'] = None   # Do not do this!  Just to trigger coverage
-    >>> a.insert(a=np.zeros(4))
-    >>> a
-    a = _arrays['array_1']
-    try: del __builtins__
-    except NameError: pass
-
     >>> archive.get_persistent_rep_repr(1, {})
     ('1', {}, [])
 
@@ -694,7 +700,6 @@ class TestCoverageDoctests(object):
     >>> type(archive.AST('[1,2,3]').ast)
     <class '_ast.Module'>
     """
-    # Don't include regular tests here - they may be skipped.
 
 
 class TestCoverage(object):
@@ -707,48 +712,64 @@ class TestCoverage(object):
         s = '[1, 2]'
         assert s == archive.AST(s).expr
 
-    def test_array_name_clash(self):
-        if np is None:
-            raise nose.SkipTest, 'Skipping numpy dependent test'
-
+    def test_array_name_clash(self, np):
         a = archive.Archive()
-        a.insert(np.zeros(2))
+        with pytest.raises(ValueError) as e:
+            a.insert(np.zeros(2))
+        assert e.value[0] == (
+            'Insert objects with a key: insert(x=3), not insert([ 0.  0.])')
 
-    @nose.tools.raises(NotImplementedError)
-    def test_datafile_nohdf5_1(self):
+    def test_array_name_clash2(self, np, hdf5_datafile):
+        a = archive.Archive(array_threshold=2, datafile=hdf5_datafile)
+        a.data['array_0'] = np.zeros(2)
+        a.insert(x=np.zeros(5), env={})
+        s = str(a)
+        assert s == "\n".join(["x = _arrays['array_1']",
+                               "try: del __builtins__",
+                               "except NameError: pass"])
+
+    def test_datafile_nohdf5_1(self, np):
         """Test saving large arrays to disk without hdf5."""
-        if np is None:
-            raise nose.SkipTest, 'Skipping numpy dependent test'
-
         a = archive.Archive(array_threshold=2, datafile="/dev/null",
                             hdf5=False)
         M = np.random.rand(10)
         a.insert(M=M)
-        a.make_persistent()
+        with pytest.raises(NotImplementedError):
+            a.make_persistent()
 
-    @nose.tools.raises(NotImplementedError)
-    def test_datafile_nohdf5_2(self):
+    def test_datafile_nohdf5_2(self, np):
         """Test saving large arrays to disk without hdf5."""
-        if np is None: raise nose.SkipTest, 'Skipping numpy dependent test'
         a = archive.Archive(array_threshold=2, datafile="/dev/null",
                             hdf5=False)
         M = np.random.rand(10)
         a.insert(M=M)
-        a.scoped__str__()
+        with pytest.raises(NotImplementedError):
+            a.scoped__str__()
+
+    def test_get_persistent_rep_repr(self):
+        rep = archive.get_persistent_rep_repr(1, {}, rep=None)
+        assert rep == ('1', {}, [])
+
+    def test_gname(self):
+        a = archive.Archive()
+        g0 = a.gname_prefix + '0'
+        a.allowed_names.append(g0)
+        a.insert(**{g0: 1})
+        a.insert(a={'a': 1})
+        s = str(a)
+        ld = {}
+        exec s in ld
+        assert ld['a'] == {'a': 1}
+        assert ld[g0] == 1
 
 
 class TestCoverageMissingModules(object):
     """Coverage of some missing module checks"""
-    def setUp(self):
-        self.h5py = archive.h5py
-        archive.h5py = None
-
-    def tearDown(self):
-        archive.h5py = self.h5py
-
-    @nose.tools.raises(archive.ArchiveError)
     def test_missing_hdf5(self):
-        archive.Archive(hdf5=True)
+        h5py, archive.h5py = archive.h5py, None
+        with pytest.raises(archive.ArchiveError):
+            archive.Archive(hdf5=True)
+        archive.h5py = h5py
 
 
 class TestGraph(object):

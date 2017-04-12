@@ -848,7 +848,7 @@ def getmodule(obj):
     ... else:
     ...     name = module.__name__
     >>> name
-    'rad_util'
+    'persist._contrib.RADLogic.rad_util'
     >>> module is sys.modules[__name__]
     1
 
