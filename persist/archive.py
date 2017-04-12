@@ -731,7 +731,7 @@ class Archive(object):
         names = _unzip(self.arch)[0]
         return UniqueNames(names).unique(name)
 
-    def insert(self, env=None, **kwargs):
+    def insert(self, v=None, env=None, **kwargs):
         r"""Insert named object pairs (kwargs) into the archive.
 
         If `self.check_on_insert`, then try generating rep (may raise
@@ -833,6 +833,11 @@ class Archive(object):
           ('A', '_numpy.array([1, 2, 3])'),
           ('_x', '5')])
         """
+        if v is not None:
+            raise ValueError(
+                'Insert objects with a key: insert(x=3), not insert({})'
+                .format(v))
+
         if env is None:
             env = {}
 
@@ -1107,7 +1112,8 @@ class Archive(object):
         try:
             graph = _Graph(objects=self.arch,
                            get_persistent_rep=self.get_persistent_rep,
-                           gname_prefix=self.gname_prefix)
+                           gname_prefix=self.gname_prefix,
+                           allowed_names=set(self.allowed_names))
         except topsort.CycleError, err:
             raise CycleError, err.args, sys.exc_info()[-1]
 
@@ -1226,8 +1232,7 @@ def get_toplevel_imports(obj, env=None):
         if _obj is not obj:  # pragma: nocover
             raise AttributeError
     else:  # pragma: nocover
-        raise ArchiveError(
-            "name %s is not in module %s."%(name, mname))
+        raise ArchiveError("name {0} is not in module {0}.".format(name))
 
     return ([(mname, name, name)], name)
 
@@ -1258,11 +1263,7 @@ def repr_(obj, robust=True):
 
 def get_module(obj):
     r"""Return module in which object is defined."""
-    module = inspect.getmodule(obj)
-    if module is not __builtin__:
-        return module
-    else:                       # pragma: no cover
-        return None
+    return inspect.getmodule(obj)
 
 
 def get_persistent_rep_args(obj, args):
@@ -1283,7 +1284,7 @@ def get_persistent_rep_args(obj, args):
     imports = [(module, name, name)]
 
     keyvals = ["=".join((k, k)) for k in args]
-    rep = "%s(%s)"%(name, ", ".join(keyvals))
+    rep = "{}({})".format(name, ", ".join(keyvals))
     return (rep, args, imports)
 
 
@@ -1294,16 +1295,11 @@ def get_persistent_rep_repr(obj, env, rep=None):
     """
     imports = []
     args = {}
-    if rep is None:
-        rep = repr(obj)
-    scope = {}
-    try:
-        module = get_module(obj.__class__)
-        if module is not __builtin__:
-            scope = copy.copy(module.__dict__)
-    except:                     # pragma: no cover
-        1+1                     # Needed to deal with coverage bug
+
+    module = get_module(obj.__class__)
+    scope = copy.copy(module.__dict__)
     scope.update(env)
+    rep = repr(obj)
 
     _ast = AST(rep)
 
@@ -1363,7 +1359,6 @@ def get_persistent_rep_float(obj, env):
 
 def get_persistent_rep_obj(obj, env):
     r"""Archive objects at the top level of a module."""
-    ##module = get_module(obj)
     imports, rep = get_toplevel_imports(obj, env)
     return (rep, {}, imports)
 
@@ -1391,7 +1386,7 @@ def _get_rep(obj, arg_rep):
     builtin types."""
     module = obj.__class__.__module__
     cname = obj.__class__.__name__
-    rep = "%s(%s)"%(cname, arg_rep)
+    rep = "{}({})".format(cname, arg_rep)
     return (rep, (module, cname, cname))
 
 
@@ -1408,7 +1403,7 @@ def get_persistent_rep_list(l, env):
         names.add(name)
         reps.append(name)
 
-    rep = "[%s]"%(", ".join(reps))
+    rep = "[{}]".format(", ".join(reps))
 
     if l.__class__ is not list:
         rep, imp = _get_rep(l, rep)
@@ -1420,9 +1415,9 @@ def get_persistent_rep_list(l, env):
 def get_persistent_rep_tuple(t, env):
     rep, args, imports = get_persistent_rep_list(list(t), env=env)
     if len(t) == 1:
-        rep = "(%s, )"%(rep[1:-1])
+        rep = "({}, )".format(rep[1:-1])
     else:
-        rep = "(%s)"%(rep[1:-1])
+        rep = "({})".format(rep[1:-1])
 
     if t.__class__ is not tuple:
         rep, imp = _get_rep(t, rep)
@@ -1433,10 +1428,8 @@ def get_persistent_rep_tuple(t, env):
 
 def get_persistent_rep_dict(d, env):
     rep, args, imports = get_persistent_rep_list(d.items(), env)
-
-    if d.__class__ is not list:
-        rep, imp = _get_rep(d, rep)
-        imports.append(imp)
+    rep, imp = _get_rep(d, rep)
+    imports.append(imp)
 
     return (rep, args, imports)
 
@@ -1908,7 +1901,8 @@ class _Graph(Graph):
         if name is None:
             name = self.gname
         else:
-            assert not name.startswith(self.gname_prefix)
+            assert (name in self.allowed_names
+                    or not name.startswith(self.gname_prefix))
             assert name not in self.names
         self.names.add(name)
         rep, args, imports = self.get_persistent_rep(obj, env)
