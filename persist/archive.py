@@ -104,11 +104,9 @@ Large Archives
 --------------
 For small amounts of data, the string representation of
 :class:`Archive` is usually sufficient.  For large amounts of binary
-data, however, this
-
-is extremely inefficient.  In this case, a separate archive format is
-used where the archive is turned into a module that contains a binary
-data-file.
+data, however, this is extremely inefficient.  In this case, a separate archive
+format is used where the archive is turned into a module that contains a binary
+datafile or datadir.
 
 .. todo::
    - Consider using imports rather than execfile etc. for loading
@@ -246,11 +244,6 @@ try:
 except ImportError:             # pragma: no cover
     h5py = None
 
-try:
-    import tables
-except ImportError:             # pragma: no cover
-    tables = None
-
 import interfaces
 import objects
 
@@ -355,6 +348,58 @@ def backup(filename, keep=True):
         os.remove(backup_name)
 
 
+def _save_arrays(arrays, filename, keep=False, format='npy'):
+    """Archive the arraty to the specified file.
+
+    Arguments
+    ---------
+    arrays : dict
+       Mapping from names (must be valid python identifiers) to data arrays.
+    filename : str
+       Name of file/directory in which to archive the data.
+    format : 'hdf5', 'npy', 'npz'
+       Format of data on disk.
+    """
+    if format == 'hdf5':
+        with backup(filename, keep=keep):
+            with h5py.File(filename) as f:
+                for name in arrays:
+                    f[name] = arrays[name]
+    else:
+        raise NotImplementedError(
+            "Data can presently only be saved with format='hdf5'")
+
+
+def _load_arrays(filename, keys=None, format=None):
+    """Return a dictionary with the arrays from the specified file.
+
+    Arguments
+    ---------
+    filename : str
+       Name of file/directory to read data from.
+    key : str, None
+       Name of data to read.  If `None`, then load all the data.
+    format : 'hdf5', 'npy', 'npz', None
+       Format of data on disk.  If `None`, then the format is inferred from the
+       filename extension which must end in `.hd5`, `.npy`, or `.npz`.
+    """
+    if format is None:
+        format = filename.split(os.path.extsep)[-1]
+        if format in set(['hd5']):
+            format = 'hdf5'
+
+    arrays = None
+    if format == 'hdf5':
+        with h5py.File(filename, 'r') as f:
+            if keys is None:
+                keys = f
+            arrays = {k: np.asarray(f[k]) for k in keys}
+    else:
+        raise NotImplementedError(
+            "Data can presently only be saved with format='hdf5'")
+    return arrays
+
+
 class Archive(object):
     r"""Archival tool.
 
@@ -404,14 +449,14 @@ class Archive(object):
        be allowed as a valid name for other data in the archive.
     datafile : None, str, optional
        If provided, then numpy arrays longer than
-       :attr:`array_threshold` are archived in binary to this file.
+       :attr:`array_threshold` are archived in binary to this file or directory.
        (See also `hdf5`).  Otherwise, they will be stored in
        :attr:`data` which must be manually archived and restored
        externally.  The data will be written when
        :meth:`make_persistent` is called.
     hdf5 : True, False, optional
        If `True` and `datafile` is provided, then use hdf5 via the h5py package
-       to store the binary data.
+       to store the binary data, otherwise use .npz files.
     backup_data : bool
        If `True` and :attr:`datafile` already exists, then a backup of
        the data will first be made with an extension `'.bak'` or
@@ -548,14 +593,18 @@ class Archive(object):
         self.data = {}
         self.datafile = datafile
         self.hdf5 = hdf5
+        if hdf5:
+            if h5py:
+                self._data_format = 'hdf5'
+            else:
+                raise ArchiveError(
+                    "HDF5 requested but h5py could not be imported.")
+        else:
+            self._data_format = 'npy'
         self.scoped = scoped
         self.robust_replace = robust_replace
 
         self._maxint = -1       # Cache of maximum int label in archive
-
-        if hdf5 and not h5py:
-            raise ArchiveError(
-                "HDF5 requested but h5py could not be imported.")
 
     def names(self):
         r"""Return list of unique names in the archive."""
@@ -1031,14 +1080,10 @@ class Archive(object):
 
         # Archive the data to file if requested.
         if self.data and self.datafile is not None:
-            if self.hdf5 and h5py:
-                with backup(self.datafile, keep=self.backup_data):
-                    with h5py.File(self.datafile) as f:
-                        for name in self.data:
-                            f[name] = self.data[name]
-            else:
-                raise NotImplementedError(
-                    "Data can presently only be saved with hdf5")
+            _save_arrays(arrays=self.data,
+                         filename=self.datafile,
+                         keep=self.backup_data,
+                         format=self._data_format)
 
         return (graph.imports, names_reps)
 
@@ -1159,14 +1204,10 @@ class Archive(object):
 
         # Archive the data to file if requested.
         if self.data and self.datafile is not None:
-            if self.hdf5 and h5py:
-                with backup(self.datafile, keep=self.backup_data):
-                    with h5py.File(self.datafile) as f:
-                        for name in self.data:
-                            f[name] = self.data[name]
-            else:
-                raise NotImplementedError(
-                    "Data can presently only be saved with hdf5")
+            _save_arrays(arrays=self.data,
+                         filename=self.datafile,
+                         keep=self.backup_data,
+                         format=self._data_format)
 
         gnames = ", ".join(_n for _n in names
                            if _n.startswith(self.gname_prefix)
@@ -2680,22 +2721,20 @@ class DataSet(object):
             datafile = os.path.join(self._path,
                                     self._module_name,
                                     "data_%s.hd5" % (name,))
-            f = None
-            if os.path.exists(datafile):
-                with h5py.File(datafile, 'r') as f:
-                    for k in f:
-                        d[k] = np.asarray(f[k])
+            try:
+                d.update(_load_arrays(datafile, format='hdf5'))
+                datafile_exists = True
+            except IOError:
+                datafile_exists = False
+
             try:
                 execfile(archive_file, _d)
             except KeyError:
-                if f is None:
-                    raise
-                else:
-                    msg = "\n".join([
+                if datafile_exists:
+                    raise KeyError("\n".join([
                         "No datafile '%s' found to load '%s'.",
-                        (datafile, name)])
-                    f.close()
-                    raise KeyError(msg)
+                        (datafile, name)]))
+                raise
             res = _d[name]
             del d
             del _d
@@ -2729,15 +2768,11 @@ class DataSet(object):
             datafile = os.path.join(self._path,
                                     self._module_name,
                                     "data_%s.hd5" % (name,))
-            with backup(datafile, keep=self._backup_data):
-                if arch.data:
-                    if arch.hdf5 and h5py:
-                        with h5py.File(datafile) as f:
-                            for _name in arch.data:
-                                f[_name] = arch.data[_name]
-                    else:
-                        raise NotImplementedError(
-                            "Data can presently only be saved with hdf5")
+
+            _save_arrays(arrays=arch.data,
+                         filename=datafile,
+                         keep=self._backup_data,
+                         format=arch._data_format)
 
         # Needed for pre 2.6 python version to support tab completion
         if sys.version < "2.6":
