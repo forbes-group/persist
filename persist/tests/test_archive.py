@@ -632,6 +632,20 @@ class TestRegression(object):
         rep = archive.get_persistent_rep_type(type(None), {})
         assert rep == ('NoneType', {}, [('types', 'NoneType', 'NoneType')])
 
+    def test_regression_11a(self):
+        "Regression test for issue 11: duplicated data in non-scoped archive."
+        x = [1, 2, 3]
+        y = [x, x]
+        for scoped in [True, False]:
+            a = archive.Archive(scoped=scoped)
+            a.insert(y=y)
+            s = str(a)
+            d = {}
+            exec(s, d)
+            y_ = d['y']
+            assert y[0] is y[1]
+            assert y_[0] is y_[1]
+
 
 class TestPerformance(object):
     """Tests that could illustrate bad performance."""
