@@ -2855,7 +2855,7 @@ if __name__ == '{__NAME__}':
             init_file = os.path.join(
                 self._path, self._module_name, '__init__.py')
 
-            with backup(init_file):
+            with backup(init_file, keep=self._backup_data):
                 with open(init_file, 'w') as f:
                     f.write(str(arch))
                     f.write(INIT_IMPORT[0].format(
