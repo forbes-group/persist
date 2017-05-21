@@ -157,3 +157,12 @@ class TestCoverage(object):
     def test_bad_mode(self, ds_name):
         with pytest.raises(NotImplementedError):
             archive.DataSet(ds_name, mode='oops')
+
+
+def test_issue_10(ds_name, np):
+    """Regression for issue 10 that __init__.py backup files stick arround."""
+    ds = archive.DataSet(ds_name, mode='w', backup_data=False)
+    ds.a = np.ones(10)
+    ds.x = np.ones(100)
+    for f in os.listdir(ds_name):
+        assert not f.endswith('.bak')
