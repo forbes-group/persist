@@ -214,6 +214,7 @@ __all__ = ['Archive', 'DataSet', 'restore',
 
 import __builtin__
 import ast
+from collections import OrderedDict
 import cPickle
 import copy
 import inspect
@@ -467,7 +468,7 @@ class Archive(object):
     allowed_names : [str], optional
        If provided, then these names will be considered acceptable.
        This allows for 'private' names to be used by specialized
-       structures.
+       structures.  These must not start with `gname_prefix`.
     gname_prefix : str, optional
        This string is used to prefix all global variables.
     scoped : bool, optional
@@ -530,18 +531,19 @@ class Archive(object):
     from persist.archive import restore as _restore
     from numpy import sin as _sin
     from __builtin__ import dict as _dict
-    _l_5 = ['a', 'b']
-    l = [1, 2, 3, _l_5]
-    d = _dict([('s', 'hi'), ('l', l), ('l0', _l_5)])
+    _g11 = ['a', 'b']
+    l = [1, 2, 3, _g11]
+    d = _dict([('s', 'hi'), ('l', l), ('l0', _g11)])
     x = 4
     g = _restore
     f = _sin
     del _restore
     del _sin
     del _dict
-    del _l_5
+    del _g11
     try: del __builtins__
     except NameError: pass
+
 
     Now we can restore this by executing the string.  This should be
     done in a dictionary environment.
@@ -605,6 +607,18 @@ class Archive(object):
         self.robust_replace = robust_replace
 
         self._maxint = -1       # Cache of maximum int label in archive
+        self._ids = OrderedDict()
+
+    def get_id(self, obj):
+        """Return a unique id for the object.
+
+        This function is used as a proxy for the builtin id function so that id
+        numbers are generated in sequential order based on calls to this
+        function.  This makes the sorting of nodes in the graph predictable for
+        tests.  (Otherwise some tests depend on the ordering of `id()` which
+        varies from run to run.)
+        """
+        return self._ids.setdefault(id(obj), len(self._ids))
 
     def names(self):
         r"""Return list of unique names in the archive."""
@@ -899,8 +913,8 @@ class Archive(object):
             # First check to see if object is already in archive:
             unames, objs, envs = _unzip(self.arch)
 
-            obj_ids = map(id, objs)
-            obj_id = id(obj)
+            obj_ids = map(self.get_id, objs)
+            obj_id = self.get_id(obj)
             obj_ind = None
             if obj_id in obj_ids:
                 obj_ind = obj_ids.index(obj_id)
@@ -932,7 +946,7 @@ class Archive(object):
             assert(ind is not None)
             uname, obj, env = self.arch[ind]
             names.append(uname)
-            self.ids[uname] = id(obj)
+            self.ids[uname] = self.get_id(obj)
 
     def make_persistent(self):
         r"""Return `(imports, defs)` representing the persistent
@@ -1060,13 +1074,13 @@ class Archive(object):
         try:
             graph = Graph(objects=self.arch,
                           get_persistent_rep=self.get_persistent_rep,
-                          robust_replace=self.robust_replace)
+                          robust_replace=self.robust_replace,
+                          get_id=self.get_id)
         except topsort.CycleError, err:
             raise CycleError, err.args , sys.exc_info()[-1]
 
         # Optionally: at this stage perform a graph reduction.
         graph.reduce()
-
         names_reps = [(node.name, node.rep)
                       for id_ in graph.order
                       for node in [graph.nodes[id_]]]
@@ -1158,7 +1172,8 @@ class Archive(object):
             graph = _Graph(objects=self.arch,
                            get_persistent_rep=self.get_persistent_rep,
                            gname_prefix=self.gname_prefix,
-                           allowed_names=set(self.allowed_names))
+                           allowed_names=set(self.allowed_names),
+                           get_id=self.get_id)
         except topsort.CycleError, err:
             raise CycleError, err.args, sys.exc_info()[-1]
 
@@ -1185,7 +1200,7 @@ class Archive(object):
                            args=",".join([
                                 "=".join([
                                     _a,
-                                    graph.nodes[id(node.args[_a])].name])
+                                    graph.nodes[self.get_id(node.args[_a])].name])
                                for _a in node.args]),
                            imports="\n    ".join(
                                [""] + self._get_import_lines(node.imports)[0]),
@@ -1486,7 +1501,7 @@ def is_simple(obj):
     [True, True, True, True, True, True, True]
     >>> map(is_simple,
     ...     [[1], (1, ), {'a':2}])
-    [False, False, False]
+    [False, True, False]
     """
     if hasattr(obj, '__class__'):
         class_ = obj.__class__
@@ -1497,7 +1512,10 @@ def is_simple(obj):
                 None.__class__]
             or
             (class_ in [float, complex]
-             and not (np and (np.isinf(obj)) or np.isnan(obj))))
+             and not (np and (np.isinf(obj)) or np.isnan(obj)))
+            or
+            (class_ == tuple and all(map(is_simple, obj)))
+        )
     else:                       # pragma: no cover
         result = False
     if result:
@@ -1519,15 +1537,26 @@ class Node(object):
        names defined in :attr:`args`
     args : dict
        Dictionary where value `obj` is referenced in `rep` by key `name`.
-    parents : set
-       Set of parent id's
+    children : list, None
+       List of children id's.  If `None`, then it is constructed from `args`.
+       In this case it is imperative that each instance of an object in `rep`
+       has a unique identifier, even if it refers to the same object in memory.
+    parents : list
+       List of parent id's
     """
-    def __init__(self, obj, rep, args, name, imports=None, parents=set()):
+    def __init__(self, obj, rep, args, name, imports=None,
+                 children=None, parents=None, get_id=id):
+        self.get_id = get_id
         self.obj = obj
         self.rep = rep
         self.args = dict(**args)
         self.name = name
-        self.parents = set(parents)
+        if children is None:
+            children = [self.get_id(self.args[_name]) for _name in self.args]
+        self.children = children
+        if parents is None:
+            parents = []
+        self.parents = parents
         self.imports = imports
 
     def __repr__(self):
@@ -1537,12 +1566,13 @@ class Node(object):
         --------
         >>> Node(obj=['A'], rep='[x]', args=dict(x='A'), name='a')
         Node(obj=['A'], rep='[x]', args={'x': 'A'}, name='a', imports=None,
-             parents=set([]))
+             children=[...], parents=[])
         """
         return (
-            "Node(obj=%r, rep=%r, args=%r, name=%r, imports=%r, parents=%r)"
+            ("Node(obj=%r, rep=%r, args=%r, name=%r, imports=%r, "
+             + "children=%r, parents=%r)")
             % (self.obj, self.rep, self.args, self.name, self.imports,
-               self.parents))
+               self.children, self.parents))
 
     def __str__(self):
         r"""Return string showing node.
@@ -1557,19 +1587,14 @@ class Node(object):
     @property
     def id(self):
         r"""id of node."""
-        return id(self.obj)
-
-    @property
-    def children(self):
-        r"""List of dependent ids"""
-        return [id(self.args[name]) for name in self.args]
+        return self.get_id(self.obj)
 
     def isreducible(self, roots):
-        r"""Return `True` if the nodeg can be reduced.
+        r"""Return `True` if the node can be reduced.
 
-        A node can be reduced if it is either a simple object with an
-        efficient representation (as defined by :meth:`is_simple`), or
-        if it has exactly one parent and is not a root node."""
+        A node can be reduced if it is not a root node, and is either a simple
+        object with an efficient representation (as defined by
+        :meth:`is_simple`), or has exactly one parent."""
         reducible = (self.id not in roots and
                      (is_simple(self.obj) or 1 == len(self.parents)))
         return reducible
@@ -1581,7 +1606,8 @@ class Graph(object):
     This is a graph of objects in memory: these are identified by
     their python :func:`id`.
     """
-    def __init__(self, objects, get_persistent_rep, robust_replace=True):
+    def __init__(self, objects, get_persistent_rep, robust_replace=True,
+                 gname_prefix='_g', allowed_names=set(), get_id=id):
         r"""Initialize the dependency graph with some reserved
         names.
 
@@ -1605,10 +1631,14 @@ class Graph(object):
 
                 from module import iname as uiname
         """
+        self.get_id = get_id
         self.nodes = {}
         self.roots = set()
         self.envs = {}
         self.imports = []
+        self.gname_prefix = gname_prefix
+        self.allowed_names = allowed_names
+
         self.names = UniqueNames(set([name for (name, obj, env)
                                       in objects]))
         self.get_persistent_rep = get_persistent_rep
@@ -1622,16 +1652,16 @@ class Graph(object):
             self.nodes[node.id] = node
 
         # Now do a depth first search to build the graph.
-        for id_ in self.roots:
-            self._DFS(node=self.nodes[id_], env=self.envs[id_])
+        for _id in self.roots:
+            self._DFS(node=self.nodes[_id], env=self.envs[_id])
 
         self.order = self._topological_order()
 
         # Go through all nodes to determine unique names and update
         # reps.  Now that it is sorted we can do this simply.
-        for id_ in self.order:
-            node = self.nodes[id_]
-            if id_ in self.roots:
+        for _id in self.order:
+            node = self.nodes[_id]
+            if _id in self.roots:
                 # Node is a root node.  Leave name alone
                 pass
             else:
@@ -1645,7 +1675,7 @@ class Graph(object):
             args = {}
             for name in node.args:
                 obj = node.args[name]
-                uname = self.nodes[id(obj)].name
+                uname = self.nodes[self.get_id(obj)].name
                 args[uname] = obj
                 if not name == uname:
                     replacements[name] = uname
@@ -1653,29 +1683,36 @@ class Graph(object):
 
             for child in node.children:
                 cnode = self.nodes[child]
-                cnode.parents.add(node.id)
+                cnode.parents.append(node.id)
 
             node.rep = _replace_rep(node.rep, replacements,
                                     robust=self.robust_replace)
 
-    def _new_node(self, obj, env, name=None):
+    def gname(self, obj):
+        r"""Return a unique global name for the specified object.
+
+        This name is `self.gname_prefix` followed by the object's id.
+        """
+        return self.gname_prefix + str(self.get_id(obj))
+
+    def _new_node(self, obj, env, name):
         r"""Return a new node associated with `obj` and using the
-        specified `name`  If `name` is specified, then we assume
-        that the `name` is to be exported.  Also process the
-        imports of the node."""
+        specified `name`.  Also process the imports of the node."""
         rep, args, imports = self.get_persistent_rep(obj, env)
         rep = self._process_imports(rep, args, imports)
-        return Node(obj=obj, rep=rep, args=args, name=name)
+        return Node(obj=obj, rep=rep, args=args, name=name, imports=imports,
+                    get_id=self.get_id)
 
     def _DFS(self, node, env):
         r"""Visit all nodes in the directed subgraph specified by
         node, and insert them into nodes."""
-        for name, obj in node.args.iteritems():
-            id_ = id(obj)
+        for _name in node.args:
+            obj = node.args[_name]
+            id_ = self.get_id(obj)
             if id_ not in self.nodes:
-                node = self._new_node(obj, env, name)
-                self.nodes[id_] = node
-                self._DFS(node, env)
+                new_node = self._new_node(obj, env, self.gname(obj))
+                self.nodes[id_] = new_node
+                self._DFS(new_node, env)
 
     def _process_imports(self, rep, args, imports):
         r"""Process imports and add them to self.imports,
@@ -1710,7 +1747,7 @@ class Graph(object):
     def edges(self):
         r"""Return a list of edges `(id1, id2)` where object `id1` depends
         on object `id2`."""
-        return [(id_, id(obj))
+        return [(id_, self.get_id(obj))
                 for id_ in self.nodes
                 for (name, obj) in self.nodes[id_].args.iteritems()]
 
@@ -1726,26 +1763,28 @@ class Graph(object):
     def _reduce(self, id):
         r"""Reduce the node."""
         node = self.nodes[id]
-        if node.isreducible(roots=self.roots):
-            replacements = {node.name: node.rep}
-            for parent in node.parents:
-                pnode = self.nodes[parent]
-                pnode.rep = _replace_rep(pnode.rep, replacements,
-                                         robust=self.robust_replace)
+        replacements = {node.name: node.rep}
+        for parent in node.parents:
+            pnode = self.nodes[parent]
+            pnode.rep = _replace_rep(pnode.rep, replacements,
+                                     robust=self.robust_replace)
+            pnode.children.remove(id)
+            if node.name in pnode.args:
+                # It may have been removed already...
                 del pnode.args[node.name]
-                pnode.args.update(node.args)
-            for child in node.children:
-                cnode = self.nodes[child]
-                cnode.parents.remove(id)
-                cnode.parents.update(node.parents)
-            del self.nodes[id]
+
+            pnode.args.update(node.args)
+        for child in node.children:
+            cnode = self.nodes[child]
+            cnode.parents.remove(id)
+            cnode.parents.extend(node.parents)
+        del self.nodes[id]
 
     def check(self):
         r"""Check integrity of graph."""
         for id in self.nodes:
             node = self.nodes[id]
             children = node.children
-            assert children == unique_list(children)
             for child in children:
                 cnode = self.nodes[child]
                 assert id in cnode.parents
@@ -1770,94 +1809,146 @@ class Graph(object):
         r"""Reduce the graph once by combining representations for nodes
         that have a single parent.
 
-       Examples
-       --------
+        Examples
+        --------
 
-       .. digraph:: example
+        .. digraph:: example
 
-           "A" -> "B" -> "F";
-           "A" -> "C" -> "D" -> "G";
-           "C" -> "E" -> "G";
-           "C" -> "F";
+            "A" -> "B" -> "F";
+            "A" -> "C" -> "D" -> "G";
+            "C" -> "E" -> "G";
+            "C" -> "F";
 
-        ::
+         ::
 
-                                A
-                               / \
-                              B   C
-                              |  /| \
-                              | / D  E
-                              'F'  \ /
-                                   'G'
+                                 A
+                                / \
+                               B   C
+                               |  /| \
+                               | / D  E
+                               'F'  \ /
+                                    'G'
 
-       If F and G are builtin, then this is completely reducible,
-       otherwise the only reductions that can be made are on B, D, and
-       E.
+        If F and G are builtin, then this is completely reducible,
+        otherwise the only reductions that can be made are on B, D, and
+        E.
 
-       >>> G = 'G'; F = 'F'
-       >>> D = [G]; E = [G]; C = [F, D, E]; B = [F]; A = [B, C]
-       >>> a = Archive(scoped=False);
-       >>> a.insert(A=A)
-       >>> g = Graph(a.arch, a.get_persistent_rep)
-       >>> len(g.nodes)
-       7
-       >>> g.reduce()
-       >>> len(g.nodes)         # Completely reducible
-       1
-       >>> print a
-       A = [['F'], ['F', ['G'], ['G']]]
-       try: del __builtins__
-       except NameError: pass
+        >>> G = 'G'; F = 'F'
+        >>> D = [G]; E = [G]; C = [F, D, E]; B = [F]; A = [B, C]
+        >>> a = Archive(scoped=False);
+        >>> a.insert(A=A)
+        >>> g = Graph(a.arch, a.get_persistent_rep)
+        >>> len(g.nodes)
+        7
+        >>> g.reduce()
+        >>> len(g.nodes)         # Completely reducible
+        1
+        >>> print a
+        A = [['F'], ['F', ['G'], ['G']]]
+        try: del __builtins__
+        except NameError: pass
 
-       If we now make F and G not builtin, then we will not be able to
-       reduce them::
+        If we now make F and G not builtin, then we will not be able to
+        reduce them::
 
-                                A
-                               / \
-                              B   C
-                              |  /| \
-                              | / D  E
-                               F   \ /
-                               |    G
-                              'F'   |
-                                   'G'
+                                 A
+                                / \
+                               B   C
+                               |  /| \
+                               | / D  E
+                                F   \ /
+                                |    G
+                               'F'   |
+                                    'G'
 
-       >>> G = ['G']; F = ['F']
-       >>> D = [G]; E = [G]; C = [F, D, E]; B = [F]; A = [B, C]
-       >>> a = Archive(scoped=False);
-       >>> a.insert(A=A)
-       >>> g = Graph(a.arch, a.get_persistent_rep)
-       >>> len(g.nodes)
-       9
-       >>> g.reduce()
-       >>> len(g.nodes)         # Nodes A, F and G remain
-       3
-       >>> print a
-       _l_5 = ['F']
-       _l_1 = ['G']
-       A = [[_l_5], [_l_5, [_l_1], [_l_1]]]
-       del _l_5,_l_1
-       try: del __builtins__
-       except NameError: pass
+        >>> G = ['G']; F = ['F']
+        >>> D = [G]; E = [G]; C = [F, D, E]; B = [F]; A = [B, C]
+        >>> a = Archive(scoped=False);
+        >>> a.insert(A=A)
+        >>> g = Graph(a.arch, a.get_persistent_rep)
+        >>> len(g.nodes)
+        9
+        >>> g.reduce()
+        >>> len(g.nodes)         # Nodes A, F and G remain
+        3
+        >>> print a
+        _g3 = ['F']
+        _g7 = ['G']
+        A = [[_g3], [_g3, [_g7], [_g7]]]
+        del _g3,_g7
+        try: del __builtins__
+        except NameError: pass
 
-       If we explicitly add a node, then it can no longer be reduced:
+        If we explicitly add a node, then it can no longer be reduced:
 
-       >>> a.insert(B=B)
-       >>> g = Graph(a.arch, a.get_persistent_rep)
-       >>> len(g.nodes)
-       9
-       >>> g.reduce()
-       >>> len(g.nodes)         # Nodes A, F and G remain
-       4
-       >>> print a
-       _l_5 = ['F']
-       B = [_l_5]
-       _l_1 = ['G']
-       A = [B, [_l_5, [_l_1], [_l_1]]]
-       del _l_5,_l_1
-       try: del __builtins__
-       except NameError: pass
-       """
+        >>> a.insert(B=B)
+        >>> g = Graph(a.arch, a.get_persistent_rep)
+        >>> len(g.nodes)
+        9
+        >>> g.reduce()
+        >>> len(g.nodes)         # Nodes A, F and G remain
+        4
+        >>> print a
+        _g3 = ['F']
+        B = [_g3]
+        _g7 = ['G']
+        A = [B, [_g3, [_g7], [_g7]]]
+        del _g3,_g7
+        try: del __builtins__
+        except NameError: pass
+
+
+        Here is a graph that previously was problematic. Reducing this graph
+        should not break the loop since A contains two copies of F which need to
+        be identical.
+
+                                 A
+                                / \
+                                \ /
+                                 F
+                                 |
+                                'F'
+
+        >>> F = ['F']
+        >>> A = [F, F]
+        >>> a = Archive(scoped=False);
+        >>> a.insert(A=A)
+        >>> g = Graph(a.arch, a.get_persistent_rep, get_id=a.get_id)
+        >>> len(g.nodes)
+        3
+        >>> g.reduce()
+        >>> len(g.nodes)
+        2
+        >>> print a
+        _g1 = ['F']
+        A = [_g1, _g1]
+        del _g1
+        try: del __builtins__
+        except NameError: pass
+
+        Here is a similar graph that is reducible since the terminal is a
+        "simple" object.
+
+                                 A
+                                / \
+                                \ /
+                                'F'
+
+        >>> F = 'F'
+        >>> A = [F, F]
+        >>> a = Archive(scoped=False);
+        >>> a.insert(A=A)
+        >>> g = Graph(a.arch, a.get_persistent_rep, get_id=a.get_id)
+        >>> len(g.nodes)
+        2
+        >>> g.reduce()
+        >>> len(g.nodes)
+        1
+        >>> print a
+        A = ['F', 'F']
+        try: del __builtins__
+        except NameError: pass
+        """
         self.check()
         reducible_ids = [id for id in self.order
                          if self.nodes[id].isreducible(roots=self.roots)]
@@ -1880,7 +1971,7 @@ class _Graph(Graph):
        are unique and do not start with an underscore `_`.
     """
     def __init__(self, objects, get_persistent_rep,
-                 gname_prefix='_g', allowed_names=set()):
+                 gname_prefix='_g', allowed_names=set(), get_id=id):
         r"""Initialize the dependency graph with some reserved
         names.
 
@@ -1904,6 +1995,7 @@ class _Graph(Graph):
 
                 from module import iname as uiname
         """
+        self.get_id = get_id
         self.nodes = {}
         self.roots = set()
         self.envs = {}
@@ -1911,6 +2003,7 @@ class _Graph(Graph):
         self.gname_num = 0
         self.gname_prefix = gname_prefix
         self.allowed_names = allowed_names
+
         self.get_persistent_rep = get_persistent_rep
         self.names = set()
 
@@ -1928,47 +2021,19 @@ class _Graph(Graph):
         self.order = self._topological_order()
 
         # Add all reverse links from child to parent nodes.
-        for _id_ in self.order:
+        for _id in self.order:
             node = self.nodes[_id]
             for child in node.children:
                 cnode = self.nodes[child]
-                cnode.parents.add(node.id)
+                cnode.parents.append(node.id)
 
-    def _new_node(self, obj, env, name=None):
+    def _new_node(self, obj, env, name):
         r"""Return a new node associated with `obj` and using the
-        specified `name`  If `name` is specified, then we assume
-        that the `name` is to be exported.  Also process the
-        imports of the node."""
-        if name is None:
-            name = self.gname
-        else:
-            assert (name in self.allowed_names
-                    or not name.startswith(self.gname_prefix))
-            assert name not in self.names
+        specified `name`. Also process the imports of the node."""
         self.names.add(name)
         rep, args, imports = self.get_persistent_rep(obj, env)
-        return Node(obj=obj, rep=rep, args=args, name=name, imports=imports)
-
-    @property
-    def gname(self):
-        r"""Return a unique global name.  These start with an underscore."""
-        while True:
-            gname = self.gname_prefix + str(self.gname_num)
-            self.gname_num += 1
-            if gname not in self.allowed_names:
-                break
-        return gname
-
-    def _DFS(self, node, env):
-        r"""Visit all nodes in the directed subgraph specified by
-        node, and insert them into nodes."""
-        for _name in node.args:
-            obj = node.args[_name]
-            id_ = id(obj)
-            if id_ not in self.nodes:
-                new_node = self._new_node(obj, env)
-                self.nodes[id_] = new_node
-                self._DFS(new_node, env)
+        return Node(obj=obj, rep=rep, args=args, name=name, imports=imports,
+                    get_id=self.get_id)
 
     # edges = Graph.edges
     # _topological_order = Graph._topological_order
