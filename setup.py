@@ -5,78 +5,70 @@ a human readable format.  The archives use importable code and so are
 relatively robust to code changes (in the event that an interface changes, one
 can manually edit the archive making appropriate changes). Large binary data is
 stored in hdf5 format for efficiency.
+
+**Source:**
+  https://bitbucket.org/mforbes/persist
+**Issues:**
+  https://bitbucket.org/mforbes/persist/issues
+
 """
 import sys
 
 from setuptools import setup, find_packages
-from setuptools.command.test import test as original_test
 
-import persist
-VERSION = persist.__version__
+NAME = "persist"
 
-# Remove mmfutils so that it gets properly covered in tests. See
+setup_requires = [
+    'pytest-runner'
+]
+
+install_requires = [
+    'zope.interface>=3.8.0',
+]
+
+test_requires = [
+    'pytest>=2.8.1',
+    'pytest-cov>=2.2.0',
+    'pytest-flake8',
+    'coverage',
+    'flake8',
+    'pep8==1.5.7',     # Needed by flake8: dependency resolution issue if not pinned
+    'numpy',
+    'scipy',
+    'h5py',
+]
+
+extras_require = dict(
+    doc=['mmf_setup',
+         'sphinx>=1.3.1',
+         'sphinxcontrib-zopeext',
+    ]
+)
+
+# Remove NAME from sys.modules so that it gets covered in tests. See
 # http://stackoverflow.com/questions/11279096
 for mod in sys.modules.keys():
-    if mod.startswith('persist'):
+    if mod.startswith(NAME):
         del sys.modules[mod]
 del mod
 
 
-class test(original_test):
-    description = "Run all tests and checks (customized for this project)"
-
-    def finalize_options(self):
-        # Don't actually run any "test" tests (we will use nosetest)
-        self.test_suit = None
-
-    def run(self):
-        # Call this to do complicated distribute stuff.
-        original_test.run(self)
-
-        from nose.core import TestProgram
-        if not TestProgram(argv=['nosetests', '--config', 'setup.cfg'],
-                           exit=False).success:
-            raise sys.exit(1)
-
-        for cmd in ['flake8', 'check']:
-            try:
-                self.run_command(cmd)
-            except SystemExit, e:
-                if e.code:
-                    raise
-
-setup(name='persist',
-      version=VERSION,
+setup(name=NAME,
+      version='0.9',
       packages=find_packages(),
-      cmdclass=dict(test=test),
 
-      install_requires=[
-          "zope.interface>=3.8.0"
-      ],
-
-      extras_require={
-          'docs': [
-              'sphinx>=1.3.1',
-              'sphinxcontrib-zopeext',
-          ]
-      },
-
-      tests_require=[
-          'nose>=1.3',
-          'coverage',
-          'flake8',
-          'numpy',
-          'scipy',
-          'h5py',
-      ],
+      setup_requires=setup_requires,
+      install_requires=install_requires,
+      tests_require=test_requires,
+      extras_require=extras_require,
 
       # Metadata
       author='Michael McNeil Forbes',
       author_email='michael.forbes+bitbucket@gmail.com',
-      url='https://bitbucket.org/mforbes_pristine/persist',
+      url='https://bitbucket.org/mforbes/persist',
       description="Persistent importable archival of python objects to disk",
       long_description=__doc__,
-      license='LPGL',
+      license='BSD',
 
       classifiers=[
           # How mature is this project? Common values are

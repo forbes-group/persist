@@ -37,6 +37,15 @@ project <https://bitbucket.org/mforbes/persist>`__:
 
     pip install hg+https://bitbucket.org/mforbes/persist
 
+DataSet Format
+==============
+
+.. toctree::
+   :maxdepth: 1
+   
+   notebooks/DataSet Format
+   notebooks/Pickle
+
 API
 ===
 
