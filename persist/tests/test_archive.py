@@ -1,52 +1,19 @@
 from __future__ import print_function
 
 import math
-import os
 import sys
-import tempfile
 import warnings
 
 import pytest
 
-
 from persist import objects
 from persist import interfaces
-
-archive = sys.modules['persist.archive']
-
-
-@pytest.fixture
-def hdf5_datafile():
-    with tempfile.NamedTemporaryFile(suffix='.hd5', delete=True) as f:
-        yield f.name
+from persist import archive
 
 
-@pytest.fixture
-def np():
-    try:
-        import numpy
-        numpy.random.seed(3)
-        return numpy
-    except ImportError:         # pragma: no cover
-        pytest.skip("Skipping test that depends on numpy")
-
-
-@pytest.fixture
-def sp():
-    try:
-        import scipy
-        return scipy
-    except ImportError:         # pragma: no cover
-        pytest.skip("Skipping test that depends on scipy")
-
-
-@pytest.fixture
-def h5py():
-    try:
-        import h5py
-        return h5py
-    except ImportError:         # pragma: no cover
-        pytest.skip("Skipping test that depends on h5py")
+# This is needed until a later release of py.test.  See Issue #2430
+# https://github.com/pytest-dev/pytest/issues/2430
+warnings.simplefilter('always', UserWarning)
 
 
 class A(object):
@@ -451,10 +418,72 @@ class TestNumpy(ToolsMixin):
         a = archive.Archive(array_threshold=2)
         M = np.random.rand(10)
         a.insert(M=M)
-        a.make_persistent()
+        with pytest.warns(UserWarning) as record:
+            a.make_persistent()
+        assert len(record) == 1
+        assert record[0].message.args[0] == (
+            "Data arrays ['array_0'] exist but no datafile specified. " +
+            "Save data manually and populate in _arrays dict.")
+
         assert len(a.data) == 1
-        a.make_persistent()
+        with pytest.warns(UserWarning) as record:
+            a.make_persistent()
+        assert len(record) == 1
+        assert record[0].message.args[0] == (
+            "Data arrays ['array_0'] exist but no datafile specified. " +
+            "Save data manually and populate in _arrays dict.")
+
         assert len(a.data) == 1
+
+    def test_external_data_no_datafile(self, np, scoped):
+        """Test archive without datafile."""
+
+        # Archive without specified datafile will not save data.  This should
+        # raise a warning.
+        a = archive.Archive(scoped=scoped, array_threshold=2)
+        np.random.seed(1)
+        M = np.random.rand(10)
+        a.insert(M=M)
+        with pytest.warns(UserWarning) as record:
+            s = str(a)
+        assert len(record) == 1
+        assert record[0].message.args[0] == (
+            "Data arrays ['array_0'] exist but no datafile specified. " +
+            "Save data manually and populate in _arrays dict.")
+
+        # Data must be provided when evaluated
+        d = dict(_arrays=dict(array_0=M.copy()))
+        exec s in d
+        assert np.allclose(d['M'], M)
+
+    def test_external_data_datafile_type(self, np):
+        """Test setting data_format from datafile name."""
+        a = archive.Archive(datafile='tmpdata.npz')
+        assert a._data_format == 'npz'
+
+        a = archive.Archive(datafile='tmpdata.npy')
+        assert a._data_format == 'npy'
+
+        a = archive.Archive(datafile='tmpdata')
+        assert a._data_format == 'npy'
+
+        for ext in archive._HDF5_EXTS:
+            a = archive.Archive(datafile='tmpdata.{}'.format(ext))
+            assert a._data_format == 'hdf5'
+
+    def test_external_data(self, np, data_format, datafile):
+        """Test saving external data."""
+        a = archive.Archive(datafile=datafile,
+                            array_threshold=3,
+                            data_format=data_format)
+        np.random.seed(1)
+        M = np.random.rand(10)
+        a.insert(M=M)
+        s = str(a)
+
+        a = archive.Archive(datafile=datafile, data_format=data_format)
+        d = a.eval(s)
+        assert np.allclose(d['M'], M)
 
 
 class TestScipy(ToolsMixin):
@@ -514,7 +543,9 @@ class TestScipy(ToolsMixin):
 class TestDatafile(object):
     def test_datafile(self, hdf5_datafile, np, h5py):
         """Test saving large arrays to disk."""
-        a = archive.Archive(array_threshold=2, datafile=hdf5_datafile,
+        a = archive.Archive(array_threshold=2,
+                            hdf5=True,
+                            datafile=hdf5_datafile,
                             backup_data=False)
         M = np.random.rand(10)
         a.insert(M=M)
@@ -561,9 +592,8 @@ class TestWarnings(object):
         """Test archive_1 warning"""
         arch = archive.Archive()
         arch.insert(a=A_archive_1())
-        with pytest.deprecated_call():
-            with pytest.warns(UserWarning) as w:
-                str(arch)
+        with pytest.deprecated_call() as w:
+            str(arch)
         assert len(w) == 2
         assert w[0].message[0] == (
             'archive_1 is deprecated: use get_persistent_rep')
@@ -632,19 +662,18 @@ class TestRegression(object):
         rep = archive.get_persistent_rep_type(type(None), {})
         assert rep == ('NoneType', {}, [('types', 'NoneType', 'NoneType')])
 
-    def test_regression_11a(self):
+    def test_regression_11a(self, scoped):
         "Regression test for issue 11: duplicated data in non-scoped archive."
         x = [1, 2, 3]
         y = [x, x]
-        for scoped in [True, False]:
-            a = archive.Archive(scoped=scoped)
-            a.insert(y=y)
-            s = str(a)
-            d = {}
-            exec(s, d)
-            y_ = d['y']
-            assert y[0] is y[1]
-            assert y_[0] is y_[1]
+        a = archive.Archive(scoped=scoped)
+        a.insert(y=y)
+        s = str(a)
+        d = {}
+        exec(s, d)
+        y_ = d['y']
+        assert y[0] is y[1]
+        assert y_[0] is y_[1]
 
 
 class TestPerformance(object):
@@ -734,7 +763,7 @@ class TestCoverage(object):
             'Insert objects with a key: insert(x=3), not insert([ 0.  0.])')
 
     def test_array_name_clash2(self, np, hdf5_datafile):
-        a = archive.Archive(array_threshold=2, datafile=hdf5_datafile)
+        a = archive.Archive(array_threshold=2, hdf5=True, datafile=hdf5_datafile)
         a.data['array_0'] = np.zeros(2)
         a.insert(x=np.zeros(5), env={})
         s = str(a)
@@ -742,23 +771,28 @@ class TestCoverage(object):
                                "try: del __builtins__",
                                "except NameError: pass"])
 
-    def test_datafile_nohdf5_1(self, np):
+    def test_datafile_nohdf5_1(self, np, datadir):
         """Test saving large arrays to disk without hdf5."""
-        a = archive.Archive(array_threshold=2, datafile="/dev/null",
+        a = archive.Archive(array_threshold=2, datafile=datadir,
                             hdf5=False)
         M = np.random.rand(10)
         a.insert(M=M)
-        with pytest.raises(NotImplementedError):
-            a.make_persistent()
+        a.make_persistent()
+        s = str(a)
+        ld = dict(_arrays=archive.load_arrays(datadir))
+        exec s in ld
+        assert np.allclose(ld['M'], M)
 
-    def test_datafile_nohdf5_2(self, np):
+    def test_datafile_nohdf5_2(self, np, datadir):
         """Test saving large arrays to disk without hdf5."""
-        a = archive.Archive(array_threshold=2, datafile="/dev/null",
+        a = archive.Archive(array_threshold=2, datafile=datadir,
                             hdf5=False)
         M = np.random.rand(10)
         a.insert(M=M)
-        with pytest.raises(NotImplementedError):
-            a.scoped__str__()
+        s = a.scoped__str__()
+        ld = dict(_arrays=archive.load_arrays(datadir))
+        exec s in ld
+        assert np.allclose(ld['M'], M)
 
     def test_get_persistent_rep_repr(self):
         rep = archive.get_persistent_rep_repr(1, {}, rep=None)
@@ -775,6 +809,11 @@ class TestCoverage(object):
         exec s in ld
         assert ld['a'] == {'a': 1}
         assert ld[g0] == 1
+
+    def test__save_arrays_error(self, hdf5_datafile):
+        with pytest.raises(NotImplementedError):
+            archive._save_arrays([0, 1, 2], filename=hdf5_datafile,
+                                 data_format='unknown')
 
 
 class TestCoverageMissingModules(object):

@@ -217,6 +217,7 @@ import ast
 from collections import OrderedDict
 import cPickle
 import copy
+import glob
 import inspect
 import logging
 import os
@@ -247,6 +248,9 @@ except ImportError:             # pragma: no cover
 
 import interfaces
 import objects
+
+
+_HDF5_EXTS = set(['hf5', 'hd5', 'hdf5'])
 
 
 class ArchiveError(Exception):
@@ -349,8 +353,24 @@ def backup(filename, keep=True):
         os.remove(backup_name)
 
 
-def _save_arrays(arrays, filename, keep=False, format='npy'):
-    """Archive the arraty to the specified file.
+_EXTS = {
+    'hdf5': '.hd5',
+    'npy': '',
+    'npz': '.npz'
+}
+
+
+def get_ext(filename):
+    """Return the extension of filename"""
+    basename = os.path.basename(filename)
+    ext = ''
+    if os.path.extsep in basename:
+        ext = basename.split(os.path.extsep)[-1].lower()
+    return ext
+
+
+def _save_arrays(arrays, filename, keep=False, data_format='npy'):
+    """Archive the array to the specified file.
 
     Arguments
     ---------
@@ -358,46 +378,122 @@ def _save_arrays(arrays, filename, keep=False, format='npy'):
        Mapping from names (must be valid python identifiers) to data arrays.
     filename : str
        Name of file/directory in which to archive the data.
-    format : 'hdf5', 'npy', 'npz'
+    data_format : 'hdf5', 'npy', 'npz'
        Format of data on disk.
     """
-    if format == 'hdf5':
+    ext = get_ext(filename)
+    if data_format == 'hdf5':
+        if ext not in _HDF5_EXTS:
+            filename = os.path.extsep.join([filename, 'hd5'])
         with backup(filename, keep=keep):
             with h5py.File(filename) as f:
                 for name in arrays:
                     f[name] = arrays[name]
+    elif data_format == 'npz':
+        if ext != 'npz':
+            filename = os.path.extsep.join([filename, 'npz'])
+        with backup(filename, keep=keep):
+            np.savez(filename, **arrays)
+    elif data_format == 'npy':
+        if not os.path.exists(filename):
+            os.makedirs(filename)
+        for name in arrays:
+            _filename = os.path.join(filename, name)
+            with backup(_filename, keep=keep):
+                np.save(_filename, arrays[name])
     else:
         raise NotImplementedError(
-            "Data can presently only be saved with format='hdf5'")
+            "Expected data_format in ['hdf5', 'npz', 'npy'], got {}"
+            .format(data_format))
 
 
-def _load_arrays(filename, keys=None, format=None):
+def get_data_format(filename):
+    """Return (data_format, filename) from the filename.
+
+    If the filename does not have an extension, then the contents of disk are
+    examined.
+
+    Examples
+    --------
+    >>> get_data_format('tst/a.npz')
+    ('npz', 'tst/a.npz')
+    >>> get_data_format('tst/a.hd5')
+    ('hdf5', 'tst/a.hd5')
+    >>> get_data_format('/dev/null/a')
+    Traceback (most recent call last):
+       ...
+    ValueError: Cannot determine data_format: No files /dev/null/a.*
+    >>> get_data_format('/dev/null/a.unknown')
+    Traceback (most recent call last):
+       ...
+    ValueError: Unknown data_format for extension unknown of /dev/null/a.unknown
+    """
+    basename = os.path.basename(filename)
+    if os.path.extsep in basename:
+        ext = basename.split(os.path.extsep)[-1].lower()
+    elif os.path.exists(filename) and os.path.isdir(filename):
+        ext = ''
+    else:
+        files = glob.glob(os.path.extsep.join([filename, '*']))
+        if not files:
+            raise ValueError("Cannot determine data_format: No files {}.*"
+                             .format(filename))
+        elif len(files) > 1:
+            raise ValueError("Cannot determine data_format: Multiple files {}"
+                             .format(files))
+        else:
+            filename = files[0]
+            ext = filename.split(os.path.extsep)[-1].lower()
+
+    if ext in set(_HDF5_EXTS):
+        data_format = 'hdf5'
+    elif ext == 'npz':
+        data_format ='npz'
+    elif ext == '':
+        data_format = 'npy'
+    else:
+        raise ValueError("Unknown data_format for extension {} of {}"
+                         .format(ext, filename))
+    return data_format, filename
+
+
+def load_arrays(filename, keys=None, data_format=None):
     """Return a dictionary with the arrays from the specified file.
 
     Arguments
     ---------
     filename : str
-       Name of file/directory to read data from.
+       Name of file/directory to read data from.  If this has no extension and
+       data_format is None, then the files on disk will be inspected to
+       determine the data format.
     key : str, None
        Name of data to read.  If `None`, then load all the data.
-    format : 'hdf5', 'npy', 'npz', None
+    data_format : 'hdf5', 'npy', 'npz', None
        Format of data on disk.  If `None`, then the format is inferred from the
-       filename extension which must end in `.hd5`, `.npy`, or `.npz`.
+       filename extension which must end in `.hd5`, `.npy`, or `.npz` or from
+       the existing data on disk.
     """
-    if format is None:
-        format = filename.split(os.path.extsep)[-1]
-        if format in set(['hd5']):
-            format = 'hdf5'
+    if data_format is None:
+        data_format, filename = get_data_format(filename)
 
     arrays = None
-    if format == 'hdf5':
+    if data_format == 'hdf5':
         with h5py.File(filename, 'r') as f:
             if keys is None:
                 keys = f
             arrays = {k: np.asarray(f[k]) for k in keys}
+    elif data_format == 'npz':
+        with np.load(filename) as f:
+            if keys is None:
+                keys = f
+            arrays = {k: np.asarray(f[k]) for k in keys}
+    elif data_format == 'npy':
+        if keys is None:
+            keys = [f[:-4] for f in os.listdir(filename) if f.endswith('.npy')]
+        arrays = {k: np.load(os.path.join(filename, k) + '.npy') for k in keys}
     else:
-        raise NotImplementedError(
-            "Data can presently only be saved with format='hdf5'")
+        raise NotImplementedError("Unknown data_format={}".format(data_format))
+
     return arrays
 
 
@@ -455,9 +551,12 @@ class Archive(object):
        :attr:`data` which must be manually archived and restored
        externally.  The data will be written when
        :meth:`make_persistent` is called.
+    data_format : 'npy', 'npz', 'hdf5
+       Data format used to store binary data in the file/directory `datafile`.
     hdf5 : True, False, optional
        If `True` and `datafile` is provided, then use hdf5 via the h5py package
        to store the binary data, otherwise use .npz files.
+       Deprecated.  Use `data_format`.
     backup_data : bool
        If `True` and :attr:`datafile` already exists, then a backup of
        the data will first be made with an extension `'.bak'` or
@@ -563,7 +662,8 @@ class Archive(object):
     data_name = '_arrays'
 
     def __init__(self, flat=True, tostring=True, check_on_insert=False,
-                 array_threshold=None, datafile=None, hdf5=bool(h5py),
+                 array_threshold=None, datafile=None, data_format=None,
+                 hdf5=None,
                  backup_data=True, allowed_names=None, gname_prefix='_g',
                  scoped=True, robust_replace=True):
         self.tostring = tostring
@@ -594,15 +694,31 @@ class Archive(object):
         self.check_on_insert = check_on_insert
         self.data = {}
         self.datafile = datafile
-        self.hdf5 = hdf5
-        if hdf5:
-            if h5py:
-                self._data_format = 'hdf5'
+        if hdf5 is not None:
+            warnings.warn(
+                "hdf5 option deprecated.  Use data_format='hdf5' instead.",
+                DeprecationWarning)
+            if hdf5:
+                data_format = 'hdf5'
+
+        if data_format == 'hdf5' and not h5py:
+            raise ArchiveError("HDF5 requested but h5py could not be imported.")
+
+        if data_format is None:
+            # Determine data_format from datafile
+            if datafile is None:
+                data_format = 'npy'
             else:
-                raise ArchiveError(
-                    "HDF5 requested but h5py could not be imported.")
-        else:
-            self._data_format = 'npy'
+                _ext = datafile.split(os.path.extsep)
+                _ext = _ext[-1].lower() if len(_ext) > 1 else ''
+                if _ext in set(_HDF5_EXTS):
+                    data_format = 'hdf5'
+                elif _ext == '':
+                    data_format = 'npy'
+                else:
+                    data_format = _ext
+
+        self._data_format = data_format
         self.scoped = scoped
         self.robust_replace = robust_replace
 
@@ -1093,11 +1209,17 @@ class Archive(object):
             for node in [graph.nodes[self.ids[name]]]])
 
         # Archive the data to file if requested.
-        if self.data and self.datafile is not None:
-            _save_arrays(arrays=self.data,
-                         filename=self.datafile,
-                         keep=self.backup_data,
-                         format=self._data_format)
+        if self.data:
+            if self.datafile is not None:
+                _save_arrays(arrays=self.data,
+                             filename=self.datafile,
+                             keep=self.backup_data,
+                             data_format=self._data_format)
+            else:
+                warnings.warn(
+                    "Data arrays {} exist but no datafile specified. "
+                    .format(self.data.keys()) +
+                    "Save data manually and populate in _arrays dict.")
 
         return (graph.imports, names_reps)
 
@@ -1218,11 +1340,17 @@ class Archive(object):
             results.append(" = ".join([name, node.name]))
 
         # Archive the data to file if requested.
-        if self.data and self.datafile is not None:
-            _save_arrays(arrays=self.data,
-                         filename=self.datafile,
-                         keep=self.backup_data,
-                         format=self._data_format)
+        if self.data:
+            if self.datafile is not None:
+                _save_arrays(arrays=self.data,
+                             filename=self.datafile,
+                             keep=self.backup_data,
+                             data_format=self._data_format)
+            else:
+                warnings.warn(
+                    "Data arrays {} exist but no datafile specified. "
+                    .format(self.data.keys()) +
+                    "Save data manually and populate in _arrays dict.")
 
         gnames = ", ".join(_n for _n in names
                            if _n.startswith(self.gname_prefix)
@@ -1234,6 +1362,32 @@ class Archive(object):
             "except NameError: pass"])
 
         return "\n".join(results)
+
+    def eval(self, s, d=None, datafile=None, data_name=None):
+        """Return the evaluated representation of the archive `s`.
+
+        This method loads any associated externally stored arrays if required.
+        Uses
+
+        Arguents
+        --------
+        s : str
+           Representation of an archive as returned by `str(archive)`.
+        d : dict, None
+           Dictionary in which `s` is evaluated.
+        """
+        if d is None:
+            d = {}
+        if datafile is None:
+            datafile = self.datafile
+        if data_name is None:
+            data_name = self.data_name
+        if datafile:
+            d[data_name] = load_arrays(datafile)
+        exec(s, d)
+        if data_name in d:
+            del d[data_name]
+        return d
 
 
 def get_imports(obj, env=None):
@@ -2586,7 +2740,9 @@ class DataSet(object):
     def __init__(self, module_name, mode='r', path=".",
                  synchronize=True,
                  _reload=False,
-                 array_threshold=100, backup_data=False,
+                 array_threshold=100,
+                 data_format='npy',
+                 backup_data=False,
                  name_prefix='x_',
                  timeout=60,
                  scoped=True):
@@ -2617,7 +2773,10 @@ class DataSet(object):
            This -- appended with an integer -- is used to form unique
            names when :meth:`insert` is called without specifying a name.
         array_threshold : int
-           Threshold size above which arrays are stored as hd5 files.
+           Threshold size above which arrays are stored using the format
+           specified in the `data_format` flag.
+        data_format : 'npy', 'hdf5', 'npz'
+           Format to use for storing arrays that exceed the array_threshold.
         backup_data : bool
            If `True`, then backup copies of overwritten data will be
            saved.
@@ -2642,6 +2801,7 @@ class DataSet(object):
         self._synchronize = synchronize
         self._mode = mode
         self._array_threshold = array_threshold
+        self._data_format = data_format
         self._module_name = module_name
         self._path = path
         self._backup_data = backup_data
@@ -2785,9 +2945,9 @@ class DataSet(object):
 
             datafile = os.path.join(self._path,
                                     self._module_name,
-                                    "data_%s.hd5" % (name,))
+                                    "data_%s" % (name,))
             try:
-                d.update(_load_arrays(datafile, format='hdf5'))
+                d.update(load_arrays(datafile))
                 datafile_exists = True
             except IOError:
                 datafile_exists = False
@@ -2818,6 +2978,7 @@ class DataSet(object):
 
         with self._ds_lock():              # Establish lock
             arch = Archive(array_threshold=self._array_threshold,
+                           data_format=self._data_format,
                            scoped=self._scoped)
             arch.insert(**{name: value})
             archive_file = os.path.join(self._path,
@@ -2832,12 +2993,16 @@ class DataSet(object):
 
             datafile = os.path.join(self._path,
                                     self._module_name,
-                                    "data_%s.hd5" % (name,))
+                                    "data_%s" % (name,))
+            if self._data_format == 'npz':
+                datafile = os.path.extsep.join([datafile, 'npz'])
+            elif self._data_format == 'hdf5':
+                datafile = os.path.extsep.join([datafile, 'hd5'])
 
             _save_arrays(arrays=arch.data,
                          filename=datafile,
                          keep=self._backup_data,
-                         format=arch._data_format)
+                         data_format=arch._data_format)
 
         # Needed for pre 2.6 python version to support tab completion
         if sys.version < "2.6":
@@ -2886,34 +3051,52 @@ class DataSet(object):
         load the dataset with ``DataSet(filename)``, then you will get the
         benefits of delayed loading etc.
         """
-        INIT_IMPORT = ("""
+        _tmp0 = """
 if __name__ == '{__NAME__}':
     def _load(name):
-        import os.path
+        import os.path, numpy
         dir = os.path.dirname(__file__)
-        data_file = os.path.join(dir, '{DATA_PRE}{{}}{DATA_EXT}'.format(name))
+        data_file = os.path.join(dir, 'data_{{}}{DATA_EXT}'.format(name))
         pyfile = os.path.join(dir, '{{}}.py'.format(name))
-
-        d = {{}}
-        if os.path.exists(data_file):
-            import numpy, h5py
-            {DATA_NAME} = {{}}
-            with h5py.File(data_file, 'r') as f:
-                for k in f:
-                    {DATA_NAME}[k] = numpy.asarray(f[k])
-            d['{DATA_NAME}'] = _arrays
+        d = dict({DATA_NAME}={{}})
+"""
+        _tmp2 = """
         with open(pyfile) as f:
             exec f.read() in d
         return d[name]
-""", """
+"""
+        if self._data_format == 'hdf5':
+            _tmp1 = """
+        import h5py
+        with h5py.File(data_file, 'r') as f:
+            for k in f:
+                d['{DATA_NAME}'][k] = numpy.asarray(f[k])
+"""
+        elif self._data_format == 'npy':
+            _tmp1 = """
+        for k in [f[:-4] for f in os.listdir(data_file)
+                  if f.endswith('.npy')]:
+            d['{DATA_NAME}'][k] = numpy.load(os.path.join(data_file, k) + '.npy')
+"""
+        elif self._data_format == 'npz':
+            _tmp1 = """
+        with numpy.load(data_file) as f:
+            for k in f:
+                d['{DATA_NAME}'][k] = numpy.asarray(f[k])
+"""
+
+        INIT_IMPORT = [
+            "\n".join([_tmp0, _tmp1, _tmp2]),
+            """
     try: {name} = _load('{name}')
     except: pass
 """, """
     del _load
-""")
+"""]
 
         if self._module_name:
             arch = Archive(allowed_names=['_info_dict'],
+                           data_format=self._data_format,
                            scoped=self._scoped)
             arch.insert(_info_dict=self._info_dict)
 
@@ -2925,8 +3108,7 @@ if __name__ == '{__NAME__}':
                     f.write(str(arch))
                     f.write(INIT_IMPORT[0].format(
                         __NAME__=os.path.basename(self._module_name),
-                        DATA_PRE='data_',
-                        DATA_EXT='.hd5',
+                        DATA_EXT=_EXTS[self._data_format],
                         DATA_NAME=arch.data_name,
                     ))
                     for name in self._info_dict:
