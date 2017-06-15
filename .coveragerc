@@ -1,7 +1,7 @@
 [run]
 branch = True
 data_file = .coverage
-omit = persist/_contrib/*
+omit = persist/_contrib/*, persist/tests/conftest.py
 source = persist
 
 [html]
