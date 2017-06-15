@@ -54,7 +54,7 @@ del mod
 
 
 setup(name=NAME,
-      version='0.9b3',
+      version='0.9',
       packages=find_packages(),
 
       setup_requires=setup_requires,
