@@ -1,32 +1,11 @@
 import os
-import shutil
 import sys
-import tempfile
 
 import pytest
 
 from test_archive import NoStrNoRepr
 
-archive = sys.modules['persist.archive']
-
-
-@pytest.fixture
-def ds_name():
-    ds_name = tempfile.mkdtemp(dir='.')[2:]
-    os.rmdir(ds_name)
-    yield ds_name
-    if os.path.exists(ds_name):
-        shutil.rmtree(ds_name)
-
-
-@pytest.fixture
-def np():
-    try:
-        import numpy
-        numpy.random.seed(3)
-        return numpy
-    except ImportError:         # pragma: nocover
-        pytest.skip("Skipping test that depends on numpy")
+from persist import archive
 
 
 class TestDataSet(object):
@@ -54,23 +33,23 @@ class TestDataSet(object):
         ds = archive.DataSet(ds_name, 'w')
         ds.a = NoStrNoRepr()
 
-    def test_large_array(self, ds_name, np):
+    def test_large_array(self, ds_name, np, data_format):
         """Test large array in dataset"""
         a = np.arange(1000, dtype=float)
-        ds = archive.DataSet(ds_name, 'w')
+        ds = archive.DataSet(ds_name, 'w', data_format=data_format)
         ds.a = a
         del ds
         ds = archive.DataSet(ds_name, 'r')
         assert np.allclose(a, ds.a)
 
-    def test_import1(self, ds_name, np):
+    def test_import1(self, ds_name, np, data_format):
         """Test import of dataset"""
         module_name = 'module'
 
         ds_name_ = os.path.join(ds_name, module_name)
 
         a = np.arange(1000, dtype=float)
-        ds = archive.DataSet(ds_name_, 'w')
+        ds = archive.DataSet(ds_name_, 'w', data_format=data_format)
         ds.a = a
         ds['b'] = 'b'
         ds.c = 1
@@ -94,9 +73,10 @@ class TestDataSet(object):
         with pytest.raises(ValueError):
             archive.DataSet(ds_name, 'r')
 
-    def test_non_synchronize(self, ds_name, np):
+    def test_non_synchronize(self, ds_name, np, data_format):
         """Test non-sychronized access."""
-        ds = archive.DataSet(ds_name, 'w', synchronize=False)
+        ds = archive.DataSet(ds_name, 'w', synchronize=False,
+                             data_format=data_format)
         a = np.arange(1000, dtype=float)
         ds.a = a
         ds['a'] = a.shape
@@ -111,8 +91,8 @@ class TestDataSet(object):
         assert np.allclose(ds.a, a)
         assert ds.c == 1
 
-    def test_non_scoped(self, ds_name, np):
-        ds = archive.DataSet(ds_name, 'w', scoped=False)
+    def test_non_scoped(self, ds_name, np, data_format):
+        ds = archive.DataSet(ds_name, 'w', scoped=False, data_format=data_format)
         a = np.arange(1000, dtype=float)
         ds.a = a
         ds['a'] = a.shape
@@ -157,3 +137,12 @@ class TestCoverage(object):
     def test_bad_mode(self, ds_name):
         with pytest.raises(NotImplementedError):
             archive.DataSet(ds_name, mode='oops')
+
+
+def test_issue_10(ds_name, np):
+    """Regression for issue 10 that __init__.py backup files stick arround."""
+    ds = archive.DataSet(ds_name, mode='w', backup_data=False)
+    ds.a = np.ones(10)
+    ds.x = np.ones(100)
+    for f in os.listdir(ds_name):
+        assert not f.endswith('.bak')

@@ -104,11 +104,9 @@ Large Archives
 --------------
 For small amounts of data, the string representation of
 :class:`Archive` is usually sufficient.  For large amounts of binary
-data, however, this
-
-is extremely inefficient.  In this case, a separate archive format is
-used where the archive is turned into a module that contains a binary
-data-file.
+data, however, this is extremely inefficient.  In this case, a separate archive
+format is used where the archive is turned into a module that contains a binary
+datafile or datadir.
 
 .. todo::
    - Consider using imports rather than execfile etc. for loading
@@ -216,8 +214,10 @@ __all__ = ['Archive', 'DataSet', 'restore',
 
 import __builtin__
 import ast
+from collections import OrderedDict
 import cPickle
 import copy
+import glob
 import inspect
 import logging
 import os
@@ -246,13 +246,11 @@ try:
 except ImportError:             # pragma: no cover
     h5py = None
 
-try:
-    import tables
-except ImportError:             # pragma: no cover
-    tables = None
-
 import interfaces
 import objects
+
+
+_HDF5_EXTS = set(['hf5', 'hd5', 'hdf5'])
 
 
 class ArchiveError(Exception):
@@ -355,6 +353,150 @@ def backup(filename, keep=True):
         os.remove(backup_name)
 
 
+_EXTS = {
+    'hdf5': '.hd5',
+    'npy': '',
+    'npz': '.npz'
+}
+
+
+def get_ext(filename):
+    """Return the extension of filename"""
+    basename = os.path.basename(filename)
+    ext = ''
+    if os.path.extsep in basename:
+        ext = basename.split(os.path.extsep)[-1].lower()
+    return ext
+
+
+def _save_arrays(arrays, filename, keep=False, data_format='npy'):
+    """Archive the array to the specified file.
+
+    Arguments
+    ---------
+    arrays : dict
+       Mapping from names (must be valid python identifiers) to data arrays.
+    filename : str
+       Name of file/directory in which to archive the data.
+    data_format : 'hdf5', 'npy', 'npz'
+       Format of data on disk.
+    """
+    ext = get_ext(filename)
+    if data_format == 'hdf5':
+        if ext not in _HDF5_EXTS:
+            filename = os.path.extsep.join([filename, 'hd5'])
+        with backup(filename, keep=keep):
+            with h5py.File(filename) as f:
+                for name in arrays:
+                    f[name] = arrays[name]
+    elif data_format == 'npz':
+        if ext != 'npz':
+            filename = os.path.extsep.join([filename, 'npz'])
+        with backup(filename, keep=keep):
+            np.savez(filename, **arrays)
+    elif data_format == 'npy':
+        if not os.path.exists(filename):
+            os.makedirs(filename)
+        for name in arrays:
+            _filename = os.path.join(filename, name)
+            with backup(_filename, keep=keep):
+                np.save(_filename, arrays[name])
+    else:
+        raise NotImplementedError(
+            "Expected data_format in ['hdf5', 'npz', 'npy'], got {}"
+            .format(data_format))
+
+
+def get_data_format(filename):
+    """Return (data_format, filename) from the filename.
+
+    If the filename does not have an extension, then the contents of disk are
+    examined.
+
+    Examples
+    --------
+    >>> get_data_format('tst/a.npz')
+    ('npz', 'tst/a.npz')
+    >>> get_data_format('tst/a.hd5')
+    ('hdf5', 'tst/a.hd5')
+    >>> get_data_format('/dev/null/a')
+    Traceback (most recent call last):
+       ...
+    ValueError: Cannot determine data_format: No files /dev/null/a.*
+    >>> get_data_format('/dev/null/a.unknown')
+    Traceback (most recent call last):
+       ...
+    ValueError: Unknown data_format for extension unknown of /dev/null/a.unknown
+    """
+    basename = os.path.basename(filename)
+    if os.path.extsep in basename:
+        ext = basename.split(os.path.extsep)[-1].lower()
+    elif os.path.exists(filename) and os.path.isdir(filename):
+        ext = ''
+    else:
+        files = glob.glob(os.path.extsep.join([filename, '*']))
+        if not files:
+            raise ValueError("Cannot determine data_format: No files {}.*"
+                             .format(filename))
+        elif len(files) > 1:
+            raise ValueError("Cannot determine data_format: Multiple files {}"
+                             .format(files))
+        else:
+            filename = files[0]
+            ext = filename.split(os.path.extsep)[-1].lower()
+
+    if ext in set(_HDF5_EXTS):
+        data_format = 'hdf5'
+    elif ext == 'npz':
+        data_format ='npz'
+    elif ext == '':
+        data_format = 'npy'
+    else:
+        raise ValueError("Unknown data_format for extension {} of {}"
+                         .format(ext, filename))
+    return data_format, filename
+
+
+def load_arrays(filename, keys=None, data_format=None):
+    """Return a dictionary with the arrays from the specified file.
+
+    Arguments
+    ---------
+    filename : str
+       Name of file/directory to read data from.  If this has no extension and
+       data_format is None, then the files on disk will be inspected to
+       determine the data format.
+    key : str, None
+       Name of data to read.  If `None`, then load all the data.
+    data_format : 'hdf5', 'npy', 'npz', None
+       Format of data on disk.  If `None`, then the format is inferred from the
+       filename extension which must end in `.hd5`, `.npy`, or `.npz` or from
+       the existing data on disk.
+    """
+    if data_format is None:
+        data_format, filename = get_data_format(filename)
+
+    arrays = None
+    if data_format == 'hdf5':
+        with h5py.File(filename, 'r') as f:
+            if keys is None:
+                keys = f
+            arrays = {k: np.asarray(f[k]) for k in keys}
+    elif data_format == 'npz':
+        with np.load(filename) as f:
+            if keys is None:
+                keys = f
+            arrays = {k: np.asarray(f[k]) for k in keys}
+    elif data_format == 'npy':
+        if keys is None:
+            keys = [f[:-4] for f in os.listdir(filename) if f.endswith('.npy')]
+        arrays = {k: np.load(os.path.join(filename, k) + '.npy') for k in keys}
+    else:
+        raise NotImplementedError("Unknown data_format={}".format(data_format))
+
+    return arrays
+
+
 class Archive(object):
     r"""Archival tool.
 
@@ -404,14 +546,17 @@ class Archive(object):
        be allowed as a valid name for other data in the archive.
     datafile : None, str, optional
        If provided, then numpy arrays longer than
-       :attr:`array_threshold` are archived in binary to this file.
+       :attr:`array_threshold` are archived in binary to this file or directory.
        (See also `hdf5`).  Otherwise, they will be stored in
        :attr:`data` which must be manually archived and restored
        externally.  The data will be written when
        :meth:`make_persistent` is called.
+    data_format : 'npy', 'npz', 'hdf5
+       Data format used to store binary data in the file/directory `datafile`.
     hdf5 : True, False, optional
        If `True` and `datafile` is provided, then use hdf5 via the h5py package
-       to store the binary data.
+       to store the binary data, otherwise use .npz files.
+       Deprecated.  Use `data_format`.
     backup_data : bool
        If `True` and :attr:`datafile` already exists, then a backup of
        the data will first be made with an extension `'.bak'` or
@@ -422,7 +567,7 @@ class Archive(object):
     allowed_names : [str], optional
        If provided, then these names will be considered acceptable.
        This allows for 'private' names to be used by specialized
-       structures.
+       structures.  These must not start with `gname_prefix`.
     gname_prefix : str, optional
        This string is used to prefix all global variables.
     scoped : bool, optional
@@ -485,18 +630,19 @@ class Archive(object):
     from persist.archive import restore as _restore
     from numpy import sin as _sin
     from __builtin__ import dict as _dict
-    _l_5 = ['a', 'b']
-    l = [1, 2, 3, _l_5]
-    d = _dict([('s', 'hi'), ('l', l), ('l0', _l_5)])
+    _g11 = ['a', 'b']
+    l = [1, 2, 3, _g11]
+    d = _dict([('s', 'hi'), ('l', l), ('l0', _g11)])
     x = 4
     g = _restore
     f = _sin
     del _restore
     del _sin
     del _dict
-    del _l_5
+    del _g11
     try: del __builtins__
     except NameError: pass
+
 
     Now we can restore this by executing the string.  This should be
     done in a dictionary environment.
@@ -516,7 +662,8 @@ class Archive(object):
     data_name = '_arrays'
 
     def __init__(self, flat=True, tostring=True, check_on_insert=False,
-                 array_threshold=None, datafile=None, hdf5=bool(h5py),
+                 array_threshold=None, datafile=None, data_format=None,
+                 hdf5=None,
                  backup_data=True, allowed_names=None, gname_prefix='_g',
                  scoped=True, robust_replace=True):
         self.tostring = tostring
@@ -547,15 +694,47 @@ class Archive(object):
         self.check_on_insert = check_on_insert
         self.data = {}
         self.datafile = datafile
-        self.hdf5 = hdf5
+        if hdf5 is not None:
+            warnings.warn(
+                "hdf5 option deprecated.  Use data_format='hdf5' instead.",
+                DeprecationWarning)
+            if hdf5:
+                data_format = 'hdf5'
+
+        if data_format == 'hdf5' and not h5py:
+            raise ArchiveError("HDF5 requested but h5py could not be imported.")
+
+        if data_format is None:
+            # Determine data_format from datafile
+            if datafile is None:
+                data_format = 'npy'
+            else:
+                _ext = datafile.split(os.path.extsep)
+                _ext = _ext[-1].lower() if len(_ext) > 1 else ''
+                if _ext in set(_HDF5_EXTS):
+                    data_format = 'hdf5'
+                elif _ext == '':
+                    data_format = 'npy'
+                else:
+                    data_format = _ext
+
+        self._data_format = data_format
         self.scoped = scoped
         self.robust_replace = robust_replace
 
         self._maxint = -1       # Cache of maximum int label in archive
+        self._ids = OrderedDict()
 
-        if hdf5 and not h5py:
-            raise ArchiveError(
-                "HDF5 requested but h5py could not be imported.")
+    def get_id(self, obj):
+        """Return a unique id for the object.
+
+        This function is used as a proxy for the builtin id function so that id
+        numbers are generated in sequential order based on calls to this
+        function.  This makes the sorting of nodes in the graph predictable for
+        tests.  (Otherwise some tests depend on the ordering of `id()` which
+        varies from run to run.)
+        """
+        return self._ids.setdefault(id(obj), len(self._ids))
 
     def names(self):
         r"""Return list of unique names in the archive."""
@@ -850,8 +1029,8 @@ class Archive(object):
             # First check to see if object is already in archive:
             unames, objs, envs = _unzip(self.arch)
 
-            obj_ids = map(id, objs)
-            obj_id = id(obj)
+            obj_ids = map(self.get_id, objs)
+            obj_id = self.get_id(obj)
             obj_ind = None
             if obj_id in obj_ids:
                 obj_ind = obj_ids.index(obj_id)
@@ -883,7 +1062,7 @@ class Archive(object):
             assert(ind is not None)
             uname, obj, env = self.arch[ind]
             names.append(uname)
-            self.ids[uname] = id(obj)
+            self.ids[uname] = self.get_id(obj)
 
     def make_persistent(self):
         r"""Return `(imports, defs)` representing the persistent
@@ -1011,13 +1190,13 @@ class Archive(object):
         try:
             graph = Graph(objects=self.arch,
                           get_persistent_rep=self.get_persistent_rep,
-                          robust_replace=self.robust_replace)
+                          robust_replace=self.robust_replace,
+                          get_id=self.get_id)
         except topsort.CycleError, err:
             raise CycleError, err.args , sys.exc_info()[-1]
 
         # Optionally: at this stage perform a graph reduction.
         graph.reduce()
-
         names_reps = [(node.name, node.rep)
                       for id_ in graph.order
                       for node in [graph.nodes[id_]]]
@@ -1030,15 +1209,17 @@ class Archive(object):
             for node in [graph.nodes[self.ids[name]]]])
 
         # Archive the data to file if requested.
-        if self.data and self.datafile is not None:
-            if self.hdf5 and h5py:
-                with backup(self.datafile, keep=self.backup_data):
-                    with h5py.File(self.datafile) as f:
-                        for name in self.data:
-                            f[name] = self.data[name]
+        if self.data:
+            if self.datafile is not None:
+                _save_arrays(arrays=self.data,
+                             filename=self.datafile,
+                             keep=self.backup_data,
+                             data_format=self._data_format)
             else:
-                raise NotImplementedError(
-                    "Data can presently only be saved with hdf5")
+                warnings.warn(
+                    "Data arrays {} exist but no datafile specified. "
+                    .format(self.data.keys()) +
+                    "Save data manually and populate in _arrays dict.")
 
         return (graph.imports, names_reps)
 
@@ -1113,7 +1294,8 @@ class Archive(object):
             graph = _Graph(objects=self.arch,
                            get_persistent_rep=self.get_persistent_rep,
                            gname_prefix=self.gname_prefix,
-                           allowed_names=set(self.allowed_names))
+                           allowed_names=set(self.allowed_names),
+                           get_id=self.get_id)
         except topsort.CycleError, err:
             raise CycleError, err.args, sys.exc_info()[-1]
 
@@ -1140,7 +1322,7 @@ class Archive(object):
                            args=",".join([
                                 "=".join([
                                     _a,
-                                    graph.nodes[id(node.args[_a])].name])
+                                    graph.nodes[self.get_id(node.args[_a])].name])
                                for _a in node.args]),
                            imports="\n    ".join(
                                [""] + self._get_import_lines(node.imports)[0]),
@@ -1158,15 +1340,17 @@ class Archive(object):
             results.append(" = ".join([name, node.name]))
 
         # Archive the data to file if requested.
-        if self.data and self.datafile is not None:
-            if self.hdf5 and h5py:
-                with backup(self.datafile, keep=self.backup_data):
-                    with h5py.File(self.datafile) as f:
-                        for name in self.data:
-                            f[name] = self.data[name]
+        if self.data:
+            if self.datafile is not None:
+                _save_arrays(arrays=self.data,
+                             filename=self.datafile,
+                             keep=self.backup_data,
+                             data_format=self._data_format)
             else:
-                raise NotImplementedError(
-                    "Data can presently only be saved with hdf5")
+                warnings.warn(
+                    "Data arrays {} exist but no datafile specified. "
+                    .format(self.data.keys()) +
+                    "Save data manually and populate in _arrays dict.")
 
         gnames = ", ".join(_n for _n in names
                            if _n.startswith(self.gname_prefix)
@@ -1178,6 +1362,32 @@ class Archive(object):
             "except NameError: pass"])
 
         return "\n".join(results)
+
+    def eval(self, s, d=None, datafile=None, data_name=None):
+        """Return the evaluated representation of the archive `s`.
+
+        This method loads any associated externally stored arrays if required.
+        Uses
+
+        Arguents
+        --------
+        s : str
+           Representation of an archive as returned by `str(archive)`.
+        d : dict, None
+           Dictionary in which `s` is evaluated.
+        """
+        if d is None:
+            d = {}
+        if datafile is None:
+            datafile = self.datafile
+        if data_name is None:
+            data_name = self.data_name
+        if datafile:
+            d[data_name] = load_arrays(datafile)
+        exec(s, d)
+        if data_name in d:
+            del d[data_name]
+        return d
 
 
 def get_imports(obj, env=None):
@@ -1445,7 +1655,7 @@ def is_simple(obj):
     [True, True, True, True, True, True, True]
     >>> map(is_simple,
     ...     [[1], (1, ), {'a':2}])
-    [False, False, False]
+    [False, True, False]
     """
     if hasattr(obj, '__class__'):
         class_ = obj.__class__
@@ -1456,7 +1666,10 @@ def is_simple(obj):
                 None.__class__]
             or
             (class_ in [float, complex]
-             and not (np and (np.isinf(obj)) or np.isnan(obj))))
+             and not (np and (np.isinf(obj)) or np.isnan(obj)))
+            or
+            (class_ == tuple and all(map(is_simple, obj)))
+        )
     else:                       # pragma: no cover
         result = False
     if result:
@@ -1478,15 +1691,26 @@ class Node(object):
        names defined in :attr:`args`
     args : dict
        Dictionary where value `obj` is referenced in `rep` by key `name`.
-    parents : set
-       Set of parent id's
+    children : list, None
+       List of children id's.  If `None`, then it is constructed from `args`.
+       In this case it is imperative that each instance of an object in `rep`
+       has a unique identifier, even if it refers to the same object in memory.
+    parents : list
+       List of parent id's
     """
-    def __init__(self, obj, rep, args, name, imports=None, parents=set()):
+    def __init__(self, obj, rep, args, name, imports=None,
+                 children=None, parents=None, get_id=id):
+        self.get_id = get_id
         self.obj = obj
         self.rep = rep
         self.args = dict(**args)
         self.name = name
-        self.parents = set(parents)
+        if children is None:
+            children = [self.get_id(self.args[_name]) for _name in self.args]
+        self.children = children
+        if parents is None:
+            parents = []
+        self.parents = parents
         self.imports = imports
 
     def __repr__(self):
@@ -1496,12 +1720,13 @@ class Node(object):
         --------
         >>> Node(obj=['A'], rep='[x]', args=dict(x='A'), name='a')
         Node(obj=['A'], rep='[x]', args={'x': 'A'}, name='a', imports=None,
-             parents=set([]))
+             children=[...], parents=[])
         """
         return (
-            "Node(obj=%r, rep=%r, args=%r, name=%r, imports=%r, parents=%r)"
+            ("Node(obj=%r, rep=%r, args=%r, name=%r, imports=%r, "
+             + "children=%r, parents=%r)")
             % (self.obj, self.rep, self.args, self.name, self.imports,
-               self.parents))
+               self.children, self.parents))
 
     def __str__(self):
         r"""Return string showing node.
@@ -1516,19 +1741,14 @@ class Node(object):
     @property
     def id(self):
         r"""id of node."""
-        return id(self.obj)
-
-    @property
-    def children(self):
-        r"""List of dependent ids"""
-        return [id(self.args[name]) for name in self.args]
+        return self.get_id(self.obj)
 
     def isreducible(self, roots):
-        r"""Return `True` if the nodeg can be reduced.
+        r"""Return `True` if the node can be reduced.
 
-        A node can be reduced if it is either a simple object with an
-        efficient representation (as defined by :meth:`is_simple`), or
-        if it has exactly one parent and is not a root node."""
+        A node can be reduced if it is not a root node, and is either a simple
+        object with an efficient representation (as defined by
+        :meth:`is_simple`), or has exactly one parent."""
         reducible = (self.id not in roots and
                      (is_simple(self.obj) or 1 == len(self.parents)))
         return reducible
@@ -1540,7 +1760,8 @@ class Graph(object):
     This is a graph of objects in memory: these are identified by
     their python :func:`id`.
     """
-    def __init__(self, objects, get_persistent_rep, robust_replace=True):
+    def __init__(self, objects, get_persistent_rep, robust_replace=True,
+                 gname_prefix='_g', allowed_names=set(), get_id=id):
         r"""Initialize the dependency graph with some reserved
         names.
 
@@ -1564,10 +1785,14 @@ class Graph(object):
 
                 from module import iname as uiname
         """
+        self.get_id = get_id
         self.nodes = {}
         self.roots = set()
         self.envs = {}
         self.imports = []
+        self.gname_prefix = gname_prefix
+        self.allowed_names = allowed_names
+
         self.names = UniqueNames(set([name for (name, obj, env)
                                       in objects]))
         self.get_persistent_rep = get_persistent_rep
@@ -1581,16 +1806,16 @@ class Graph(object):
             self.nodes[node.id] = node
 
         # Now do a depth first search to build the graph.
-        for id_ in self.roots:
-            self._DFS(node=self.nodes[id_], env=self.envs[id_])
+        for _id in self.roots:
+            self._DFS(node=self.nodes[_id], env=self.envs[_id])
 
         self.order = self._topological_order()
 
         # Go through all nodes to determine unique names and update
         # reps.  Now that it is sorted we can do this simply.
-        for id_ in self.order:
-            node = self.nodes[id_]
-            if id_ in self.roots:
+        for _id in self.order:
+            node = self.nodes[_id]
+            if _id in self.roots:
                 # Node is a root node.  Leave name alone
                 pass
             else:
@@ -1604,7 +1829,7 @@ class Graph(object):
             args = {}
             for name in node.args:
                 obj = node.args[name]
-                uname = self.nodes[id(obj)].name
+                uname = self.nodes[self.get_id(obj)].name
                 args[uname] = obj
                 if not name == uname:
                     replacements[name] = uname
@@ -1612,29 +1837,36 @@ class Graph(object):
 
             for child in node.children:
                 cnode = self.nodes[child]
-                cnode.parents.add(node.id)
+                cnode.parents.append(node.id)
 
             node.rep = _replace_rep(node.rep, replacements,
                                     robust=self.robust_replace)
 
-    def _new_node(self, obj, env, name=None):
+    def gname(self, obj):
+        r"""Return a unique global name for the specified object.
+
+        This name is `self.gname_prefix` followed by the object's id.
+        """
+        return self.gname_prefix + str(self.get_id(obj))
+
+    def _new_node(self, obj, env, name):
         r"""Return a new node associated with `obj` and using the
-        specified `name`  If `name` is specified, then we assume
-        that the `name` is to be exported.  Also process the
-        imports of the node."""
+        specified `name`.  Also process the imports of the node."""
         rep, args, imports = self.get_persistent_rep(obj, env)
         rep = self._process_imports(rep, args, imports)
-        return Node(obj=obj, rep=rep, args=args, name=name)
+        return Node(obj=obj, rep=rep, args=args, name=name, imports=imports,
+                    get_id=self.get_id)
 
     def _DFS(self, node, env):
         r"""Visit all nodes in the directed subgraph specified by
         node, and insert them into nodes."""
-        for name, obj in node.args.iteritems():
-            id_ = id(obj)
+        for _name in node.args:
+            obj = node.args[_name]
+            id_ = self.get_id(obj)
             if id_ not in self.nodes:
-                node = self._new_node(obj, env, name)
-                self.nodes[id_] = node
-                self._DFS(node, env)
+                new_node = self._new_node(obj, env, self.gname(obj))
+                self.nodes[id_] = new_node
+                self._DFS(new_node, env)
 
     def _process_imports(self, rep, args, imports):
         r"""Process imports and add them to self.imports,
@@ -1669,7 +1901,7 @@ class Graph(object):
     def edges(self):
         r"""Return a list of edges `(id1, id2)` where object `id1` depends
         on object `id2`."""
-        return [(id_, id(obj))
+        return [(id_, self.get_id(obj))
                 for id_ in self.nodes
                 for (name, obj) in self.nodes[id_].args.iteritems()]
 
@@ -1685,26 +1917,28 @@ class Graph(object):
     def _reduce(self, id):
         r"""Reduce the node."""
         node = self.nodes[id]
-        if node.isreducible(roots=self.roots):
-            replacements = {node.name: node.rep}
-            for parent in node.parents:
-                pnode = self.nodes[parent]
-                pnode.rep = _replace_rep(pnode.rep, replacements,
-                                         robust=self.robust_replace)
+        replacements = {node.name: node.rep}
+        for parent in node.parents:
+            pnode = self.nodes[parent]
+            pnode.rep = _replace_rep(pnode.rep, replacements,
+                                     robust=self.robust_replace)
+            pnode.children.remove(id)
+            if node.name in pnode.args:
+                # It may have been removed already...
                 del pnode.args[node.name]
-                pnode.args.update(node.args)
-            for child in node.children:
-                cnode = self.nodes[child]
-                cnode.parents.remove(id)
-                cnode.parents.update(node.parents)
-            del self.nodes[id]
+
+            pnode.args.update(node.args)
+        for child in node.children:
+            cnode = self.nodes[child]
+            cnode.parents.remove(id)
+            cnode.parents.extend(node.parents)
+        del self.nodes[id]
 
     def check(self):
         r"""Check integrity of graph."""
         for id in self.nodes:
             node = self.nodes[id]
             children = node.children
-            assert children == unique_list(children)
             for child in children:
                 cnode = self.nodes[child]
                 assert id in cnode.parents
@@ -1729,94 +1963,146 @@ class Graph(object):
         r"""Reduce the graph once by combining representations for nodes
         that have a single parent.
 
-       Examples
-       --------
+        Examples
+        --------
 
-       .. digraph:: example
+        .. digraph:: example
 
-           "A" -> "B" -> "F";
-           "A" -> "C" -> "D" -> "G";
-           "C" -> "E" -> "G";
-           "C" -> "F";
+            "A" -> "B" -> "F";
+            "A" -> "C" -> "D" -> "G";
+            "C" -> "E" -> "G";
+            "C" -> "F";
 
-        ::
+         ::
 
-                                A
-                               / \
-                              B   C
-                              |  /| \
-                              | / D  E
-                              'F'  \ /
-                                   'G'
+                                 A
+                                / \
+                               B   C
+                               |  /| \
+                               | / D  E
+                               'F'  \ /
+                                    'G'
 
-       If F and G are builtin, then this is completely reducible,
-       otherwise the only reductions that can be made are on B, D, and
-       E.
+        If F and G are builtin, then this is completely reducible,
+        otherwise the only reductions that can be made are on B, D, and
+        E.
 
-       >>> G = 'G'; F = 'F'
-       >>> D = [G]; E = [G]; C = [F, D, E]; B = [F]; A = [B, C]
-       >>> a = Archive(scoped=False);
-       >>> a.insert(A=A)
-       >>> g = Graph(a.arch, a.get_persistent_rep)
-       >>> len(g.nodes)
-       7
-       >>> g.reduce()
-       >>> len(g.nodes)         # Completely reducible
-       1
-       >>> print a
-       A = [['F'], ['F', ['G'], ['G']]]
-       try: del __builtins__
-       except NameError: pass
+        >>> G = 'G'; F = 'F'
+        >>> D = [G]; E = [G]; C = [F, D, E]; B = [F]; A = [B, C]
+        >>> a = Archive(scoped=False);
+        >>> a.insert(A=A)
+        >>> g = Graph(a.arch, a.get_persistent_rep)
+        >>> len(g.nodes)
+        7
+        >>> g.reduce()
+        >>> len(g.nodes)         # Completely reducible
+        1
+        >>> print a
+        A = [['F'], ['F', ['G'], ['G']]]
+        try: del __builtins__
+        except NameError: pass
 
-       If we now make F and G not builtin, then we will not be able to
-       reduce them::
+        If we now make F and G not builtin, then we will not be able to
+        reduce them::
 
-                                A
-                               / \
-                              B   C
-                              |  /| \
-                              | / D  E
-                               F   \ /
-                               |    G
-                              'F'   |
-                                   'G'
+                                 A
+                                / \
+                               B   C
+                               |  /| \
+                               | / D  E
+                                F   \ /
+                                |    G
+                               'F'   |
+                                    'G'
 
-       >>> G = ['G']; F = ['F']
-       >>> D = [G]; E = [G]; C = [F, D, E]; B = [F]; A = [B, C]
-       >>> a = Archive(scoped=False);
-       >>> a.insert(A=A)
-       >>> g = Graph(a.arch, a.get_persistent_rep)
-       >>> len(g.nodes)
-       9
-       >>> g.reduce()
-       >>> len(g.nodes)         # Nodes A, F and G remain
-       3
-       >>> print a
-       _l_5 = ['F']
-       _l_1 = ['G']
-       A = [[_l_5], [_l_5, [_l_1], [_l_1]]]
-       del _l_5,_l_1
-       try: del __builtins__
-       except NameError: pass
+        >>> G = ['G']; F = ['F']
+        >>> D = [G]; E = [G]; C = [F, D, E]; B = [F]; A = [B, C]
+        >>> a = Archive(scoped=False);
+        >>> a.insert(A=A)
+        >>> g = Graph(a.arch, a.get_persistent_rep)
+        >>> len(g.nodes)
+        9
+        >>> g.reduce()
+        >>> len(g.nodes)         # Nodes A, F and G remain
+        3
+        >>> print a
+        _g3 = ['F']
+        _g7 = ['G']
+        A = [[_g3], [_g3, [_g7], [_g7]]]
+        del _g3,_g7
+        try: del __builtins__
+        except NameError: pass
 
-       If we explicitly add a node, then it can no longer be reduced:
+        If we explicitly add a node, then it can no longer be reduced:
 
-       >>> a.insert(B=B)
-       >>> g = Graph(a.arch, a.get_persistent_rep)
-       >>> len(g.nodes)
-       9
-       >>> g.reduce()
-       >>> len(g.nodes)         # Nodes A, F and G remain
-       4
-       >>> print a
-       _l_5 = ['F']
-       B = [_l_5]
-       _l_1 = ['G']
-       A = [B, [_l_5, [_l_1], [_l_1]]]
-       del _l_5,_l_1
-       try: del __builtins__
-       except NameError: pass
-       """
+        >>> a.insert(B=B)
+        >>> g = Graph(a.arch, a.get_persistent_rep)
+        >>> len(g.nodes)
+        9
+        >>> g.reduce()
+        >>> len(g.nodes)         # Nodes A, F and G remain
+        4
+        >>> print a
+        _g3 = ['F']
+        B = [_g3]
+        _g7 = ['G']
+        A = [B, [_g3, [_g7], [_g7]]]
+        del _g3,_g7
+        try: del __builtins__
+        except NameError: pass
+
+
+        Here is a graph that previously was problematic. Reducing this graph
+        should not break the loop since A contains two copies of F which need to
+        be identical.
+
+                                 A
+                                / \
+                                \ /
+                                 F
+                                 |
+                                'F'
+
+        >>> F = ['F']
+        >>> A = [F, F]
+        >>> a = Archive(scoped=False);
+        >>> a.insert(A=A)
+        >>> g = Graph(a.arch, a.get_persistent_rep, get_id=a.get_id)
+        >>> len(g.nodes)
+        3
+        >>> g.reduce()
+        >>> len(g.nodes)
+        2
+        >>> print a
+        _g1 = ['F']
+        A = [_g1, _g1]
+        del _g1
+        try: del __builtins__
+        except NameError: pass
+
+        Here is a similar graph that is reducible since the terminal is a
+        "simple" object.
+
+                                 A
+                                / \
+                                \ /
+                                'F'
+
+        >>> F = 'F'
+        >>> A = [F, F]
+        >>> a = Archive(scoped=False);
+        >>> a.insert(A=A)
+        >>> g = Graph(a.arch, a.get_persistent_rep, get_id=a.get_id)
+        >>> len(g.nodes)
+        2
+        >>> g.reduce()
+        >>> len(g.nodes)
+        1
+        >>> print a
+        A = ['F', 'F']
+        try: del __builtins__
+        except NameError: pass
+        """
         self.check()
         reducible_ids = [id for id in self.order
                          if self.nodes[id].isreducible(roots=self.roots)]
@@ -1839,7 +2125,7 @@ class _Graph(Graph):
        are unique and do not start with an underscore `_`.
     """
     def __init__(self, objects, get_persistent_rep,
-                 gname_prefix='_g', allowed_names=set()):
+                 gname_prefix='_g', allowed_names=set(), get_id=id):
         r"""Initialize the dependency graph with some reserved
         names.
 
@@ -1863,6 +2149,7 @@ class _Graph(Graph):
 
                 from module import iname as uiname
         """
+        self.get_id = get_id
         self.nodes = {}
         self.roots = set()
         self.envs = {}
@@ -1870,6 +2157,7 @@ class _Graph(Graph):
         self.gname_num = 0
         self.gname_prefix = gname_prefix
         self.allowed_names = allowed_names
+
         self.get_persistent_rep = get_persistent_rep
         self.names = set()
 
@@ -1887,47 +2175,19 @@ class _Graph(Graph):
         self.order = self._topological_order()
 
         # Add all reverse links from child to parent nodes.
-        for _id_ in self.order:
+        for _id in self.order:
             node = self.nodes[_id]
             for child in node.children:
                 cnode = self.nodes[child]
-                cnode.parents.add(node.id)
+                cnode.parents.append(node.id)
 
-    def _new_node(self, obj, env, name=None):
+    def _new_node(self, obj, env, name):
         r"""Return a new node associated with `obj` and using the
-        specified `name`  If `name` is specified, then we assume
-        that the `name` is to be exported.  Also process the
-        imports of the node."""
-        if name is None:
-            name = self.gname
-        else:
-            assert (name in self.allowed_names
-                    or not name.startswith(self.gname_prefix))
-            assert name not in self.names
+        specified `name`. Also process the imports of the node."""
         self.names.add(name)
         rep, args, imports = self.get_persistent_rep(obj, env)
-        return Node(obj=obj, rep=rep, args=args, name=name, imports=imports)
-
-    @property
-    def gname(self):
-        r"""Return a unique global name.  These start with an underscore."""
-        while True:
-            gname = self.gname_prefix + str(self.gname_num)
-            self.gname_num += 1
-            if gname not in self.allowed_names:
-                break
-        return gname
-
-    def _DFS(self, node, env):
-        r"""Visit all nodes in the directed subgraph specified by
-        node, and insert them into nodes."""
-        for _name in node.args:
-            obj = node.args[_name]
-            id_ = id(obj)
-            if id_ not in self.nodes:
-                new_node = self._new_node(obj, env)
-                self.nodes[id_] = new_node
-                self._DFS(new_node, env)
+        return Node(obj=obj, rep=rep, args=args, name=name, imports=imports,
+                    get_id=self.get_id)
 
     # edges = Graph.edges
     # _topological_order = Graph._topological_order
@@ -2480,7 +2740,9 @@ class DataSet(object):
     def __init__(self, module_name, mode='r', path=".",
                  synchronize=True,
                  _reload=False,
-                 array_threshold=100, backup_data=False,
+                 array_threshold=100,
+                 data_format='npy',
+                 backup_data=False,
                  name_prefix='x_',
                  timeout=60,
                  scoped=True):
@@ -2511,7 +2773,10 @@ class DataSet(object):
            This -- appended with an integer -- is used to form unique
            names when :meth:`insert` is called without specifying a name.
         array_threshold : int
-           Threshold size above which arrays are stored as hd5 files.
+           Threshold size above which arrays are stored using the format
+           specified in the `data_format` flag.
+        data_format : 'npy', 'hdf5', 'npz'
+           Format to use for storing arrays that exceed the array_threshold.
         backup_data : bool
            If `True`, then backup copies of overwritten data will be
            saved.
@@ -2536,6 +2801,7 @@ class DataSet(object):
         self._synchronize = synchronize
         self._mode = mode
         self._array_threshold = array_threshold
+        self._data_format = data_format
         self._module_name = module_name
         self._path = path
         self._backup_data = backup_data
@@ -2679,23 +2945,21 @@ class DataSet(object):
 
             datafile = os.path.join(self._path,
                                     self._module_name,
-                                    "data_%s.hd5" % (name,))
-            f = None
-            if os.path.exists(datafile):
-                with h5py.File(datafile, 'r') as f:
-                    for k in f:
-                        d[k] = np.asarray(f[k])
+                                    "data_%s" % (name,))
+            try:
+                d.update(load_arrays(datafile))
+                datafile_exists = True
+            except IOError:
+                datafile_exists = False
+
             try:
                 execfile(archive_file, _d)
             except KeyError:
-                if f is None:
-                    raise
-                else:
-                    msg = "\n".join([
+                if datafile_exists:
+                    raise KeyError("\n".join([
                         "No datafile '%s' found to load '%s'.",
-                        (datafile, name)])
-                    f.close()
-                    raise KeyError(msg)
+                        (datafile, name)]))
+                raise
             res = _d[name]
             del d
             del _d
@@ -2714,6 +2978,7 @@ class DataSet(object):
 
         with self._ds_lock():              # Establish lock
             arch = Archive(array_threshold=self._array_threshold,
+                           data_format=self._data_format,
                            scoped=self._scoped)
             arch.insert(**{name: value})
             archive_file = os.path.join(self._path,
@@ -2728,16 +2993,16 @@ class DataSet(object):
 
             datafile = os.path.join(self._path,
                                     self._module_name,
-                                    "data_%s.hd5" % (name,))
-            with backup(datafile, keep=self._backup_data):
-                if arch.data:
-                    if arch.hdf5 and h5py:
-                        with h5py.File(datafile) as f:
-                            for _name in arch.data:
-                                f[_name] = arch.data[_name]
-                    else:
-                        raise NotImplementedError(
-                            "Data can presently only be saved with hdf5")
+                                    "data_%s" % (name,))
+            if self._data_format == 'npz':
+                datafile = os.path.extsep.join([datafile, 'npz'])
+            elif self._data_format == 'hdf5':
+                datafile = os.path.extsep.join([datafile, 'hd5'])
+
+            _save_arrays(arrays=arch.data,
+                         filename=datafile,
+                         keep=self._backup_data,
+                         data_format=arch._data_format)
 
         # Needed for pre 2.6 python version to support tab completion
         if sys.version < "2.6":
@@ -2786,47 +3051,64 @@ class DataSet(object):
         load the dataset with ``DataSet(filename)``, then you will get the
         benefits of delayed loading etc.
         """
-        INIT_IMPORT = ("""
+        _tmp0 = """
 if __name__ == '{__NAME__}':
     def _load(name):
-        import os.path
+        import os.path, numpy
         dir = os.path.dirname(__file__)
-        data_file = os.path.join(dir, '{DATA_PRE}{{}}{DATA_EXT}'.format(name))
+        data_file = os.path.join(dir, 'data_{{}}{DATA_EXT}'.format(name))
         pyfile = os.path.join(dir, '{{}}.py'.format(name))
-
-        d = {{}}
-        if os.path.exists(data_file):
-            import numpy, h5py
-            {DATA_NAME} = {{}}
-            with h5py.File(data_file, 'r') as f:
-                for k in f:
-                    {DATA_NAME}[k] = numpy.asarray(f[k])
-            d['{DATA_NAME}'] = _arrays
+        d = dict({DATA_NAME}={{}})
+"""
+        _tmp2 = """
         with open(pyfile) as f:
             exec f.read() in d
         return d[name]
-""", """
+"""
+        if self._data_format == 'hdf5':
+            _tmp1 = """
+        import h5py
+        with h5py.File(data_file, 'r') as f:
+            for k in f:
+                d['{DATA_NAME}'][k] = numpy.asarray(f[k])
+"""
+        elif self._data_format == 'npy':
+            _tmp1 = """
+        for k in [f[:-4] for f in os.listdir(data_file)
+                  if f.endswith('.npy')]:
+            d['{DATA_NAME}'][k] = numpy.load(os.path.join(data_file, k) + '.npy')
+"""
+        elif self._data_format == 'npz':
+            _tmp1 = """
+        with numpy.load(data_file) as f:
+            for k in f:
+                d['{DATA_NAME}'][k] = numpy.asarray(f[k])
+"""
+
+        INIT_IMPORT = [
+            "\n".join([_tmp0, _tmp1, _tmp2]),
+            """
     try: {name} = _load('{name}')
     except: pass
 """, """
     del _load
-""")
+"""]
 
         if self._module_name:
             arch = Archive(allowed_names=['_info_dict'],
+                           data_format=self._data_format,
                            scoped=self._scoped)
             arch.insert(_info_dict=self._info_dict)
 
             init_file = os.path.join(
                 self._path, self._module_name, '__init__.py')
 
-            with backup(init_file):
+            with backup(init_file, keep=self._backup_data):
                 with open(init_file, 'w') as f:
                     f.write(str(arch))
                     f.write(INIT_IMPORT[0].format(
                         __NAME__=os.path.basename(self._module_name),
-                        DATA_PRE='data_',
-                        DATA_EXT='.hd5',
+                        DATA_EXT=_EXTS[self._data_format],
                         DATA_NAME=arch.data_name,
                     ))
                     for name in self._info_dict:
