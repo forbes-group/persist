@@ -108,13 +108,15 @@ data, however, this is extremely inefficient.  In this case, a separate archive
 format is used where the archive is turned into a module that contains a binary
 datafile or datadir.
 
+Developer's Note
+----------------
 .. todo::
-   - Consider using imports rather than execfile etc. for loading
-     :class:`DataSet` s.  This allows the components to be byte-compiled for
-     performance.  (Only really helps if the components have lots of code --
-     most of my loading performance issues are due instead to the execution of
-     constructors, so this will not help.)  Also important for python 3.0
-     conversion.
+   - Consider allowing components to be byte-compiled for performance.  (Only
+     really helps if the components have lots of code -- most of my loading
+     performance issues are due instead to the execution of constructors, so
+     this will not help.)  The issue here is fact that byte compilation takes
+     place in a parallel process that may not finish before a dataset is updated,
+     invalidating the byte-compiled files.
    - Make sure that numpy arrays from tostring() are *NOT* subject to
      replacement somehow.  Not exactly sure how to reproduce the
      problem, but it is quite common for these to have things like
@@ -143,8 +145,6 @@ datafile or datadir.
      `_maxint` cache. The remaining performance issues appear to be in
      `_replace_rep`.
 
-Developer's Note
-================
 After issue 12 arose, I decided to change the structure of archives to
 minimize the need to replace text.  New archives will evaluate objects in a
 local scope.  Here is an example, first in the old format::
@@ -208,16 +208,12 @@ unreliable::
 """
 from __future__ import division, with_statement
 
-__all__ = ['Archive', 'DataSet', 'restore',
-           'ArchiveError', 'DuplicateError', 'repr_',
-           'get_imports']
-
+from collections import OrderedDict
+from contextlib import contextmanager
 import __builtin__
 import ast
-from collections import OrderedDict
 import cPickle
 import copy
-import glob
 import imp
 import inspect
 import logging
@@ -228,7 +224,7 @@ import sys
 import time
 import types
 import warnings
-from contextlib import contextmanager
+
 import _contrib.RADLogic.topsort as topsort
 
 try:
@@ -249,6 +245,10 @@ except ImportError:             # pragma: no cover
 
 import interfaces
 import objects
+
+__all__ = ['Archive', 'DataSet', 'restore',
+           'ArchiveError', 'DuplicateError', 'repr_',
+           'get_imports']
 
 
 _HDF5_EXTS = set(['hf5', 'hd5', 'hdf5'])
@@ -414,7 +414,7 @@ class ArrayManager(object):
 
     @classmethod
     def save_arrays(cls, arrays, dirname='.', filename=None, keep=False,
-             data_format='npy', arrays_name='_arrays'):
+                    data_format='npy', arrays_name='_arrays'):
         """Return `(rep, files)` and save the array.
 
         Arguments
@@ -483,7 +483,7 @@ class ArrayManager(object):
 
         if filename is None:
             filename = ''
-            
+
         rep = ('\n'.join([_l[4:] for _l in res.splitlines()])).format(
             DATA_NAME=arrays_name,
             NAMES="[{}]".format(', '.join(map(repr, arrays))),
@@ -557,7 +557,7 @@ class Archive(object):
        `'.bak'` or `'_#.bak'` if backups already exists.  Otherwise, the file will
        be overwritten.  (Actually, a backup will always be made, but if the
        creation of the new file is successful, then the backup will be deleted if
-       this is `False`.) 
+       this is `False`.)
     single_item_mode : bool
        If `True`, then only one item is allowed in the archive at a time, and
        the importable representation saved by `Archive.save()` will replace the
@@ -657,8 +657,8 @@ class Archive(object):
     >>> id(res['l'][3]) == id(res['d']['l0'])
     True
 
-    Single Item Mode
-    ----------------
+    **Single Item Mode**
+
     Archives can also be used in single item mode.  This is primarly intended
     for used with DataSets, but could be of use to users.  In this mode, only
     one item can be inserted.  When saving these archives as a module, upon
@@ -675,7 +675,7 @@ class Archive(object):
     data_name = '_arrays'
 
     def __init__(self, flat=True, tostring=True, check_on_insert=False,
-                 array_threshold=None, 
+                 array_threshold=None,
                  backup_data=True, single_item_mode=False,
                  allowed_names=None, gname_prefix='_g',
                  scoped=True, robust_replace=True):
@@ -1182,7 +1182,7 @@ class Archive(object):
         # the parent ids.  The nodes dictionary also acts as the
         # "visited" list to prevent cycles.
 
-        ##names = _unzip(self.arch)[0]
+        # #names = _unzip(self.arch)[0]
 
         # Generate dependency graph
         try:
@@ -1191,7 +1191,7 @@ class Archive(object):
                           robust_replace=self.robust_replace,
                           get_id=self.get_id)
         except topsort.CycleError, err:
-            raise CycleError, err.args , sys.exc_info()[-1]
+            raise CycleError(err.args), None, sys.exc_info()[-1]
 
         # Optionally: at this stage perform a graph reduction.
         graph.reduce()
@@ -1224,17 +1224,17 @@ class Archive(object):
             assert(iname is not None or uiname is not None)
             if iname is None:
                 import_lines.append(
-                    "import %s as %s"%(module, uiname))
-                del_lines.append("del %s" % (uiname,))
+                    "import {} as {}".format(module, uiname))
+                del_lines.append("del {}".format(uiname))
             elif iname == uiname or uiname is None:  # pragma: no cover
                 # Probably never happens because uinames start with _
                 import_lines.append(
-                    "from %s import %s"%(module, uiname))
-                del_lines.append("del %s" % (uiname,))
+                    "from {} import {}".format(module, uiname))
+                del_lines.append("del {}".format(uiname))
             else:
                 import_lines.append(
-                    "from %s import %s as %s"%(module, iname, uiname))
-                del_lines.append("del %s" % (uiname,))
+                    "from {} import {} as {}".format(module, iname, uiname))
+                del_lines.append("del {}".format(uiname))
         return import_lines, del_lines
 
     def __str__(self):
@@ -1266,7 +1266,7 @@ class Archive(object):
             "try: del __builtins__, {}".format(self.data_name),
             "except NameError: pass"])
 
-        lines = "\n".join(["%s = %s"%(uname, rep)
+        lines = "\n".join(["{} = {}".format(uname, rep)
                            for (uname, rep) in defs])
         imports = "\n".join(import_lines)
         dels = "\n".join(del_lines)
@@ -1285,7 +1285,7 @@ class Archive(object):
                            allowed_names=set(self.allowed_names),
                            get_id=self.get_id)
         except topsort.CycleError, err:
-            raise CycleError, err.args, sys.exc_info()[-1]
+            raise CycleError(err.args), None, sys.exc_info()[-1]
 
         # Optionally: at this stage perform a graph reduction.
         # graph.reduce()
@@ -1846,7 +1846,7 @@ class Node(object):
         >>> print Node(obj=['A'], rep='[x]', args=dict(x='A'), name='a')
         Node(a=[x])
         """
-        return "Node(%s=%s)"%(self.name, self.rep)
+        return "Node({}={})".format(self.name, self.rep)
 
     @property
     def id(self):
@@ -2534,8 +2534,7 @@ def _replace_rep(rep, replacements, check=False, robust=True):
             prev = rep[i-1:i]
             next = rep[i+l:i+l+1]
             if ((not next or next not in identifier_tokens)
-                and
-                (not prev or prev not in identifier_tokens)):
+                    and (not prev or prev not in identifier_tokens)):
 
                 # Now get previous and next non-whitespace characters
                 c = i + l
@@ -3177,8 +3176,8 @@ class DataSet(object):
         else:
             info = None
 
-        #Why did I do this?  I don't use it...
-        #mod_dir = os.path.join(self._path, self._module_name)
+        # Why did I do this?  I don't use it...
+        # mod_dir = os.path.join(self._path, self._module_name)
         for name in kw:
             self[name] = info
             self.__setattr__(name, kw[name])

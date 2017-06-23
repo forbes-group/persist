@@ -32,7 +32,7 @@ test_requires = [
     'pytest-flake8',
     'coverage',
     'flake8',
-    'pep8==1.5.7',     # Needed by flake8: dependency resolution issue if not pinned
+    'pep8',     # Needed by flake8: dependency resolution issue if not pinned
     'numpy',
     'scipy',
     'h5py',

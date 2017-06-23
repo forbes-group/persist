@@ -46,7 +46,6 @@ DataSet Format
    :maxdepth: 1
    
    notebooks/DataSet Format
-   notebooks/Pickle
 
 API
 ===
@@ -54,7 +53,16 @@ API
 .. toctree::
    :maxdepth: 3
 
-   api/persist   
+   api/persist
+
+Developer Notes
+===============
+
+.. toctree::
+   :maxdepth: 1
+
+   notebooks/Pickle
+   notebooks/Dev Notes
 
 Indices and Tables
 ==================
