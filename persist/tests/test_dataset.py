@@ -8,6 +8,29 @@ from test_archive import NoStrNoRepr
 from persist import archive
 
 
+def test_1():
+    import tempfile, shutil, os
+    t = tempfile.mkdtemp(dir='.')
+    os.rmdir(t)
+    modname = t[2:]
+    ds = archive.DataSet(modname, 'w')
+    ds.d = dict(a=1, b=2)        # Will write to disk
+    ds1 = archive.DataSet(modname, 'r')
+    assert ds1.d == {'a': 1, 'b': 2}
+
+    ds.d['a'] = 6                # No write!
+    assert ds1.d['a'] == 1
+
+    import time
+    d = ds.d
+    d['a'] = 6
+    time.sleep(1)
+    ds.d = d                     # This assignment will write
+    assert ds1.d['a'] == 6
+
+    shutil.rmtree(t)
+    
+
 class TestDataSet(object):
     def test_failure1(self, ds_name):
         r"""Regression test for a bug that left a DataSet in a bad
@@ -57,12 +80,20 @@ class TestDataSet(object):
 
         # Try importing
         sys.path.append(ds_name)
-        ds = __import__(module_name)
+        ds_mod = __import__(module_name)
+        reload(ds_mod)
+        assert ds_mod._info_dict == dict(a=None, b='b', c=None)
 
-        assert ds._info_dict == dict(a=None, b='b', c=None)
-        assert np.allclose(ds.a, np.arange(1000, dtype=float))
-        assert ds.c == 1
+        # We have not imported a yet, so it should not be there
+        assert not hasattr(ds_mod, 'a')
+        __import__(module_name + '.a')
+        
+        # Now it should be there
+        assert np.allclose(ds_mod.a, np.arange(1000, dtype=float))
 
+        __import__(module_name + '.c')
+        assert ds_mod.c == 1
+        
     def test_noclobber(self):
         """Test access to an existing non-dataset."""
         with pytest.raises(ValueError):

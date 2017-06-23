@@ -89,3 +89,12 @@ def h5py():
 @pytest.fixture(params=[True, False])
 def scoped(request):
     yield request.param
+
+
+@pytest.fixture(params=[True, False])
+def package(request):
+    yield request.param
+
+@pytest.fixture(params=[True, False])
+def backup_data(request):
+    yield request.param
