@@ -5,3 +5,4 @@ _coverage
 .eggs
 persist.egg-info
 *.egg
+dist/

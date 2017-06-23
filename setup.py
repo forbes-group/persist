@@ -42,6 +42,7 @@ extras_require = dict(
     doc=['mmf_setup',
          'sphinx>=1.3.1',
          'sphinxcontrib-zopeext',
+         'nbsphinx>=0.2.13',
     ]
 )
 
