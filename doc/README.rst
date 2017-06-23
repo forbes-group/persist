@@ -6,8 +6,9 @@ Persistent archival of python objects in an importable format.
 
 This package provides a method for archiving python objects to disk for
 long-term persistent storage. The archives are importable python
-packages with large data stored in
-`HDF5 <http://www.hdfgroup.org/HDF5/>`__ files using the
+packages with large data stored in the
+`npy <https://docs.scipy.org/doc/numpy/neps/npy-format.html>`__ numpy
+data format, or `HDF5 <http://www.hdfgroup.org/HDF5/>`__ files using the
 `h5py <http://www.h5py.org>`__ package (if it is installed). The
 original goal was to overcomes several disadvatages of pickles:
 
@@ -20,6 +21,7 @@ original goal was to overcomes several disadvatages of pickles:
    still be edited or debugged in the case of errors due to API
    changes.)
 3. Efficient storage of large arrays.
+4. Safe for concurrent access by multiple processes.
 
 **Documentation:** http://persist.readthedocs.org
 
