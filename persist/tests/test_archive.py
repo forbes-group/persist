@@ -1,6 +1,9 @@
 from __future__ import print_function
 
+import glob
 import math
+import os.path
+import shutil
 import sys
 import warnings
 
@@ -418,16 +421,18 @@ class TestNumpy(ToolsMixin):
         a = archive.Archive(array_threshold=2)
         M = np.random.rand(10)
         a.insert(M=M)
+        s = str(a)
         with pytest.warns(UserWarning) as record:
-            a.make_persistent()
+            rep, files = a.save_data()
         assert len(record) == 1
         assert record[0].message.args[0] == (
             "Data arrays ['array_0'] exist but no datafile specified. " +
             "Save data manually and populate in _arrays dict.")
 
         assert len(a.data) == 1
+        s = str(a)
         with pytest.warns(UserWarning) as record:
-            a.make_persistent()
+            rep, files = a.save_data()
         assert len(record) == 1
         assert record[0].message.args[0] == (
             "Data arrays ['array_0'] exist but no datafile specified. " +
@@ -444,8 +449,9 @@ class TestNumpy(ToolsMixin):
         np.random.seed(1)
         M = np.random.rand(10)
         a.insert(M=M)
+        s = str(a)
         with pytest.warns(UserWarning) as record:
-            s = str(a)
+            rep, files = a.save_data()
         assert len(record) == 1
         assert record[0].message.args[0] == (
             "Data arrays ['array_0'] exist but no datafile specified. " +
@@ -456,34 +462,19 @@ class TestNumpy(ToolsMixin):
         exec s in d
         assert np.allclose(d['M'], M)
 
-    def test_external_data_datafile_type(self, np):
-        """Test setting data_format from datafile name."""
-        a = archive.Archive(datafile='tmpdata.npz')
-        assert a._data_format == 'npz'
-
-        a = archive.Archive(datafile='tmpdata.npy')
-        assert a._data_format == 'npy'
-
-        a = archive.Archive(datafile='tmpdata')
-        assert a._data_format == 'npy'
-
-        for ext in archive._HDF5_EXTS:
-            a = archive.Archive(datafile='tmpdata.{}'.format(ext))
-            assert a._data_format == 'hdf5'
-
     def test_external_data(self, np, data_format, datafile):
         """Test saving external data."""
-        a = archive.Archive(datafile=datafile,
-                            array_threshold=3,
-                            data_format=data_format)
+        a = archive.Archive(array_threshold=3)
         np.random.seed(1)
         M = np.random.rand(10)
         a.insert(M=M)
         s = str(a)
+        rep, files = a.save_data(datafile=datafile, data_format=data_format)
 
-        a = archive.Archive(datafile=datafile, data_format=data_format)
-        d = a.eval(s)
+        d = {a.data_name: archive.ArrayManager.load_arrays(rep)}
+        exec s in d
         assert np.allclose(d['M'], M)
+        map(os.remove, files)
 
 
 class TestScipy(ToolsMixin):
@@ -544,13 +535,14 @@ class TestDatafile(object):
     def test_datafile(self, hdf5_datafile, np, h5py):
         """Test saving large arrays to disk."""
         a = archive.Archive(array_threshold=2,
-                            hdf5=True,
-                            datafile=hdf5_datafile,
                             backup_data=False)
         M = np.random.rand(10)
         a.insert(M=M)
         a.make_persistent()
-
+        rep, files = a.save_data(datafile=hdf5_datafile, data_format='hdf5')
+        assert len(files) == 1
+        assert files[0] == hdf5_datafile
+        
         assert len(a.data) == 1
         array_name = a.data.keys()[0]
         with h5py.File(hdf5_datafile) as f:
@@ -563,6 +555,201 @@ class TestDatafile(object):
         exec s in ld
         assert np.allclose(ld['M'], M)
 
+
+class TestImportableArchive(object):
+    """Tests for the importable archive format provided in version 1.0"""
+
+    def run_test(self, datadir, np, package, data_format,
+                 force=False, **kw):
+        a = archive.Archive(array_threshold=2, **kw)
+        M = np.random.rand(10)
+        N = np.random.rand(10)
+        x = [M, N]
+        a.insert(M=M, N=N, x=x)
+        
+        a.save(dirname=datadir, name='my_archive', package=package,
+               data_format=data_format, force=force)
+        sys.path.append(datadir)
+        import my_archive
+        reload(my_archive)  # Might have been imported before
+        sys.path.pop()
+        if package:
+            package_file = os.path.join(datadir, 'my_archive', '__init__.py')
+        else:
+            package_file = os.path.join(datadir, 'my_archive.py')
+
+        assert os.path.isfile(package_file)
+        assert np.allclose(my_archive.M, M)
+        assert np.allclose(my_archive.N, N)
+        assert my_archive.x[0] is my_archive.M
+        assert my_archive.x[1] is my_archive.N
+        
+    def test_save(self, data_format, datadir, np, package):
+        """Test saving to an importable package"""
+        args = dict(data_format=data_format, datadir=datadir, np=np,
+                    package=package)
+        
+        # Test case where datadir exists
+        self.run_test(**args)
+
+        # Test case where datadir does not exist
+        shutil.rmtree(datadir)
+        self.run_test(**args)
+
+    def test_save_force(self, data_format, datadir, np, package, backup_data,
+                        arrays_name='_arrays'):
+        """Test forced saving to an importable package."""
+        args = dict(datadir=datadir, np=np, 
+                    package=package, backup_data=backup_data,
+                    data_format=data_format, force=True)
+
+        name = 'my_archive'
+        arrays_file = arrays_name + archive._EXTS[data_format]
+        if package:
+            init_file = os.path.join(datadir, name, '__init__.py')
+            arrays_file = os.path.join(datadir, name, arrays_file)
+            package_dir = os.path.join(datadir, name)
+        else:
+            init_file = os.path.join(datadir, name + '.py')
+            arrays_file = os.path.join(datadir, name + arrays_file)
+            package_dir = datadir
+            
+        # Test case where datadir exists
+        self.run_test(**args)
+        assert not os.path.exists(init_file + '.bak')
+        if data_format == 'npy':
+            assert not glob.glob(os.path.join(arrays_file, '*.bak'))
+        else:
+            assert not os.path.exists(arrays_file + '.bak')
+            
+        self.run_test(**args)
+        if backup_data:
+            assert os.path.exists(init_file + '.bak')
+            if data_format == 'npy':
+                assert os.path.exists(os.path.join(arrays_file, 'array_0.npy.bak'))
+                assert os.path.exists(os.path.join(arrays_file, 'array_1.npy.bak'))
+            else:
+                assert os.path.exists(arrays_file + '.bak')
+        else:
+            if data_format == 'npy':
+                assert not glob.glob(os.path.join(arrays_file, '*.bak'))
+            else:
+                assert not os.path.exists(arrays_file + '.bak')
+
+        # Case where package_dir is a file
+        if package:
+            shutil.rmtree(package_dir)
+            with open(package_dir, 'w') as f:
+                f.write("noop")
+            self.run_test(**args)
+
+            # This backup is always made...
+            assert os.path.exists(package_dir + '.bak')
+        
+    def test_save_errors(self, data_format, datadir, np, package):
+        """Test error handling with saving"""
+        args = dict(data_format=data_format, datadir=datadir, np=np,
+                    package=package)
+        # Test case where datadir exists
+        self.run_test(**args)
+
+        # Test case where datadir/my_archive is a file
+        if package:
+            _file = os.path.join(datadir, 'my_archive')
+            shutil.rmtree(_file)
+            with open(_file, 'w') as f:
+                f.write("noop")
+            with pytest.raises(ValueError) as e:
+                self.run_test(**args)
+            msg = e.value.message
+            assert msg.startswith('File dirname/name=')
+            assert msg.endswith(' exists and is not a directory.')
+
+        # Test case where datadir is a file
+        shutil.rmtree(datadir)
+        for force in [True, False]:
+            with open(datadir, 'w') as f:
+                f.write("noop")
+            with pytest.raises(ValueError) as e:
+                self.run_test(force=force, **args)
+            msg = e.value.message
+            assert msg.startswith('File dirname=')
+            assert msg.endswith(' exists and is not a directory.')
+            os.remove(datadir)
+
+        # Test case where datadir and files exist
+        self.run_test(**args)
+        with pytest.raises(ValueError) as e:
+            self.run_test(**args)
+        msg = e.value.message
+        assert msg.startswith('File ')
+        if package:
+            assert msg.endswith('/my_archive/__init__.py exists and force=False.')
+        else:
+            assert msg.endswith('/my_archive.py exists and force=False.')
+        
+        # Test case where datadir and only arrays_file exist
+        if package:
+            os.remove(os.path.join(datadir, 'my_archive', '__init__.py'))
+        else:
+            os.remove(os.path.join(datadir, 'my_archive.py'))
+        with pytest.raises(ValueError) as e:
+            self.run_test(**args)
+        msg = e.value.message
+        assert msg.startswith('File ')
+        assert msg.endswith(' exists and force=False.')
+        if package:
+            assert "/my_archive/_arrays" in msg
+        else:
+            assert "/my_archive_arrays" in msg
+
+    def test_save_no_name(self, datadir):
+        """Test error handling with saving with no name"""
+        a = archive.Archive(array_threshold=2)
+        a.insert(x=1)
+        with pytest.raises(ValueError) as e:
+            a.save(dirname=datadir, name=None)
+        msg = e.value.message
+        assert msg == 'Must provide name unless single_item_mode=True'
+        
+            
+class TestArchiveSingleItemMode(object):
+    """Tests single_item_mode."""
+    def test_1(self, data_format, datadir, np, package):
+        a = archive.Archive(single_item_mode=True)
+        y = [1, 2, 3]
+        x = [y, y]
+        a.insert(my_x=x)
+        
+        a.save(dirname=datadir, name=None, package=package)
+        sys.path.append(datadir)
+        if 'my_x' in sys.modules:
+            del sys.modules['my_x']
+        import my_x
+        sys.path.pop()
+        if package:
+            package_file = os.path.join(datadir, 'my_x', '__init__.py')
+        else:
+            package_file = os.path.join(datadir, 'my_x.py')
+
+        assert os.path.isfile(package_file)
+        assert my_x == x
+        assert my_x[0] is my_x[1]
+
+    def test_err(self, data_format, datadir, np, package):
+        a = archive.Archive(single_item_mode=True)
+        with pytest.raises(ValueError) as e:
+            a.insert(x=1, y=2)
+        msg = e.value.message
+        assert msg == "Can't insert 2 items when single_item_mode=True"
+
+        a.insert(x=1)
+        a.insert(x=1)
+        with pytest.raises(ValueError) as e:
+            a.insert(y=2)
+        msg = e.value.message
+        assert msg == "Can't insert 'y' into single_item_mode=True archive with 'x'."
+        
 
 class TestDeprecationWarning(object):
     def test_deprecation_warning(self):
@@ -643,7 +830,7 @@ class DocTests(object):
         >>> print(a)
         x_2 = None
         x_1 = x_2
-        try: del __builtins__
+        try: del __builtins__, _arrays
         except NameError: pass
         >>> a.names()
         ['x_1', 'x_2']
@@ -763,34 +950,33 @@ class TestCoverage(object):
             'Insert objects with a key: insert(x=3), not insert([ 0.  0.])')
 
     def test_array_name_clash2(self, np, hdf5_datafile):
-        a = archive.Archive(array_threshold=2, hdf5=True, datafile=hdf5_datafile)
+        a = archive.Archive(array_threshold=2)
         a.data['array_0'] = np.zeros(2)
         a.insert(x=np.zeros(5), env={})
         s = str(a)
         assert s == "\n".join(["x = _arrays['array_1']",
-                               "try: del __builtins__",
+                               "try: del __builtins__, _arrays",
                                "except NameError: pass"])
 
     def test_datafile_nohdf5_1(self, np, datadir):
         """Test saving large arrays to disk without hdf5."""
-        a = archive.Archive(array_threshold=2, datafile=datadir,
-                            hdf5=False)
+        a = archive.Archive(array_threshold=2)
         M = np.random.rand(10)
         a.insert(M=M)
-        a.make_persistent()
         s = str(a)
-        ld = dict(_arrays=archive.load_arrays(datadir))
+        rep, files = a.save_data(datafile=datadir)
+        ld = dict(_arrays=archive.ArrayManager.load_arrays(rep))
         exec s in ld
         assert np.allclose(ld['M'], M)
 
     def test_datafile_nohdf5_2(self, np, datadir):
         """Test saving large arrays to disk without hdf5."""
-        a = archive.Archive(array_threshold=2, datafile=datadir,
-                            hdf5=False)
+        a = archive.Archive(array_threshold=2)
         M = np.random.rand(10)
         a.insert(M=M)
         s = a.scoped__str__()
-        ld = dict(_arrays=archive.load_arrays(datadir))
+        rep, files = a.save_data(datafile=datadir)
+        ld = dict(_arrays=archive.ArrayManager.load_arrays(rep))
         exec s in ld
         assert np.allclose(ld['M'], M)
 
@@ -810,19 +996,30 @@ class TestCoverage(object):
         assert ld['a'] == {'a': 1}
         assert ld[g0] == 1
 
-    def test__save_arrays_error(self, hdf5_datafile):
-        with pytest.raises(NotImplementedError):
-            archive._save_arrays([0, 1, 2], filename=hdf5_datafile,
-                                 data_format='unknown')
 
+class TestArrayManager(object):
+    """Test the ArrayManager class"""
+    def test_save_no_filename(self, datafile):
+        arrays = dict(x=range(10))
+        
+        with pytest.raises(ValueError) as e:
+            archive.ArrayManager.save_arrays(
+                arrays, filename=None, data_format='npz')
+        msg = e.value.message
+        assert msg == "Must specify filename for data_format='npz'"
 
-class TestCoverageMissingModules(object):
-    """Coverage of some missing module checks"""
-    def test_missing_hdf5(self):
-        h5py, archive.h5py = archive.h5py, None
-        with pytest.raises(archive.ArchiveError):
-            archive.Archive(hdf5=True)
-        archive.h5py = h5py
+    def test_save_arrays(self, np, datadir, data_format):
+        """Test saving and loading arrays."""
+        M = np.random.rand(10)
+        arrays = dict(M=M)
+        rep, files = archive.ArrayManager.save_arrays(
+            arrays=arrays, dirname=datadir, filename='M', data_format=data_format)
+
+    def test_unknown_format(self, datafile):
+        with pytest.raises(NotImplementedError) as e:
+            archive.ArrayManager.save_arrays({}, data_format='???')
+        msg = e.value.message
+        assert msg == "Expected data_format in ['hdf5', 'npz', 'npy'], got '???'"
 
 
 class TestGraph(object):
