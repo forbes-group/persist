@@ -1,0 +1,47 @@
+{% set name = "persist" %}
+{% set version = "3.0" %}
+
+package:
+  name: "{{ name|lower }}"
+  version: "{{ version }}"
+
+source:
+  hg_rev: 3.0
+  hg_url: https://bitbucket.org/mforbes/persist
+
+build:
+  number: 0
+  script: "{{ PYTHON }} -m pip install . --no-deps --ignore-installed -vv "
+
+requirements:
+  host:
+    - pip
+    - python >=3.0
+  run:
+    - six
+    - python >=3.0
+    - zope.interface >=3.8.0
+
+test:
+  source_files:
+    - persist
+  imports:
+    - persist
+  requires:
+    - coverage
+    - h5py
+    - pytest >=2.8.1
+    - pytest-cov >=2.2.0
+    - pytest-flake8
+    - scipy
+  commands:
+    - py.test
+
+about:
+  home: https://bitbucket.org/mforbes/persist
+  license: BSD
+  license_family: BSD
+  license_file: 
+  summary: Persistent importable archival of python objects to disk
+  doc_url: 
+  dev_url:

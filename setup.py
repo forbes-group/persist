@@ -18,12 +18,9 @@ from setuptools import setup, find_packages
 
 NAME = "persist"
 
-setup_requires = [
-    'pytest-runner'
-]
-
 install_requires = [
     'zope.interface>=3.8.0',
+    'six',
 ]
 
 test_requires = [
@@ -32,8 +29,8 @@ test_requires = [
     'pytest-flake8',
     'coverage',
     'flake8',
-    'pep8==1.5.7',     # Needed by flake8: dependency resolution issue if not pinned
-    'numpy',
+    'pep8',     # Needed by flake8: dependency resolution issue if not pinned
+    'numpy>=1.16',
     'scipy',
     'h5py',
 ]
@@ -42,6 +39,7 @@ extras_require = dict(
     doc=['mmf_setup',
          'sphinx>=1.3.1',
          'sphinxcontrib-zopeext',
+         'nbsphinx>=0.2.13',
     ]
 )
 
@@ -54,10 +52,9 @@ del mod
 
 
 setup(name=NAME,
-      version='1.0',
+      version='3.0',
       packages=find_packages(),
 
-      setup_requires=setup_requires,
       install_requires=install_requires,
       tests_require=test_requires,
       extras_require=extras_require,

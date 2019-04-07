@@ -2,8 +2,7 @@ r"""Provides Archivable class.
 """
 __all__ = ['Archivable']
 
-import archive
-import interfaces
+from . import interfaces
 
 
 ###########################################################
@@ -27,7 +26,6 @@ class Archivable(object):
     >>> print(a)
     A(a=1, b=2)
     """
-    interfaces.implements(interfaces.IArchivable)
 
     def items(self):
         r"""Return a list `[(name, obj)]` of `(name, object)` pairs
@@ -52,7 +50,7 @@ class Archivable(object):
         ...     def items(self):
         ...         return zip(('a', 'b'), self.data)
         >>> a = A(1, 2)
-        >>> for k in a: print k
+        >>> for k in a: print(k)
         a
         b
         """
@@ -98,15 +96,20 @@ class Archivable(object):
            o = env['n']        # Access the object from env
            o.a
         """
+        from . import archive
         arch = archive.Archive()
         arch.insert(**{name: self})
         return str(arch)
 
     def __repr__(self):
+        from . import archive
         return archive.repr_(self)
 
     def __str__(self):
         return self.__repr__()
+
+
+interfaces.classImplements(Archivable, interfaces.IArchivable)
 
 
 class Container(Archivable):

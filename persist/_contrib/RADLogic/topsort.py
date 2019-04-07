@@ -29,9 +29,6 @@ Make sure they all pass before checking in any modifications.
 
 Requires Python >= 2.2
 (For Python 2.2 also requires separate sets.py module)
-
-This requires the rad_util.py module.
-
 """
 
 # Provide support for Python 2.2*
@@ -50,7 +47,7 @@ try:
 except NameError:
     from sets import Set as set
 
-from rad_util import is_rotated
+#from .rad_util import is_rotated
 
 
 class CycleError(Exception):
@@ -58,18 +55,63 @@ class CycleError(Exception):
     pass
 
 
+def is_rotated(seq1, seq2):
+    """Return true if the first sequence is a rotation of the second sequence.
+
+    Examples
+    --------
+    >>> seq1 = ['A', 'B', 'C', 'D']
+    >>> seq2 = ['C', 'D', 'A', 'B']
+    >>> int(is_rotated(seq1, seq2))
+    1
+
+    >>> seq2 = ['C', 'D', 'B', 'A']
+    >>> int(is_rotated(seq1, seq2))
+    0
+
+    >>> seq1 = ['A', 'B', 'C', 'A']
+    >>> seq2 = ['A', 'A', 'B', 'C']
+    >>> int(is_rotated(seq1, seq2))
+    1
+
+    >>> seq2 = ['A', 'B', 'C', 'A']
+    >>> int(is_rotated(seq1, seq2))
+    1
+
+    >>> seq2 = ['A', 'A', 'C', 'B']
+    >>> int(is_rotated(seq1, seq2))
+    0
+
+    """
+    # Do a sanity check.
+    if len(seq1) != len(seq2):
+        return False
+    # Look for occurrences of second sequence head item in first sequence.
+    start_indexes = []
+    head_item = seq2[0]
+    for index1 in range(len(seq1)):
+        if seq1[index1] == head_item:
+            start_indexes.append(index1)
+    # Check that wrapped sequence matches.
+    double_seq1 = seq1 + seq1
+    for index1 in start_indexes:
+        if double_seq1[index1:index1+len(seq1)] == seq2:
+            return True
+    return False
+
+
 def topsort(pairlist):
     """Topologically sort a list of (parent, child) pairs.
 
     Return a list of the elements in dependency order (parent to child order).
 
-    >>> print topsort( [(1,2), (3,4), (5,6), (1,3), (1,5), (1,6), (2,5)] ) 
+    >>> topsort( [(1,2), (3,4), (5,6), (1,3), (1,5), (1,6), (2,5)] ) 
     [1, 2, 3, 5, 4, 6]
 
-    >>> print topsort( [(1,2), (1,3), (2,4), (3,4), (5,6), (4,5)] )
+    >>> topsort( [(1,2), (1,3), (2,4), (3,4), (5,6), (4,5)] )
     [1, 2, 3, 4, 5, 6]
 
-    >>> print topsort( [(1,2), (2,3), (3,2)] )
+    >>> topsort( [(1,2), (2,3), (3,2)] )
     Traceback (most recent call last):
     CycleError: ([1], {2: 1, 3: 1}, {2: [3], 3: [2]})
     
@@ -78,9 +120,9 @@ def topsort(pairlist):
     children = {}  # element -> list of successors 
     for parent, child in pairlist: 
         # Make sure every element is a key in num_parents.
-        if not num_parents.has_key( parent ): 
+        if not parent in num_parents: 
             num_parents[parent] = 0 
-        if not num_parents.has_key( child ): 
+        if not child in num_parents: 
             num_parents[child] = 0 
 
         # Since child has a parent, increment child's num_parents count.
@@ -96,7 +138,7 @@ def topsort(pairlist):
     # Note that answer grows *in* the loop.
     for parent in answer: 
         del num_parents[parent]
-        if children.has_key( parent ): 
+        if parent in children: 
             for child in children[parent]: 
                 num_parents[child] -= 1
                 if num_parents[child] == 0: 
@@ -123,7 +165,7 @@ def topsort_levels(pairlist):
 
     >>> dependency_pairs = [(1,2), (3,4), (5,6), (1,3), (1,5), (1,6), (2,5)]
     >>> for level in iter(topsort_levels( dependency_pairs )):
-    ...    print level
+    ...    print(level)
     [1]
     [2, 3]
     [4, 5]
@@ -131,7 +173,7 @@ def topsort_levels(pairlist):
 
     >>> dependency_pairs = [(1,2), (1,3), (2,4), (3,4), (5,6), (4,5)]
     >>> for level in iter(topsort_levels( dependency_pairs )):
-    ...    print level
+    ...    print(level)
     [1]
     [2, 3]
     [4]
@@ -141,9 +183,9 @@ def topsort_levels(pairlist):
     >>> dependency_pairs = [(1,2), (2,3), (3,4), (4, 3)]
     >>> try:
     ...     for level in iter(topsort_levels( dependency_pairs )):
-    ...         print level
-    ... except CycleError, exc:
-    ...     print 'CycleError:', exc
+    ...         print(level)
+    ... except CycleError as exc:
+    ...     print('CycleError:', exc)
     [1]
     [2]
     CycleError: ({3: 1, 4: 1}, {3: [4], 4: [3]})
@@ -158,9 +200,9 @@ def topsort_levels(pairlist):
     children = {}  # element -> list of successors 
     for parent, child in pairlist: 
         # Make sure every element is a key in num_parents.
-        if not num_parents.has_key( parent ): 
+        if not parent in num_parents: 
             num_parents[parent] = 0 
-        if not num_parents.has_key( child ): 
+        if not child in num_parents: 
             num_parents[child] = 0 
 
         # Since child has a parent, increment child's num_parents count.
@@ -218,7 +260,7 @@ def topsort_levels_core(num_parents, children):
 
             del num_parents[level_parent]
 
-            if children.has_key(level_parent):
+            if level_parent in children:
                 for level_parent_child in children[level_parent]:
                     num_parents[level_parent_child] -= 1
                 del children[level_parent]
@@ -227,9 +269,6 @@ def topsort_levels_core(num_parents, children):
         # Everything in num_parents has at least one child -> 
         # there's a cycle.
         raise CycleError(num_parents, children)
-    else:
-        # This is the end of the generator.
-        raise StopIteration
 
 
 def find_cycles(parent_children):
@@ -250,7 +289,7 @@ def find_cycles(parent_children):
     1
     >>> cycle = cycles[0]
     >>> cycle.sort()
-    >>> print cycle
+    >>> cycle
     ['A', 'B']
 
     Simplest cycle with extra baggage at the start and the end:
@@ -263,7 +302,7 @@ def find_cycles(parent_children):
     1
     >>> cycle = cycles[0]
     >>> cycle.sort()
-    >>> print cycle
+    >>> cycle
     ['B', 'C']
 
     Double cycle:
@@ -283,11 +322,11 @@ def find_cycles(parent_children):
     >>> cycles.sort()
     >>> cycle1 = cycles[0]
     >>> cycle1.sort()
-    >>> print cycle1
+    >>> cycle1
     ['D1', 'E1']
     >>> cycle2 = cycles[1]
     >>> cycle2.sort()
-    >>> print cycle2
+    >>> cycle2
     ['D2', 'E2']
 
     Simple cycle with children not specified for one item:
@@ -299,7 +338,7 @@ def find_cycles(parent_children):
     1
     >>> cycle = cycles[0]
     >>> cycle.sort()
-    >>> print cycle
+    >>> cycle
     ['A', 'B']
 
     Diamond cycle
@@ -316,7 +355,7 @@ def find_cycles(parent_children):
     ...     sorted_cycles.append(cycle)
     >>> sorted_cycles.sort()
     >>> for cycle in sorted_cycles:
-    ...     print cycle
+    ...     print(cycle)
     ['A', 'B1', 'C']
     ['A', 'B2', 'C']
     ['B1', 'C']
@@ -336,7 +375,7 @@ def find_cycles(parent_children):
     1
     >>> cycle = cycles[0]
     >>> cycle.sort()
-    >>> print cycle
+    >>> cycle
     ['A', 'C', 'DQ', 'IA']
 
     """

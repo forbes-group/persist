@@ -108,13 +108,15 @@ data, however, this is extremely inefficient.  In this case, a separate archive
 format is used where the archive is turned into a module that contains a binary
 datafile or datadir.
 
+Developer's Note
+----------------
 .. todo::
-   - Consider using imports rather than execfile etc. for loading
-     :class:`DataSet` s.  This allows the components to be byte-compiled for
-     performance.  (Only really helps if the components have lots of code --
-     most of my loading performance issues are due instead to the execution of
-     constructors, so this will not help.)  Also important for python 3.0
-     conversion.
+   - Consider allowing components to be byte-compiled for performance.  (Only
+     really helps if the components have lots of code -- most of my loading
+     performance issues are due instead to the execution of constructors, so
+     this will not help.)  The issue here is fact that byte compilation takes
+     place in a parallel process that may not finish before a dataset is updated,
+     invalidating the byte-compiled files.
    - Make sure that numpy arrays from tostring() are *NOT* subject to
      replacement somehow.  Not exactly sure how to reproduce the
      problem, but it is quite common for these to have things like
@@ -143,8 +145,6 @@ datafile or datadir.
      `_maxint` cache. The remaining performance issues appear to be in
      `_replace_rep`.
 
-Developer's Note
-================
 After issue 12 arose, I decided to change the structure of archives to
 minimize the need to replace text.  New archives will evaluate objects in a
 local scope.  Here is an example, first in the old format::
@@ -208,16 +208,17 @@ unreliable::
 """
 from __future__ import division, with_statement
 
-__all__ = ['Archive', 'DataSet', 'restore',
-           'ArchiveError', 'DuplicateError', 'repr_',
-           'get_imports']
-
-import __builtin__
-import ast
 from collections import OrderedDict
-import cPickle
+from contextlib import contextmanager
+try:                            # Python 3 version
+    import builtins
+    import pickle
+except ImportError:             # pragma: no cover
+                                # Python 2 version
+    import cPickle as pickle
+    import __builtin__ as builtins
+import ast
 import copy
-import glob
 import imp
 import inspect
 import logging
@@ -228,8 +229,10 @@ import sys
 import time
 import types
 import warnings
-from contextlib import contextmanager
-import _contrib.RADLogic.topsort as topsort
+
+import six
+
+from ._contrib.RADLogic import topsort
 
 try:
     import numpy as np
@@ -247,8 +250,12 @@ try:
 except ImportError:             # pragma: no cover
     h5py = None
 
-import interfaces
-import objects
+from . import interfaces
+from . import objects
+
+__all__ = ['Archive', 'DataSet', 'restore',
+           'ArchiveError', 'DuplicateError', 'repr_',
+           'get_imports']
 
 
 _HDF5_EXTS = set(['hf5', 'hd5', 'hdf5'])
@@ -320,7 +327,7 @@ def restore(archive, env={}):
     >>> a.insert(a=1, b=2)
     >>> arch = str(a)
     >>> d = restore(arch)
-    >>> print "%(a)i, %(b)i"%d
+    >>> print("%(a)i, %(b)i"%d)
     1, 2
     """
     ld = {}
@@ -414,7 +421,7 @@ class ArrayManager(object):
 
     @classmethod
     def save_arrays(cls, arrays, dirname='.', filename=None, keep=False,
-             data_format='npy', arrays_name='_arrays'):
+                    data_format='npy', arrays_name='_arrays'):
         """Return `(rep, files)` and save the array.
 
         Arguments
@@ -483,7 +490,7 @@ class ArrayManager(object):
 
         if filename is None:
             filename = ''
-            
+
         rep = ('\n'.join([_l[4:] for _l in res.splitlines()])).format(
             DATA_NAME=arrays_name,
             NAMES="[{}]".format(', '.join(map(repr, arrays))),
@@ -494,7 +501,7 @@ class ArrayManager(object):
     @staticmethod
     def load_arrays(rep, arrays_name='_arrays'):
         d = {}
-        exec rep in d
+        exec(rep, d)
         return d[arrays_name]
 
 
@@ -557,7 +564,7 @@ class Archive(object):
        `'.bak'` or `'_#.bak'` if backups already exists.  Otherwise, the file will
        be overwritten.  (Actually, a backup will always be made, but if the
        creation of the new file is successful, then the backup will be deleted if
-       this is `False`.) 
+       this is `False`.)
     single_item_mode : bool
        If `True`, then only one item is allowed in the archive at a time, and
        the importable representation saved by `Archive.save()` will replace the
@@ -624,18 +631,18 @@ class Archive(object):
     the archive is printed.)
 
     >>> s = str(arch)
-    >>> print s
-    from persist.archive import restore as _restore
+    >>> print(s)
     from numpy import sin as _sin
-    from __builtin__ import dict as _dict
+    from persist.archive import restore as _restore
+    from builtins import dict as _dict
     _g11 = ['a', 'b']
     l = [1, 2, 3, _g11]
-    d = _dict([('s', 'hi'), ('l', l), ('l0', _g11)])
+    d = _dict([('l0', _g11), ('l', l), ('s', 'hi')])
     x = 4
-    g = _restore
     f = _sin
-    del _restore
+    g = _restore
     del _sin
+    del _restore
     del _dict
     del _g11
     try: del __builtins__, _arrays
@@ -657,8 +664,8 @@ class Archive(object):
     >>> id(res['l'][3]) == id(res['d']['l0'])
     True
 
-    Single Item Mode
-    ----------------
+    **Single Item Mode**
+
     Archives can also be used in single item mode.  This is primarly intended
     for used with DataSets, but could be of use to users.  In this mode, only
     one item can be inserted.  When saving these archives as a module, upon
@@ -675,7 +682,7 @@ class Archive(object):
     data_name = '_arrays'
 
     def __init__(self, flat=True, tostring=True, check_on_insert=False,
-                 array_threshold=None, 
+                 array_threshold=None,
                  backup_data=True, single_item_mode=False,
                  allowed_names=None, gname_prefix='_g',
                  scoped=True, robust_replace=True):
@@ -747,10 +754,15 @@ class Archive(object):
         if inspect.ismethod(obj):
             return get_persistent_rep_method(obj, env)
 
+        if inspect.isfunction(obj) and (
+                getattr(obj, '__qualname__', obj.__name__)
+                != obj.__name__):
+            return get_persistent_rep_classmethod(obj, env)
+            
         if hasattr(obj, 'get_persistent_rep'):
             try:
                 return obj.get_persistent_rep(env)
-            except TypeError, e:
+            except TypeError as e:
                 warnings.warn("\n".join([
                     "Found get_persistent_rep() but got TypeError:",
                     str(e)]))
@@ -760,7 +772,7 @@ class Archive(object):
                           DeprecationWarning)
             try:
                 return obj.archive_1(env)
-            except TypeError, e:
+            except TypeError as e:
                 warnings.warn("\n".join([
                     "Found archive_1() but got TypeError:",
                     str(e)]))
@@ -769,7 +781,7 @@ class Archive(object):
         if rep.startswith('<'):
             try:
                 return get_persistent_rep_pickle(obj, env)
-            except cPickle.PickleError:
+            except (pickle.PickleError, AttributeError):
                 raise ArchiveError(
                     "Could not archive object {}.  Even tried pickling!"
                     .format(rep))
@@ -808,7 +820,7 @@ class Archive(object):
               and obj.__class__ is np.ndarray
               and not obj.dtype.hasobject):
 
-            rep = "numpy.fromstring(%r, dtype=%r).reshape(%s)" % (
+            rep = "numpy.frombuffer(%r, dtype=%r).reshape(%s)" % (
                 obj.tostring(), obj.dtype.str, str(obj.shape))
             imports = [('numpy', None, 'numpy')]
             args = {}
@@ -856,6 +868,9 @@ class Archive(object):
 
     def _archive_func(self, obj, env):
         r"""Attempt to archive the func."""
+        if getattr(obj, '__qualname__', obj.__name__) != obj.__name__:
+            # Class method
+            return get_persistent_rep_classmethod(obj, env)
         return get_persistent_rep_obj(obj, env)
 
     def _archive_list(self, obj, env):
@@ -881,8 +896,11 @@ class Archive(object):
         dict: _archive_dict,
         float: _archive_float,
         complex: _archive_float,
-        type: _archive_type,
-        types.ClassType: _archive_type}
+        type: _archive_type}
+    
+    if hasattr(types, 'ClassType'):
+        # Old-style classes in python 2.
+        _dispatch[types.ClassType] = _archive_type
 
     if np:
         _dispatch.update({
@@ -937,11 +955,11 @@ class Archive(object):
         >>> a.insert(**{a.unique_name('x'):3}) # ...but can make unique label
         >>> a.insert(a=4, b=5)   # Can insert multiple items
         >>> a.insert(A=np.array([1, 2, 3]))
-        >>> print a                     # doctest: +SKIP
+        >>> print(a)                     # doctest: +SKIP
         import numpy as _numpy
         x = 2
         x_0 = 3
-        A = _numpy.fromstring('\x01\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00', dtype='<i8').reshape((3,))
+        A = _numpy.frombuffer('\x01\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00', dtype='<i8').reshape((3,))
         b = 5
         a = 4
         del _numpy
@@ -950,8 +968,8 @@ class Archive(object):
 
         For testing purposes we have to sort the lines of the output:
 
-        >>> print "\n".join(sorted(str(a).splitlines()))
-        A = _numpy.fromstring('\x01\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00', dtype='<i8').reshape((3,))
+        >>> print("\n".join(sorted(str(a).splitlines())))
+        A = _numpy.frombuffer(b'\x01\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00', dtype='<i8').reshape((3,))
         a = 4
         b = 5
         del _numpy
@@ -975,7 +993,7 @@ class Archive(object):
         ([('numpy', None, '_numpy'),
           ('numpy', 'inf', '_inf'),
           ('numpy', 'nan', '_nan')],
-         [('c', '_numpy.array([ 1.+0.j,  2.+3.j,  3.+0.j])'),
+         [('c', '_numpy.array([1.+0.j, 2.+3.j, 3.+0.j])'),
           ('cc', '[c, c, [3]]'),
           ('x', '2'),
           ('A', '_numpy.array([1, 2, 3])')])
@@ -995,7 +1013,7 @@ class Archive(object):
         ([('numpy', None, '_numpy'),
           ('numpy', 'inf', '_inf'),
           ('numpy', 'nan', '_nan')],
-         [('c', '_numpy.array([ 1.+0.j,  2.+3.j,  3.+0.j])'),
+         [('c', '_numpy.array([1.+0.j,  2.+3.j, 3.+0.j])'),
           ('cc', '[c, c, [3]]'),
           ('x', '2'),
           ('A', '_numpy.array([1, 2, 3])'),
@@ -1015,7 +1033,7 @@ class Archive(object):
                 raise ValueError(
                     "Can't insert {} items when single_item_mode=True"
                     .format(len(kwargs)))
-            name = kwargs.keys().pop()
+            name = list(kwargs)[0]
             if self.arch and name not in self.names():
                 raise ValueError(
                     "Can't insert {} into single_item_mode=True archive with {}."
@@ -1029,7 +1047,7 @@ class Archive(object):
             # First check to see if object is already in archive:
             unames, objs, envs = _unzip(self.arch)
 
-            obj_ids = map(self.get_id, objs)
+            obj_ids = list(map(self.get_id, objs))
             obj_id = self.get_id(obj)
             obj_ind = None
             if obj_id in obj_ids:
@@ -1182,7 +1200,7 @@ class Archive(object):
         # the parent ids.  The nodes dictionary also acts as the
         # "visited" list to prevent cycles.
 
-        ##names = _unzip(self.arch)[0]
+        # #names = _unzip(self.arch)[0]
 
         # Generate dependency graph
         try:
@@ -1190,9 +1208,9 @@ class Archive(object):
                           get_persistent_rep=self.get_persistent_rep,
                           robust_replace=self.robust_replace,
                           get_id=self.get_id)
-        except topsort.CycleError, err:
-            raise CycleError, err.args , sys.exc_info()[-1]
-
+        except topsort.CycleError as err:
+            six.reraise(CycleError, CycleError(*err.args), sys.exc_info()[-1])
+        
         # Optionally: at this stage perform a graph reduction.
         graph.reduce()
         names_reps = [(node.name, node.rep)
@@ -1203,7 +1221,7 @@ class Archive(object):
         names_reps.extend([
             (name, node.name)
             for name in self.ids
-            if name not in zip(*names_reps)[0]
+            if name not in list(zip(*names_reps))[0]
             for node in [graph.nodes[self.ids[name]]]])
 
         return (graph.imports, names_reps)
@@ -1224,17 +1242,17 @@ class Archive(object):
             assert(iname is not None or uiname is not None)
             if iname is None:
                 import_lines.append(
-                    "import %s as %s"%(module, uiname))
-                del_lines.append("del %s" % (uiname,))
+                    "import {} as {}".format(module, uiname))
+                del_lines.append("del {}".format(uiname))
             elif iname == uiname or uiname is None:  # pragma: no cover
                 # Probably never happens because uinames start with _
                 import_lines.append(
-                    "from %s import %s"%(module, uiname))
-                del_lines.append("del %s" % (uiname,))
+                    "from {} import {}".format(module, uiname))
+                del_lines.append("del {}".format(uiname))
             else:
                 import_lines.append(
-                    "from %s import %s as %s"%(module, iname, uiname))
-                del_lines.append("del %s" % (uiname,))
+                    "from {} import {} as {}".format(module, iname, uiname))
+                del_lines.append("del {}".format(uiname))
         return import_lines, del_lines
 
     def __str__(self):
@@ -1250,6 +1268,10 @@ class Archive(object):
 
         return res
 
+    def _get_del_lines(self):
+        return ["try: del __builtins__, {}".format(self.data_name),
+                "except NameError: pass"]
+    
     def unscoped_str(self):
         r"""Return an unscoped string representation with all objects defined in
         the global scope.  This requires renaming and textual replacement."""
@@ -1262,11 +1284,9 @@ class Archive(object):
         if temp_names:
             del_lines.append("del %s" % (",".join(temp_names),))
 
-        del_lines.extend([
-            "try: del __builtins__, {}".format(self.data_name),
-            "except NameError: pass"])
+        del_lines.extend(self._get_del_lines())
 
-        lines = "\n".join(["%s = %s"%(uname, rep)
+        lines = "\n".join(["{} = {}".format(uname, rep)
                            for (uname, rep) in defs])
         imports = "\n".join(import_lines)
         dels = "\n".join(del_lines)
@@ -1284,8 +1304,8 @@ class Archive(object):
                            gname_prefix=self.gname_prefix,
                            allowed_names=set(self.allowed_names),
                            get_id=self.get_id)
-        except topsort.CycleError, err:
-            raise CycleError, err.args, sys.exc_info()[-1]
+        except topsort.CycleError as err:
+            six.reraise(CycleError, CycleError(*err.args), sys.exc_info()[-1])
 
         # Optionally: at this stage perform a graph reduction.
         # graph.reduce()
@@ -1306,7 +1326,7 @@ class Archive(object):
                         "    return %(rep)s",
                         "%(name)s = %(name)s()"])
                     % dict(name=name,
-                           argnames=",".join(node.args.keys()),
+                           argnames=",".join(sorted(node.args)),
                            args=",".join([
                                 "=".join([
                                     _a,
@@ -1332,9 +1352,7 @@ class Archive(object):
                            and _n not in self.allowed_names)
         if gnames:
             results.append("del %s" % (gnames,))
-        results.extend([
-            "try: del __builtins__, {}".format(self.data_name),
-            "except NameError: pass"])
+        results.extend(self._get_del_lines())
 
         return "\n".join(results)
 
@@ -1363,8 +1381,8 @@ class Archive(object):
             else:
                 warnings.warn(
                     "Data arrays {} exist but no datafile specified. "
-                    .format(self.data.keys()) +
-                    "Save data manually and populate in _arrays dict.")
+                    .format(sorted(self.data))
+                    + "Save data manually and populate in _arrays dict.")
         
         return rep, files
 
@@ -1488,8 +1506,10 @@ def _g_clear_single_item_modules():
     from sys.modules and the module dictionary.
     """
     import sys, types
+    if not __name__ in sys.modules:
+        return
     this_module = sys.modules[__name__]
-    for key in this_module.__dict__.keys():
+    for key in list(this_module.__dict__):
         sub_module = __name__ + '.' + key  # Name of submodule
         if (sub_module in sys.modules
                 and not isinstance(sys.modules[sub_module], types.ModuleType)):
@@ -1538,7 +1558,7 @@ def get_toplevel_imports(obj, env=None):
     --------
     >>> a = np.array
     >>> get_toplevel_imports(a)
-    ([('numpy.core.multiarray', 'array', 'array')], 'array')
+    ([('numpy...', 'array', 'array')], 'array')
     """
     module = inspect.getmodule(obj)
     if module is None:
@@ -1597,7 +1617,7 @@ def get_persistent_rep_args(obj, args):
     >>> b = 2
     >>> l = [a, b]
     >>> get_persistent_rep_args(l, dict(a=a, b=b))
-    ('list(a=a, b=b)', {'a': 1, 'b': 2}, [('__builtin__', 'list', 'list')])
+    ('list(a=a, b=b)', {'a': 1, 'b': 2}, [('builtins', 'list', 'list')])
     """
     module = obj.__class__.__module__
     name = obj.__class__.__name__
@@ -1635,20 +1655,23 @@ def get_persistent_rep_repr(obj, env, rep=None):
 def get_persistent_rep_pickle(obj, env):
     r"""Last resort - archive by pickle."""
     rep = "loads(%s)" % repr(
-        cPickle.dumps(obj, protocol=cPickle.HIGHEST_PROTOCOL))
+        pickle.dumps(obj, protocol=pickle.HIGHEST_PROTOCOL))
     args = {}
-    imports = [('cPickle', 'loads', 'loads')]
+    imports = [('pickle', 'loads', 'loads')]
     return (rep, args, imports)
 
 
 def get_persistent_rep_type(obj, env):
+    # Special cases
+    if type(None) is obj:
+        return ('type(None)', {}, [])
     name = None
     args = {}
-    for module in [__builtin__, types]:
+    for module in [builtins, types]:
         obj_id = id(obj)
-        val_ids = map(id, module.__dict__.values())
+        val_ids = list(map(id, module.__dict__.values()))
         if obj_id in val_ids:
-            name = module.__dict__.keys()[val_ids.index(obj_id)]
+            name = module.__dict__[val_ids.index(obj_id)]
             imports = [(module.__name__, name, name)]
             rep = name
             break
@@ -1685,8 +1708,11 @@ def get_persistent_rep_obj(obj, env):
 
 def get_persistent_rep_method(obj, env):
     r"""Archive methods."""
-    cls = obj.im_class
-    instance = obj.im_self
+    if sys.version_info < (3, 0):
+        instance = obj.im_self
+    else:
+        instance = obj.__self__
+    cls = instance.__class__
     name = obj.__name__
 
     if instance is None:
@@ -1697,6 +1723,17 @@ def get_persistent_rep_method(obj, env):
         rep = ".".join(["_instance", name])
         args = dict(_instance=instance)
         imports = []
+    return (rep, args, imports)
+
+
+def get_persistent_rep_classmethod(obj, env):
+    r"""Archive methods."""
+    rep = obj.__qualname__
+    module = inspect.getmodule(obj)
+    mname = module.__name__
+    cname, _name = rep.split('.', 1)
+    imports = [(mname, cname, cname)]
+    args = {}
     return (rep, args, imports)
 
 
@@ -1718,7 +1755,7 @@ def get_persistent_rep_list(l, env):
     reps = []
     unames = UniqueNames(names).unique_names(name)
     for o in l:
-        name = unames.next()
+        name = next(unames)
         args[name] = o
         names.add(name)
         reps.append(name)
@@ -1747,7 +1784,7 @@ def get_persistent_rep_tuple(t, env):
 
 
 def get_persistent_rep_dict(d, env):
-    rep, args, imports = get_persistent_rep_list(d.items(), env)
+    rep, args, imports = get_persistent_rep_list(list(d.items()), env)
     rep, imp = _get_rep(d, rep)
     imports.append(imp)
 
@@ -1760,25 +1797,23 @@ def is_simple(obj):
 
     Examples
     --------
-    >>> map(is_simple,
-    ...     [True, 1, 'Hi', 1.0, 1.0j, None, 123L])
+    >>> list(map(is_simple,
+    ...          [True, 1, 'Hi', 1.0, 1.0j, None, 123]))
     [True, True, True, True, True, True, True]
-    >>> map(is_simple,
-    ...     [[1], (1, ), {'a':2}])
+    >>> list(map(is_simple,
+    ...          [[1], (1, ), {'a':2}]))
     [False, True, False]
     """
     if hasattr(obj, '__class__'):
         class_ = obj.__class__
+        classes = [bool, int, str, None.__class__]
+        if sys.version_info < (3, 0):
+            classes.extend([long, unicode])
         result = (
-            class_ in [
-                bool, int, long,
-                str, unicode,
-                None.__class__]
-            or
-            (class_ in [float, complex]
-             and not (np and (np.isinf(obj)) or np.isnan(obj)))
-            or
-            (class_ == tuple and all(map(is_simple, obj)))
+            class_ in classes
+            or (class_ in [float, complex]
+                and not (np and (np.isinf(obj)) or np.isnan(obj)))
+            or (class_ == tuple and all(map(is_simple, obj)))
         )
     else:                       # pragma: no cover
         result = False
@@ -1843,10 +1878,10 @@ class Node(object):
 
         Examples
         --------
-        >>> print Node(obj=['A'], rep='[x]', args=dict(x='A'), name='a')
+        >>> print(Node(obj=['A'], rep='[x]', args=dict(x='A'), name='a'))
         Node(a=[x])
         """
-        return "Node(%s=%s)"%(self.name, self.rep)
+        return "Node({}={})".format(self.name, self.rep)
 
     @property
     def id(self):
@@ -1859,8 +1894,8 @@ class Node(object):
         A node can be reduced if it is not a root node, and is either a simple
         object with an efficient representation (as defined by
         :meth:`is_simple`), or has exactly one parent."""
-        reducible = (self.id not in roots and
-                     (is_simple(self.obj) or 1 == len(self.parents)))
+        reducible = (self.id not in roots
+                     and (is_simple(self.obj) or 1 == len(self.parents)))
         return reducible
 
 
@@ -1983,12 +2018,12 @@ class Graph(object):
         changing names as needed so there are no conflicts
         between `args = {name: obj}` and `self.names`.
         """
-        arg_names = args.keys()
+        arg_names = sorted(args)
 
         # Check for duplicate imports
         replacements = {}
         for (module_, iname_, uiname_) in imports:
-            mod_inames = zip(*_unzip(self.imports)[:2])
+            mod_inames = list(zip(*_unzip(self.imports)[:2]))
             if (module_, iname_) in mod_inames:
                 # Import already specified.  Just refer to it
                 ind = mod_inames.index((module_, iname_))
@@ -2013,7 +2048,7 @@ class Graph(object):
         on object `id2`."""
         return [(id_, self.get_id(obj))
                 for id_ in self.nodes
-                for (name, obj) in self.nodes[id_].args.iteritems()]
+                for (name, obj) in self.nodes[id_].args.items()]
 
     def _topological_order(self):
         r"""Return a list of the ids for all nodes in the graph in a
@@ -2107,7 +2142,7 @@ class Graph(object):
         >>> g.reduce()
         >>> len(g.nodes)         # Completely reducible
         1
-        >>> print a
+        >>> print(a)
         A = [['F'], ['F', ['G'], ['G']]]
         try: del __builtins__, _arrays
         except NameError: pass
@@ -2135,11 +2170,11 @@ class Graph(object):
         >>> g.reduce()
         >>> len(g.nodes)         # Nodes A, F and G remain
         3
-        >>> print a
-        _g3 = ['F']
+        >>> print(a)
         _g7 = ['G']
+        _g3 = ['F']
         A = [[_g3], [_g3, [_g7], [_g7]]]
-        del _g3,_g7
+        del _g7,_g3
         try: del __builtins__, _arrays
         except NameError: pass
 
@@ -2152,10 +2187,10 @@ class Graph(object):
         >>> g.reduce()
         >>> len(g.nodes)         # Nodes A, F and G remain
         4
-        >>> print a
+        >>> print(a)
         _g3 = ['F']
-        B = [_g3]
         _g7 = ['G']
+        B = [_g3]
         A = [B, [_g3, [_g7], [_g7]]]
         del _g3,_g7
         try: del __builtins__, _arrays
@@ -2183,7 +2218,7 @@ class Graph(object):
         >>> g.reduce()
         >>> len(g.nodes)
         2
-        >>> print a
+        >>> print(a)
         _g1 = ['F']
         A = [_g1, _g1]
         del _g1
@@ -2208,7 +2243,7 @@ class Graph(object):
         >>> g.reduce()
         >>> len(g.nodes)
         1
-        >>> print a
+        >>> print(a)
         A = ['F', 'F']
         try: del __builtins__, _arrays
         except NameError: pass
@@ -2317,7 +2352,7 @@ def _unzip(q, n=3):
     If len(q) = 0, then assumes that q was zipped from n lists.
 
     Example:
-    >>> _unzip(zip([1, 2, 3], [4, 5, 6]))
+    >>> _unzip(list(zip([1, 2, 3], [4, 5, 6])))
     [[1, 2, 3], [4, 5, 6]]
     >>> _unzip([], n=3)
     [[], [], []]
@@ -2328,7 +2363,7 @@ def _unzip(q, n=3):
     if 0 == len(q):
         return [[]] * n
     else:
-        return map(list, zip(*q))
+        return list(map(list, zip(*q)))
 
 
 class UniqueNames(object):
@@ -2416,7 +2451,7 @@ class UniqueNames(object):
             for _name in others:
                 self._reserve(_name)
 
-        return self.unique_names(name).next()
+        return next(self.unique_names(name))
 
     def unique_names(self, name):
         r"""Return a generator that generates a sequence of sequential unique
@@ -2426,16 +2461,16 @@ class UniqueNames(object):
         --------
         >>> names = UniqueNames(['a', 'a.1', 'b_1'])
         >>> gen = names.unique_names('c')
-        >>> gen.next(), gen.next()
+        >>> next(gen), next(gen)
         ('c', 'c_0')
         >>> gen = names.unique_names('a')
-        >>> gen.next(), gen.next()
+        >>> next(gen), next(gen)
         ('a_0', 'a_1')
         >>> gen = names.unique_names('b')
-        >>> gen.next(), gen.next()
+        >>> next(gen), next(gen)
         ('b_2', 'b_3')
         >>> gen = names.unique_names('')
-        >>> gen.next(), gen.next()
+        >>> next(gen), next(gen)
         ('_0', '_1')
         """
         match = self.extension_re.match(name)
@@ -2518,7 +2553,7 @@ def _replace_rep(rep, replacements, check=False, robust=True):
         rep_names = AST(rep).names
         counts = dict((n, rep_names.count(n)) for n in replacements)
 
-    identifier_tokens = string.letters + string.digits + "_"
+    identifier_tokens = string.ascii_letters + string.digits + "_"
 
     if replacements:
         # Replace all % characters so they are not interpreted as
@@ -2534,8 +2569,7 @@ def _replace_rep(rep, replacements, check=False, robust=True):
             prev = rep[i-1:i]
             next = rep[i+l:i+l+1]
             if ((not next or next not in identifier_tokens)
-                and
-                (not prev or prev not in identifier_tokens)):
+                    and (not prev or prev not in identifier_tokens)):
 
                 # Now get previous and next non-whitespace characters
                 c = i + l
@@ -2571,7 +2605,7 @@ def _replace_rep(rep, replacements, check=False, robust=True):
         rep = rep % replacements
 
     return rep
-    """
+    r"""
             re_ = r'''(?P<a>        # Refer to the group by name <a>
                        [^\w\.]      # Either NOT a valid identifier
                        | ^)         # OR the start of the string
@@ -2584,7 +2618,7 @@ def _replace_rep(rep, replacements, check=False, robust=True):
                 (rep, m) = regexp.subn(r"\g<a>%s\g<b>"%(replacements[old]),rep)
                 if m == 0: break
                 n_rep += m
-   """
+    """
 
 
 def _replace_rep_robust(rep, replacements):
@@ -2767,7 +2801,7 @@ class DataSet(object):
     name conflict with a data member called 'insert' should a user
     want one...
 
-    >>> for (nx, mu) in dat:
+    >>> for (nx, mu) in sorted(dat):
     ...     ds._insert(dat[(nx, mu)], info=(nx, mu))
     ['x_0']
     ['x_1']
@@ -2775,7 +2809,7 @@ class DataSet(object):
     ['x_3']
 
     >>> print(ds)
-    DataSet './...' containing ['mus', 'nxs', 'x_2', 'x_3', 'x_0', 'x_1']
+    DataSet './...' containing ['mus', 'nxs', 'x_0', 'x_1', 'x_2', 'x_3']
 
     Here is the complete set of info:
 
@@ -2786,19 +2820,19 @@ class DataSet(object):
     >>> [(k, ds[k]) for k in sorted(ds)]
     [('mus', 'Chemical potentials'),
      ('nxs', 'Particle numbers'),
-     ('x_0', (10, 2.5)),
-     ('x_1', (20, 1.2)),
-     ('x_2', (10, 1.2)),
+     ('x_0', (10, 1.2)),
+     ('x_1', (10, 2.5)),
+     ('x_2', (20, 1.2)),
      ('x_3', (20, 2.5))]
     >>> [(k, getattr(ds, k)) for k in sorted(ds)]
     [('mus', [1.2, 2.5]),
      ('nxs', [10, 20]),
-     ('x_0', array([ 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5])),
-     ('x_1', array([ 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2,
-                     1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])),
-     ('x_2', array([ 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])),
-     ('x_3', array([ 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5,
-                     2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5]))]
+     ('x_0', array([1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])),
+     ('x_1', array([2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5])),
+     ('x_2', array([1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2,
+                    1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])),
+     ('x_3', array([2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5,
+                    2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5]))]
 
     .. todo:: Fix module interface...
 
@@ -2813,15 +2847,15 @@ class DataSet(object):
        >> mod1._info_dict['x_0'].info
        (20, 2.5)
        >> mod1._info_dict['x_0'].load()
-       array([ 2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,
-               2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5])
+       array([2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,
+              2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5,  2.5])
 
     If you want to modify the data set, then create a new data set
     object pointing to the same place:
 
     >>> ds1 = DataSet(modname, 'w')
     >>> print(ds1)
-    DataSet './...' containing ['mus', 'nxs', 'x_2', 'x_3', 'x_0', 'x_1']
+    DataSet './...' containing ['mus', 'nxs', 'x_0', 'x_1', 'x_2', 'x_3']
 
     This may be modified, but see the warnings above.
 
@@ -2837,7 +2871,7 @@ class DataSet(object):
 
     >>> ds2 = DataSet(modname)
     >>> ds2.x_0
-    array([ 1.,  1.,  1.,  1.,  1.])
+    array([1., 1., 1., 1., 1.])
     >>> ds2.x_0 = 6
     Traceback (most recent call last):
        ...
@@ -2950,8 +2984,8 @@ class DataSet(object):
         self._load()
 
         # Needed for pre 2.6 python version to support tab completion
-        if sys.version < "2.6":  # pragma: no cover
-            self.__members__ = self._info_dict.keys()
+        if sys.version_info < (2, 6):  # pragma: no cover
+            self.__members__ = sorted(self._info_dict)
 
     def _import(self, name='__init__'):
         """Return the attribute `name` from the dataset.
@@ -2976,10 +3010,18 @@ class DataSet(object):
             _dont_write_bytecode = sys.dont_write_bytecode
             sys.dont_write_bytecode = True
             try:
-                res = imp.load_source(_mod, archive_file)
+                if sys.version_info < (3, 0):
+                    res = imp.load_source(_mod, archive_file)
+                else:
+                    import importlib.util
+                    spec = importlib.util.spec_from_file_location(_mod, archive_file)
+                    res = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(res)
                 if name == '__init__':
                     res = res._info_dict
-                del sys.modules[_mod]
+                else:
+                    res = sys.modules[_mod]
+                    del sys.modules[_mod]
             finally:
                 sys.dont_write_bytecode = _dont_write_bytecode
         else:
@@ -3097,7 +3139,7 @@ class DataSet(object):
                       arrays_name='_data')
 
         # Needed for pre 2.6 python version to support tab completion
-        if sys.version < "2.6":
+        if sys.version_info < (2, 6):
             self.__members__.append(name)
 
         if name not in self._info_dict:
@@ -3145,7 +3187,7 @@ class DataSet(object):
             self._load()
         return ("DataSet %r containing %s" % (
             os.path.join(self._path, self._module_name),
-            str(self._info_dict.keys())))
+            str(sorted(self._info_dict))))
 
     def __repr__(self):
         return ("DataSet(%s)" %
@@ -3156,7 +3198,7 @@ class DataSet(object):
                                      'name_prefix', ]]))
 
     def _keys(self):
-        return self._info_dict.keys()
+        return sorted(self._info_dict)
 
     def _insert(self, *v, **kw):
         r"""Store object and info in the archive under `name`.
@@ -3177,8 +3219,8 @@ class DataSet(object):
         else:
             info = None
 
-        #Why did I do this?  I don't use it...
-        #mod_dir = os.path.join(self._path, self._module_name)
+        # Why did I do this?  I don't use it...
+        # mod_dir = os.path.join(self._path, self._module_name)
         for name in kw:
             self[name] = info
             self.__setattr__(name, kw[name])

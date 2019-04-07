@@ -311,3 +311,8 @@ napoleon_use_admonition_for_references = False
 napoleon_use_ivar = False
 napoleon_use_param = True
 napoleon_use_rtype = True
+
+# nbsphinx settings
+# For now we do not execute notebooks so documentation builds easily on
+# readthedocs.
+nbsphinx_execute = 'never'

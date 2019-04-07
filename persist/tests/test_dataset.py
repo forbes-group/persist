@@ -7,6 +7,9 @@ from test_archive import NoStrNoRepr
 
 from persist import archive
 
+if sys.version_info >= (3, 0):
+    from importlib import reload
+
 
 def test_1():
     import tempfile, shutil, os
