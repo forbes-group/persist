@@ -20,6 +20,7 @@ NAME = "persist"
 
 install_requires = [
     'zope.interface>=3.8.0',
+    'six',
 ]
 
 test_requires = [
@@ -29,7 +30,7 @@ test_requires = [
     'coverage',
     'flake8',
     'pep8',     # Needed by flake8: dependency resolution issue if not pinned
-    'numpy',
+    'numpy>=1.16',
     'scipy',
     'h5py',
 ]
