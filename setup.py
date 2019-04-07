@@ -52,7 +52,7 @@ del mod
 
 
 setup(name=NAME,
-      version='3.0dev1',
+      version='3.0',
       packages=find_packages(),
 
       install_requires=install_requires,
