@@ -10,6 +10,7 @@ source:
   hg_url: https://bitbucket.org/mforbes/persist
 
 build:
+  noarch: python
   number: 0
   script: "{{ PYTHON }} -m pip install . --no-deps --ignore-installed -vv "
 
