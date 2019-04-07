@@ -18,10 +18,6 @@ from setuptools import setup, find_packages
 
 NAME = "persist"
 
-setup_requires = [
-    'pytest-runner'
-]
-
 install_requires = [
     'zope.interface>=3.8.0',
 ]
@@ -55,10 +51,9 @@ del mod
 
 
 setup(name=NAME,
-      version='1.1dev1',
+      version='3.0dev1',
       packages=find_packages(),
 
-      setup_requires=setup_requires,
       install_requires=install_requires,
       tests_require=test_requires,
       extras_require=extras_require,
