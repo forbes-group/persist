@@ -17,7 +17,7 @@ original goal was to overcomes several disadvatages of pickles:
    to read an archive if the API does not change.
 2. In the presence of API changes, the archives can be edited by hand to
    fix them since they are simply python code. (Note: for reliability,
-   the generated code is highly structured and not so “pretty”, but can
+   the generated code is highly structured and not so "pretty", but can
    still be edited or debugged in the case of errors due to API
    changes.)
 3. Efficient storage of large arrays.
@@ -37,7 +37,7 @@ project <https://bitbucket.org/mforbes/persist>`__:
 
 .. code:: bash
 
-   pip install hg+https://bitbucket.org/mforbes/persist
+    pip install hg+https://bitbucket.org/mforbes/persist
 
 DataSet Format
 ==============
