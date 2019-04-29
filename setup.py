@@ -18,12 +18,9 @@ from setuptools import setup, find_packages
 
 NAME = "persist"
 
-setup_requires = [
-    'pytest-runner'
-]
-
 install_requires = [
     'zope.interface>=3.8.0',
+    'six',
 ]
 
 test_requires = [
@@ -33,7 +30,7 @@ test_requires = [
     'coverage',
     'flake8',
     'pep8',     # Needed by flake8: dependency resolution issue if not pinned
-    'numpy',
+    'numpy>=1.16',
     'scipy',
     'h5py',
 ]
@@ -55,10 +52,9 @@ del mod
 
 
 setup(name=NAME,
-      version='1.1dev1',
+      version='2.0',
       packages=find_packages(),
 
-      setup_requires=setup_requires,
       install_requires=install_requires,
       tests_require=test_requires,
       extras_require=extras_require,
