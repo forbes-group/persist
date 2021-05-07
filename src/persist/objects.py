@@ -1,6 +1,6 @@
 r"""Provides Archivable class.
 """
-__all__ = ['Archivable']
+__all__ = ["Archivable"]
 
 from . import interfaces
 
@@ -56,7 +56,7 @@ class Archivable(object):
         """
         return (k for (k, v) in self.items())
 
-    def get_persistent_rep(self, env=None):      # pylint: disable-msg=W0613
+    def get_persistent_rep(self, env=None):  # pylint: disable-msg=W0613
         r"""Return (rep, args, imports).
 
         Define a persistent representation `rep` of the instance self where
@@ -97,12 +97,14 @@ class Archivable(object):
            o.a
         """
         from . import archive
+
         arch = archive.Archive()
         arch.insert(**{name: self})
         return str(arch)
 
     def __repr__(self):
         from . import archive
+
         return archive.repr_(self)
 
     def __str__(self):
@@ -118,5 +120,6 @@ class Container(Archivable):
     >>> Container(a=1, s='Hi')
     Container(a=1, s='Hi')
     """
+
     def __init__(self, **kw):
         self.__dict__.update(kw)

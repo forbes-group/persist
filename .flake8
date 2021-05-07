@@ -1,20 +1,16 @@
-[metadata]
-description-file = README.rst
-
-[flake8]
 # E221 Spaces before operators (x = 4  + 4)
 # E225 Requires space arround *all* operators (I like compact x**2 for example.)
 # E226 Requires whitespace around arithmetic operators
 # E241 Extra spaces after commas a = (1,  2) is not allowed
 # W293 Blank line containes whitespace
 # W503 line break before binary operator
+# W602 Deprecated form of raising exception
 ignore = E225,E226,W293,W503
-exclude=persist/_contrib/*
-#jobs=1
-max-complexity = 16
+max-line-length = 90
+exclude = persist/_contrib/*
 
 # This is the limit at which I can get 3 full emacs windows open.
-max-line-length = 85
+max-line-length = 90
 
-[aliases]
-test=pytest
+#jobs=1
+max-complexity = 16

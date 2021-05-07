@@ -210,11 +210,12 @@ from __future__ import division, with_statement
 
 from collections import OrderedDict
 from contextlib import contextmanager
-try:                            # Python 3 version
+
+try:  # Python 3 version
     import builtins
     import pickle
-except ImportError:             # pragma: no cover
-                                # Python 2 version
+except ImportError:  # pragma: no cover
+    # Python 2 version
     import cPickle as pickle
     import __builtin__ as builtins
 import ast
@@ -236,29 +237,36 @@ from ._contrib.RADLogic import topsort
 
 try:
     import numpy as np
-except ImportError:             # pragma: no cover
+except ImportError:  # pragma: no cover
     np = None
 
 try:
     import scipy.sparse
+
     sp = scipy
-except ImportError:             # pragma: no cover
+except ImportError:  # pragma: no cover
     sp = None
 
 try:
     import h5py
-except ImportError:             # pragma: no cover
+except ImportError:  # pragma: no cover
     h5py = None
 
 from . import interfaces
 from . import objects
 
-__all__ = ['Archive', 'DataSet', 'restore',
-           'ArchiveError', 'DuplicateError', 'repr_',
-           'get_imports']
+__all__ = [
+    "Archive",
+    "DataSet",
+    "restore",
+    "ArchiveError",
+    "DuplicateError",
+    "repr_",
+    "get_imports",
+]
 
 
-_HDF5_EXTS = set(['hf5', 'hd5', 'hdf5'])
+_HDF5_EXTS = set(["hf5", "hd5", "hdf5"])
 
 
 class ArchiveError(Exception):
@@ -414,14 +422,21 @@ class ArrayManager(object):
     def get_ext(filename):
         """Return the extension of filename"""
         basename = os.path.basename(filename)
-        ext = ''
+        ext = ""
         if os.path.extsep in basename:
             ext = basename.split(os.path.extsep)[-1].lower()
         return ext
 
     @classmethod
-    def save_arrays(cls, arrays, dirname='.', filename=None, keep=False,
-                    data_format='npy', arrays_name='_arrays'):
+    def save_arrays(
+        cls,
+        arrays,
+        dirname=".",
+        filename=None,
+        keep=False,
+        data_format="npy",
+        arrays_name="_arrays",
+    ):
         """Return `(rep, files)` and save the array.
 
         Arguments
@@ -450,31 +465,30 @@ class ArrayManager(object):
            List of filenames of created files.
         """
         files = []
-        if data_format == 'npy':
+        if data_format == "npy":
             if filename is not None:
                 dirname = os.path.join(dirname, filename)
             if not os.path.exists(dirname):
                 os.makedirs(dirname)
             for name in arrays:
-                _filename = os.path.join(dirname,
-                                         os.path.extsep.join([name, 'npy']))
+                _filename = os.path.join(dirname, os.path.extsep.join([name, "npy"]))
                 with backup(_filename, keep=keep):
                     np.save(_filename, arrays[name])
                     files.append(_filename)
             res = cls.npy_code
-        elif data_format in ['hdf5', 'npz']:
+        elif data_format in ["hdf5", "npz"]:
             if filename is None:
                 raise ValueError(
-                    "Must specify filename for data_format={}"
-                    .format(repr(data_format)))
+                    "Must specify filename for data_format={}".format(repr(data_format))
+                )
             ext = cls.get_ext(filename)
-            if data_format == 'hdf5' and ext not in _HDF5_EXTS:
-                filename = os.path.extsep.join([filename, 'hd5'])
-            elif data_format == 'npz' and ext != 'npz':
-                filename = os.path.extsep.join([filename, 'npz'])
+            if data_format == "hdf5" and ext not in _HDF5_EXTS:
+                filename = os.path.extsep.join([filename, "hd5"])
+            elif data_format == "npz" and ext != "npz":
+                filename = os.path.extsep.join([filename, "npz"])
             _filename = os.path.join(dirname, filename)
             with backup(_filename, keep=keep):
-                if data_format == 'hdf5':
+                if data_format == "hdf5":
                     res = cls.hdf5_code
                     with h5py.File(_filename) as f:
                         for name in arrays:
@@ -485,31 +499,30 @@ class ArrayManager(object):
                 files.append(_filename)
         else:
             raise NotImplementedError(
-                "Expected data_format in ['hdf5', 'npz', 'npy'], got {}"
-                .format(repr(data_format)))
+                "Expected data_format in ['hdf5', 'npz', 'npy'], got {}".format(
+                    repr(data_format)
+                )
+            )
 
         if filename is None:
-            filename = ''
+            filename = ""
 
-        rep = ('\n'.join([_l[4:] for _l in res.splitlines()])).format(
+        rep = ("\n".join([_l[4:] for _l in res.splitlines()])).format(
             DATA_NAME=arrays_name,
-            NAMES="[{}]".format(', '.join(map(repr, arrays))),
+            NAMES="[{}]".format(", ".join(map(repr, arrays))),
             DIRNAME=repr(dirname),
-            FILENAME=repr(filename))
+            FILENAME=repr(filename),
+        )
         return rep, files
 
     @staticmethod
-    def load_arrays(rep, arrays_name='_arrays'):
+    def load_arrays(rep, arrays_name="_arrays"):
         d = {}
         exec(rep, d)
         return d[arrays_name]
 
 
-_EXTS = {
-    'hdf5': '.hd5',
-    'npy': '',
-    'npz': '.npz'
-}
+_EXTS = {"hdf5": ".hd5", "npy": "", "npz": ".npz"}
 
 
 class Archive(object):
@@ -679,13 +692,21 @@ class Archive(object):
        ...
     ValueError: Can't insert 'y' into single_item_mode=True archive with 'x'.
     """
-    data_name = '_arrays'
+    data_name = "_arrays"
 
-    def __init__(self, flat=True, tostring=True, check_on_insert=False,
-                 array_threshold=None,
-                 backup_data=True, single_item_mode=False,
-                 allowed_names=None, gname_prefix='_g',
-                 scoped=True, robust_replace=True):
+    def __init__(
+        self,
+        flat=True,
+        tostring=True,
+        check_on_insert=False,
+        array_threshold=None,
+        backup_data=True,
+        single_item_mode=False,
+        allowed_names=None,
+        gname_prefix="_g",
+        scoped=True,
+        robust_replace=True,
+    ):
         self.tostring = tostring
         self.flat = flat
         self.imports = []
@@ -700,13 +721,15 @@ class Archive(object):
 
         self._section_sep = ""  # string to separate the sections
         if np:
-            self._numpy_printoptions = {'infstr': 'Inf',
-                                        'threshold': np.inf,
-                                        'suppress': False,
-                                        'linewidth': 200,
-                                        'edgeitems': 3,
-                                        'precision': 16,
-                                        'nanstr': 'NaN'}
+            self._numpy_printoptions = {
+                "infstr": "Inf",
+                "threshold": np.inf,
+                "suppress": False,
+                "linewidth": 200,
+                "edgeitems": 3,
+                "precision": 16,
+                "nanstr": "NaN",
+            }
             if array_threshold is None:
                 array_threshold = np.inf
 
@@ -718,7 +741,7 @@ class Archive(object):
         self.scoped = scoped
         self.robust_replace = robust_replace
 
-        self._maxint = -1       # Cache of maximum int label in archive
+        self._maxint = -1  # Cache of maximum int label in archive
         self._ids = OrderedDict()
 
     def get_id(self, obj):
@@ -743,8 +766,9 @@ class Archive(object):
         has either `import module as uiname`, `from module import
         iname` or `from module import iname as uiname`.
         """
-        if (interfaces.IArchivable.providedBy(obj)
-                or isinstance(obj, objects.Archivable)):
+        if interfaces.IArchivable.providedBy(obj) or isinstance(
+            obj, objects.Archivable
+        ):
             return obj.get_persistent_rep(env)
 
         for class_ in self._dispatch:
@@ -755,36 +779,37 @@ class Archive(object):
             return get_persistent_rep_method(obj, env)
 
         if inspect.isfunction(obj) and (
-                getattr(obj, '__qualname__', obj.__name__)
-                != obj.__name__):
+            getattr(obj, "__qualname__", obj.__name__) != obj.__name__
+        ):
             return get_persistent_rep_classmethod(obj, env)
-            
-        if hasattr(obj, 'get_persistent_rep'):
+
+        if hasattr(obj, "get_persistent_rep"):
             try:
                 return obj.get_persistent_rep(env)
             except TypeError as e:
-                warnings.warn("\n".join([
-                    "Found get_persistent_rep() but got TypeError:",
-                    str(e)]))
+                warnings.warn(
+                    "\n".join(["Found get_persistent_rep() but got TypeError:", str(e)])
+                )
 
-        if hasattr(obj, 'archive_1'):
-            warnings.warn("archive_1 is deprecated: use get_persistent_rep",
-                          DeprecationWarning)
+        if hasattr(obj, "archive_1"):
+            warnings.warn(
+                "archive_1 is deprecated: use get_persistent_rep", DeprecationWarning
+            )
             try:
                 return obj.archive_1(env)
             except TypeError as e:
-                warnings.warn("\n".join([
-                    "Found archive_1() but got TypeError:",
-                    str(e)]))
+                warnings.warn(
+                    "\n".join(["Found archive_1() but got TypeError:", str(e)])
+                )
 
         rep = repr(obj)
-        if rep.startswith('<'):
+        if rep.startswith("<"):
             try:
                 return get_persistent_rep_pickle(obj, env)
             except (pickle.PickleError, AttributeError):
                 raise ArchiveError(
-                    "Could not archive object {}.  Even tried pickling!"
-                    .format(rep))
+                    "Could not archive object {}.  Even tried pickling!".format(rep)
+                )
         else:
             return get_persistent_rep_repr(obj, env, rep=rep)
 
@@ -801,7 +826,7 @@ class Archive(object):
                     array_name = None
 
             if array_name is None:
-                array_prefix = 'array_'
+                array_prefix = "array_"
                 i = self._maxint + 1
                 array_name = array_prefix + str(i)
                 while array_name in self.data:
@@ -816,13 +841,14 @@ class Archive(object):
             rep = "%s['%s']" % (self.data_name, array_name)
             args = {}
             imports = []
-        elif (self.tostring
-              and obj.__class__ is np.ndarray
-              and not obj.dtype.hasobject):
+        elif self.tostring and obj.__class__ is np.ndarray and not obj.dtype.hasobject:
 
             rep = "numpy.frombuffer(%r, dtype=%r).reshape(%s)" % (
-                obj.tostring(), obj.dtype.str, str(obj.shape))
-            imports = [('numpy', None, 'numpy')]
+                obj.tostring(),
+                obj.dtype.str,
+                str(obj.shape),
+            )
+            imports = [("numpy", None, "numpy")]
             args = {}
         else:
             popts = np.get_printoptions()
@@ -834,27 +860,31 @@ class Archive(object):
 
             # Import A.B.C as C
             iname = module.__name__
-            mname = iname.rpartition('.')[-1]
+            mname = iname.rpartition(".")[-1]
 
             constructor = rep.partition("(")[0]
             if not constructor.startswith(mname):
                 rep = ".".join([mname, rep])
 
-            imports = [(iname, None, mname),
-                       ('numpy', 'inf', 'inf'),
-                       ('numpy', 'inf', 'Infinity'),
-                       ('numpy', 'inf', 'Inf'),
-                       ('numpy', 'inf', 'infty'),
-                       ('numpy', 'nan', 'nan'),
-                       ('numpy', 'nan', 'NaN'),
-                       ('numpy', 'nan', 'NAN')]
+            imports = [
+                (iname, None, mname),
+                ("numpy", "inf", "inf"),
+                ("numpy", "inf", "Infinity"),
+                ("numpy", "inf", "Inf"),
+                ("numpy", "inf", "infty"),
+                ("numpy", "nan", "nan"),
+                ("numpy", "nan", "NaN"),
+                ("numpy", "nan", "NAN"),
+            ]
             args = {}
         return (rep, args, imports)
 
     def _archive_spmatrix(self, obj, env):
-        if (sp.sparse.isspmatrix_csc(obj)
-                or sp.sparse.isspmatrix_csr(obj)
-                or sp.sparse.isspmatrix_bsr(obj)):
+        if (
+            sp.sparse.isspmatrix_csc(obj)
+            or sp.sparse.isspmatrix_csr(obj)
+            or sp.sparse.isspmatrix_bsr(obj)
+        ):
             args = (obj.data, obj.indices, obj.indptr)
         elif sp.sparse.isspmatrix_dia(obj):
             args = (obj.data, obj.offsets)
@@ -862,13 +892,13 @@ class Archive(object):
             raise NotImplementedError(obj.__class__.__name__)
 
         class_name = obj.__class__.__name__
-        imports = [('scipy.sparse', class_name, class_name)]
-        rep = '%s(args, shape=%s)' % (class_name, str(obj.shape))
+        imports = [("scipy.sparse", class_name, class_name)]
+        rep = "%s(args, shape=%s)" % (class_name, str(obj.shape))
         return (rep, dict(args=args), imports)
 
     def _archive_func(self, obj, env):
         r"""Attempt to archive the func."""
-        if getattr(obj, '__qualname__', obj.__name__) != obj.__name__:
+        if getattr(obj, "__qualname__", obj.__name__) != obj.__name__:
             # Class method
             return get_persistent_rep_classmethod(obj, env)
         return get_persistent_rep_obj(obj, env)
@@ -896,21 +926,18 @@ class Archive(object):
         dict: _archive_dict,
         float: _archive_float,
         complex: _archive_float,
-        type: _archive_type}
-    
-    if hasattr(types, 'ClassType'):
+        type: _archive_type,
+    }
+
+    if hasattr(types, "ClassType"):
         # Old-style classes in python 2.
         _dispatch[types.ClassType] = _archive_type
 
     if np:
-        _dispatch.update({
-            np.ndarray: _archive_ndarray,
-            np.ufunc: _archive_func})
+        _dispatch.update({np.ndarray: _archive_ndarray, np.ufunc: _archive_func})
 
     if sp:
-        _dispatch.update({
-            sp.sparse.base.spmatrix: _archive_spmatrix
-        })
+        _dispatch.update({sp.sparse.base.spmatrix: _archive_spmatrix})
 
     def unique_name(self, name):
         r"""Return a unique name not contained in the archive."""
@@ -1021,8 +1048,8 @@ class Archive(object):
         """
         if v is not None:
             raise ValueError(
-                'Insert objects with a key: insert(x=3), not insert({})'
-                .format(v))
+                "Insert objects with a key: insert(x=3), not insert({})".format(v)
+            )
 
         if env is None:
             env = {}
@@ -1031,17 +1058,21 @@ class Archive(object):
         if self.single_item_mode:
             if len(kwargs) != 1:
                 raise ValueError(
-                    "Can't insert {} items when single_item_mode=True"
-                    .format(len(kwargs)))
+                    "Can't insert {} items when single_item_mode=True".format(
+                        len(kwargs)
+                    )
+                )
             name = list(kwargs)[0]
             if self.arch and name not in self.names():
                 raise ValueError(
-                    "Can't insert {} into single_item_mode=True archive with {}."
-                    .format(repr(name), repr(self.names()[0])))
-            
+                    "Can't insert {} into single_item_mode=True archive with {}.".format(
+                        repr(name), repr(self.names()[0])
+                    )
+                )
+
         for name in kwargs:
             obj = kwargs[name]
-            if (name.startswith('_') and name not in self.allowed_names):
+            if name.startswith("_") and name not in self.allowed_names:
                 raise ValueError("name must not start with '_'")
 
             # First check to see if object is already in archive:
@@ -1077,7 +1108,7 @@ class Archive(object):
                 self.arch.append((uname, obj, env))
                 ind = len(self.arch) - 1
 
-            assert(ind is not None)
+            assert ind is not None
             uname, obj, env = self.arch[ind]
             names.append(uname)
             self.ids[uname] = self.get_id(obj)
@@ -1204,25 +1235,30 @@ class Archive(object):
 
         # Generate dependency graph
         try:
-            graph = Graph(objects=self.arch,
-                          get_persistent_rep=self.get_persistent_rep,
-                          robust_replace=self.robust_replace,
-                          get_id=self.get_id)
+            graph = Graph(
+                objects=self.arch,
+                get_persistent_rep=self.get_persistent_rep,
+                robust_replace=self.robust_replace,
+                get_id=self.get_id,
+            )
         except topsort.CycleError as err:
             six.reraise(CycleError, CycleError(*err.args), sys.exc_info()[-1])
-        
+
         # Optionally: at this stage perform a graph reduction.
         graph.reduce()
-        names_reps = [(node.name, node.rep)
-                      for id_ in graph.order
-                      for node in [graph.nodes[id_]]]
+        names_reps = [
+            (node.name, node.rep) for id_ in graph.order for node in [graph.nodes[id_]]
+        ]
 
         # Add any leftover names (aliases):
-        names_reps.extend([
-            (name, node.name)
-            for name in self.ids
-            if name not in list(zip(*names_reps))[0]
-            for node in [graph.nodes[self.ids[name]]]])
+        names_reps.extend(
+            [
+                (name, node.name)
+                for name in self.ids
+                if name not in list(zip(*names_reps))[0]
+                for node in [graph.nodes[self.ids[name]]]
+            ]
+        )
 
         return (graph.imports, names_reps)
 
@@ -1239,19 +1275,18 @@ class Archive(object):
         import_lines = []
         del_lines = []
         for (module, iname, uiname) in imports:
-            assert(iname is not None or uiname is not None)
+            assert iname is not None or uiname is not None
             if iname is None:
-                import_lines.append(
-                    "import {} as {}".format(module, uiname))
+                import_lines.append("import {} as {}".format(module, uiname))
                 del_lines.append("del {}".format(uiname))
             elif iname == uiname or uiname is None:  # pragma: no cover
                 # Probably never happens because uinames start with _
-                import_lines.append(
-                    "from {} import {}".format(module, uiname))
+                import_lines.append("from {} import {}".format(module, uiname))
                 del_lines.append("del {}".format(uiname))
             else:
                 import_lines.append(
-                    "from {} import {} as {}".format(module, iname, uiname))
+                    "from {} import {} as {}".format(module, iname, uiname)
+                )
                 del_lines.append("del {}".format(uiname))
         return import_lines, del_lines
 
@@ -1269,41 +1304,47 @@ class Archive(object):
         return res
 
     def _get_del_lines(self):
-        return ["try: del __builtins__, {}".format(self.data_name),
-                "except NameError: pass"]
-    
+        return [
+            "try: del __builtins__, {}".format(self.data_name),
+            "except NameError: pass",
+        ]
+
     def unscoped_str(self):
         r"""Return an unscoped string representation with all objects defined in
         the global scope.  This requires renaming and textual replacement."""
         imports, defs = self.make_persistent()
 
         import_lines, del_lines = self._get_import_lines(imports)
-        temp_names = [name for (name, rep) in defs
-                      if (name.startswith('_')
-                          and name not in self.allowed_names)]
+        temp_names = [
+            name
+            for (name, rep) in defs
+            if (name.startswith("_") and name not in self.allowed_names)
+        ]
         if temp_names:
             del_lines.append("del %s" % (",".join(temp_names),))
 
         del_lines.extend(self._get_del_lines())
 
-        lines = "\n".join(["{} = {}".format(uname, rep)
-                           for (uname, rep) in defs])
+        lines = "\n".join(["{} = {}".format(uname, rep) for (uname, rep) in defs])
         imports = "\n".join(import_lines)
         dels = "\n".join(del_lines)
 
-        res = ("\n"+self._section_sep).join([l for l in [imports, lines, dels]
-                                             if 0 < len(l)])
+        res = ("\n" + self._section_sep).join(
+            [l for l in [imports, lines, dels] if 0 < len(l)]
+        )
         return res
 
     def scoped__str__(self):
         r"""Return the scoped version of the string representation."""
         # Generate dependency graph
         try:
-            graph = _Graph(objects=self.arch,
-                           get_persistent_rep=self.get_persistent_rep,
-                           gname_prefix=self.gname_prefix,
-                           allowed_names=set(self.allowed_names),
-                           get_id=self.get_id)
+            graph = _Graph(
+                objects=self.arch,
+                get_persistent_rep=self.get_persistent_rep,
+                gname_prefix=self.gname_prefix,
+                allowed_names=set(self.allowed_names),
+                get_id=self.get_id,
+            )
         except topsort.CycleError as err:
             six.reraise(CycleError, CycleError(*err.args), sys.exc_info()[-1])
 
@@ -1320,25 +1361,33 @@ class Archive(object):
 
             if node.args or node.imports:
                 results.append(
-                    "\n".join([
-                        "",
-                        "def %(name)s(%(args)s):%(imports)s",
-                        "    return %(rep)s",
-                        "%(name)s = %(name)s()"])
-                    % dict(name=name,
-                           argnames=",".join(sorted(node.args)),
-                           args=",".join([
-                                "=".join([
-                                    _a,
-                                    graph.nodes[self.get_id(node.args[_a])].name])
-                               for _a in node.args]),
-                           imports="\n    ".join(
-                               [""] + self._get_import_lines(node.imports)[0]),
-                           rep=node.rep))
+                    "\n".join(
+                        [
+                            "",
+                            "def %(name)s(%(args)s):%(imports)s",
+                            "    return %(rep)s",
+                            "%(name)s = %(name)s()",
+                        ]
+                    )
+                    % dict(
+                        name=name,
+                        argnames=",".join(sorted(node.args)),
+                        args=",".join(
+                            [
+                                "=".join(
+                                    [_a, graph.nodes[self.get_id(node.args[_a])].name]
+                                )
+                                for _a in node.args
+                            ]
+                        ),
+                        imports="\n    ".join(
+                            [""] + self._get_import_lines(node.imports)[0]
+                        ),
+                        rep=node.rep,
+                    )
+                )
             else:
-                results.append(
-                    "%(name)s = %(rep)s"
-                    % dict(name=name, rep=node.rep))
+                results.append("%(name)s = %(rep)s" % dict(name=name, rep=node.rep))
 
         # Add any leftover names (aliases):
         for name in self.ids:
@@ -1347,16 +1396,18 @@ class Archive(object):
             node = graph.nodes[self.ids[name]]
             results.append(" = ".join([name, node.name]))
 
-        gnames = ", ".join(_n for _n in names
-                           if _n.startswith(self.gname_prefix)
-                           and _n not in self.allowed_names)
+        gnames = ", ".join(
+            _n
+            for _n in names
+            if _n.startswith(self.gname_prefix) and _n not in self.allowed_names
+        )
         if gnames:
             results.append("del %s" % (gnames,))
         results.extend(self._get_del_lines())
 
         return "\n".join(results)
 
-    def save_data(self, datafile=None, filename=None, data_format='npy'):
+    def save_data(self, datafile=None, filename=None, data_format="npy"):
         """Save any arrays in `self.data` to disk.
 
         Arguments
@@ -1369,25 +1420,37 @@ class Archive(object):
         if self.data:
             if datafile is not None:
                 dirname = datafile
-                if filename is None and data_format != 'npy':
+                if filename is None and data_format != "npy":
                     dirname = os.path.dirname(datafile)
                     filename = os.path.basename(datafile)
 
-                rep, files = ArrayManager.save_arrays(arrays=self.data,
-                                                      dirname=dirname,
-                                                      filename=filename,
-                                                      keep=self.backup_data,
-                                                      data_format=data_format)
+                rep, files = ArrayManager.save_arrays(
+                    arrays=self.data,
+                    dirname=dirname,
+                    filename=filename,
+                    keep=self.backup_data,
+                    data_format=data_format,
+                )
             else:
                 warnings.warn(
-                    "Data arrays {} exist but no datafile specified. "
-                    .format(sorted(self.data))
-                    + "Save data manually and populate in _arrays dict.")
-        
+                    "Data arrays {} exist but no datafile specified. ".format(
+                        sorted(self.data)
+                    )
+                    + "Save data manually and populate in _arrays dict."
+                )
+
         return rep, files
 
-    def save(self, dirname, name=None, package=True, arrays_name='_arrays',
-             data_format='npy', force=False, clear_on_reload=True):
+    def save(
+        self,
+        dirname,
+        name=None,
+        package=True,
+        arrays_name="_arrays",
+        data_format="npy",
+        force=False,
+        clear_on_reload=True,
+    ):
         """Save the archive to disk as an importable package or module.
 
         Arguments
@@ -1402,7 +1465,7 @@ class Archive(object):
            `self.array_threshold`.
         package : bool
            If `True`, then the archive will be stored as a package in::
-           
+
               <dirname>/<name>/__init__.py
               <dirname>/<name>/<arrays_name>.<ext>
 
@@ -1436,38 +1499,45 @@ class Archive(object):
         # First check for existing files.
         arrays_file = arrays_name + _EXTS[data_format]
         if package:
-            init_file = os.path.join(dirname, name, '__init__.py')
+            init_file = os.path.join(dirname, name, "__init__.py")
             package_dir = os.path.join(dirname, name)
         else:
-            init_file = os.path.join(dirname, name + '.py')
+            init_file = os.path.join(dirname, name + ".py")
             arrays_file = name + arrays_file
             package_dir = dirname
-            
+
         if os.path.exists(dirname):
             if not os.path.isdir(dirname):
                 raise ValueError(
-                    "File dirname={} exists and is not a directory.".format(dirname))
+                    "File dirname={} exists and is not a directory.".format(dirname)
+                )
 
             if not force:
                 if os.path.exists(init_file):
-                    raise ValueError("File {} exists and force=False."
-                                     .format(init_file))
+                    raise ValueError(
+                        "File {} exists and force=False.".format(init_file)
+                    )
                 _arrays_file = os.path.join(package_dir, arrays_file)
                 if self.data and os.path.exists(_arrays_file):
-                    raise ValueError("File {} exists and force=False."
-                                     .format(_arrays_file))
-            if (package
-                    and os.path.exists(package_dir)
-                    and not os.path.isdir(package_dir)):
+                    raise ValueError(
+                        "File {} exists and force=False.".format(_arrays_file)
+                    )
+            if (
+                package
+                and os.path.exists(package_dir)
+                and not os.path.isdir(package_dir)
+            ):
                 # package_dir is a file
                 if force:
                     with backup(package_dir, keep=True):
                         pass
                 else:
                     raise ValueError(
-                        "File dirname/name={} exists and is not a directory."
-                        .format(package_dir))
-                
+                        "File dirname/name={} exists and is not a directory.".format(
+                            package_dir
+                        )
+                    )
+
         else:
             logging.info("Making directory {} for archive.".format(dirname))
             os.makedirs(dirname)
@@ -1477,12 +1547,12 @@ class Archive(object):
             if not os.path.exists(package_dir):
                 logging.info("Making directory {} for archive.".format(package_dir))
                 os.makedirs(package_dir)
-                
-        array_rep, array_files = self.save_data(datafile=package_dir,
-                                                filename=arrays_file,
-                                                data_format=data_format)
+
+        array_rep, array_files = self.save_data(
+            datafile=package_dir, filename=arrays_file, data_format=data_format
+        )
         with backup(init_file, keep=self.backup_data):
-            with open(init_file, 'w') as f:
+            with open(init_file, "w") as f:
                 if array_rep:
                     f.write(array_rep)
                 f.write(string_rep)
@@ -1490,11 +1560,17 @@ class Archive(object):
                     assert 1 == len(self.arch)
                     # Special case of a single item archive.  Make module the
                     # single object.
-                    f.write("\n".join([
-                        "",
-                        "import sys",
-                        "sys.modules[__name__] = {NAME}"
-                        .format(NAME=self.names()[0])]))
+                    f.write(
+                        "\n".join(
+                            [
+                                "",
+                                "import sys",
+                                "sys.modules[__name__] = {NAME}".format(
+                                    NAME=self.names()[0]
+                                ),
+                            ]
+                        )
+                    )
                 elif clear_on_reload:
                     # clear all special single item imports
                     f.write(_G_CLEAR_SINGLE_ITEM_MODULES_CODE)
@@ -1518,7 +1594,7 @@ def _g_clear_single_item_modules():
 _g_clear_single_item_modules()
 del _g_clear_single_item_modules
 '''
-        
+
 
 def get_imports(obj, env=None):
     r"""Return `imports = [(module, iname, uiname)]` where
@@ -1654,17 +1730,16 @@ def get_persistent_rep_repr(obj, env, rep=None):
 
 def get_persistent_rep_pickle(obj, env):
     r"""Last resort - archive by pickle."""
-    rep = "loads(%s)" % repr(
-        pickle.dumps(obj, protocol=pickle.HIGHEST_PROTOCOL))
+    rep = "loads(%s)" % repr(pickle.dumps(obj, protocol=pickle.HIGHEST_PROTOCOL))
     args = {}
-    imports = [('pickle', 'loads', 'loads')]
+    imports = [("pickle", "loads", "loads")]
     return (rep, args, imports)
 
 
 def get_persistent_rep_type(obj, env):
     # Special cases
     if type(None) is obj:
-        return ('type(None)', {}, [])
+        return ("type(None)", {}, [])
     name = None
     args = {}
     for module in [builtins, types]:
@@ -1694,7 +1769,7 @@ def get_persistent_rep_float(obj, env):
     ('inf', {}, [('numpy', 'inf', 'inf')])
     """
     rep = repr(obj)
-    imports = [('numpy', name, name) for name in AST(rep)._get_names()]
+    imports = [("numpy", name, name) for name in AST(rep)._get_names()]
     args = {}
 
     return (rep, args, imports)
@@ -1731,7 +1806,7 @@ def get_persistent_rep_classmethod(obj, env):
     rep = obj.__qualname__
     module = inspect.getmodule(obj)
     mname = module.__name__
-    cname, _name = rep.split('.', 1)
+    cname, _name = rep.split(".", 1)
     imports = [(mname, cname, cname)]
     args = {}
     return (rep, args, imports)
@@ -1750,7 +1825,7 @@ def _get_rep(obj, arg_rep):
 def get_persistent_rep_list(l, env):
     args = {}
     imports = []
-    name = '_l_0'
+    name = "_l_0"
     names = set(env)
     reps = []
     unames = UniqueNames(names).unique_names(name)
@@ -1804,18 +1879,20 @@ def is_simple(obj):
     ...          [[1], (1, ), {'a':2}]))
     [False, True, False]
     """
-    if hasattr(obj, '__class__'):
+    if hasattr(obj, "__class__"):
         class_ = obj.__class__
         classes = [bool, int, str, None.__class__]
         if sys.version_info < (3, 0):
             classes.extend([long, unicode])
         result = (
             class_ in classes
-            or (class_ in [float, complex]
-                and not (np and (np.isinf(obj)) or np.isnan(obj)))
+            or (
+                class_ in [float, complex]
+                and not (np and (np.isinf(obj)) or np.isnan(obj))
+            )
             or (class_ == tuple and all(map(is_simple, obj)))
         )
-    else:                       # pragma: no cover
+    else:  # pragma: no cover
         result = False
     if result:
         assert obj == eval(repr(obj))
@@ -1843,8 +1920,10 @@ class Node(object):
     parents : list
        List of parent id's
     """
-    def __init__(self, obj, rep, args, name, imports=None,
-                 children=None, parents=None, get_id=id):
+
+    def __init__(
+        self, obj, rep, args, name, imports=None, children=None, parents=None, get_id=id
+    ):
         self.get_id = get_id
         self.obj = obj
         self.rep = rep
@@ -1868,10 +1947,17 @@ class Node(object):
              children=[...], parents=[])
         """
         return (
-            ("Node(obj=%r, rep=%r, args=%r, name=%r, imports=%r, "
-             + "children=%r, parents=%r)")
-            % (self.obj, self.rep, self.args, self.name, self.imports,
-               self.children, self.parents))
+            "Node(obj=%r, rep=%r, args=%r, name=%r, imports=%r, "
+            + "children=%r, parents=%r)"
+        ) % (
+            self.obj,
+            self.rep,
+            self.args,
+            self.name,
+            self.imports,
+            self.children,
+            self.parents,
+        )
 
     def __str__(self):
         r"""Return string showing node.
@@ -1894,8 +1980,9 @@ class Node(object):
         A node can be reduced if it is not a root node, and is either a simple
         object with an efficient representation (as defined by
         :meth:`is_simple`), or has exactly one parent."""
-        reducible = (self.id not in roots
-                     and (is_simple(self.obj) or 1 == len(self.parents)))
+        reducible = self.id not in roots and (
+            is_simple(self.obj) or 1 == len(self.parents)
+        )
         return reducible
 
 
@@ -1905,8 +1992,16 @@ class Graph(object):
     This is a graph of objects in memory: these are identified by
     their python :func:`id`.
     """
-    def __init__(self, objects, get_persistent_rep, robust_replace=True,
-                 gname_prefix='_g', allowed_names=set(), get_id=id):
+
+    def __init__(
+        self,
+        objects,
+        get_persistent_rep,
+        robust_replace=True,
+        gname_prefix="_g",
+        allowed_names=set(),
+        get_id=id,
+    ):
         r"""Initialize the dependency graph with some reserved
         names.
 
@@ -1938,8 +2033,7 @@ class Graph(object):
         self.gname_prefix = gname_prefix
         self.allowed_names = allowed_names
 
-        self.names = UniqueNames(set([name for (name, obj, env)
-                                      in objects]))
+        self.names = UniqueNames(set([name for (name, obj, env) in objects]))
         self.get_persistent_rep = get_persistent_rep
         self.robust_replace = robust_replace
 
@@ -1965,7 +2059,7 @@ class Graph(object):
                 pass
             else:
                 uname = node.name
-                if not node.name.startswith('_'):
+                if not node.name.startswith("_"):
                     uname = "_" + uname
                 uname = self.names.unique(uname)
                 node.name = uname
@@ -1984,8 +2078,7 @@ class Graph(object):
                 cnode = self.nodes[child]
                 cnode.parents.append(node.id)
 
-            node.rep = _replace_rep(node.rep, replacements,
-                                    robust=self.robust_replace)
+            node.rep = _replace_rep(node.rep, replacements, robust=self.robust_replace)
 
     def gname(self, obj):
         r"""Return a unique global name for the specified object.
@@ -1999,8 +2092,9 @@ class Graph(object):
         specified `name`.  Also process the imports of the node."""
         rep, args, imports = self.get_persistent_rep(obj, env)
         rep = self._process_imports(rep, args, imports)
-        return Node(obj=obj, rep=rep, args=args, name=name, imports=imports,
-                    get_id=self.get_id)
+        return Node(
+            obj=obj, rep=rep, args=args, name=name, imports=imports, get_id=self.get_id
+        )
 
     def _DFS(self, node, env):
         r"""Visit all nodes in the directed subgraph specified by
@@ -2031,7 +2125,7 @@ class Graph(object):
             else:
                 # Get new name.  All import names are local
                 uiname = uiname_
-                if not uiname.startswith('_'):
+                if not uiname.startswith("_"):
                     uiname = "_" + uiname
                 uiname = self.names.unique(uiname, arg_names)
                 self.imports.append((module_, iname_, uiname))
@@ -2046,9 +2140,11 @@ class Graph(object):
     def edges(self):
         r"""Return a list of edges `(id1, id2)` where object `id1` depends
         on object `id2`."""
-        return [(id_, self.get_id(obj))
-                for id_ in self.nodes
-                for (name, obj) in self.nodes[id_].args.items()]
+        return [
+            (id_, self.get_id(obj))
+            for id_ in self.nodes
+            for (name, obj) in self.nodes[id_].args.items()
+        ]
 
     def _topological_order(self):
         r"""Return a list of the ids for all nodes in the graph in a
@@ -2065,8 +2161,9 @@ class Graph(object):
         replacements = {node.name: node.rep}
         for parent in node.parents:
             pnode = self.nodes[parent]
-            pnode.rep = _replace_rep(pnode.rep, replacements,
-                                     robust=self.robust_replace)
+            pnode.rep = _replace_rep(
+                pnode.rep, replacements, robust=self.robust_replace
+            )
             pnode.children.remove(id)
             if node.name in pnode.args:
                 # It may have been removed already...
@@ -2249,8 +2346,9 @@ class Graph(object):
         except NameError: pass
         """
         self.check()
-        reducible_ids = [id for id in self.order
-                         if self.nodes[id].isreducible(roots=self.roots)]
+        reducible_ids = [
+            id for id in self.order if self.nodes[id].isreducible(roots=self.roots)
+        ]
         for id in reducible_ids:
             self._reduce(id)
 
@@ -2269,8 +2367,15 @@ class _Graph(Graph):
        To improve performance, it is assumed that the names of `objects`
        are unique and do not start with an underscore `_`.
     """
-    def __init__(self, objects, get_persistent_rep,
-                 gname_prefix='_g', allowed_names=set(), get_id=id):
+
+    def __init__(
+        self,
+        objects,
+        get_persistent_rep,
+        gname_prefix="_g",
+        allowed_names=set(),
+        get_id=id,
+    ):
         r"""Initialize the dependency graph with some reserved
         names.
 
@@ -2331,18 +2436,19 @@ class _Graph(Graph):
         specified `name`. Also process the imports of the node."""
         self.names.add(name)
         rep, args, imports = self.get_persistent_rep(obj, env)
-        return Node(obj=obj, rep=rep, args=args, name=name, imports=imports,
-                    get_id=self.get_id)
+        return Node(
+            obj=obj, rep=rep, args=args, name=name, imports=imports, get_id=self.get_id
+        )
 
     # edges = Graph.edges
     # _topological_order = Graph._topological_order
     # check = Graph.check
     # paths = Graph.paths
 
-    def _reduce(self, id):      # pragma: no cover
+    def _reduce(self, id):  # pragma: no cover
         raise NotImplementedError
 
-    def reduce(self):           # pragma: no cover
+    def reduce(self):  # pragma: no cover
         raise NotImplementedError
 
 
@@ -2371,7 +2477,8 @@ class UniqueNames(object):
     bottleneck.  This class is used to manage unique names in an efficient
     manner.
     """
-    def __init__(self, names=None, sep='_'):
+
+    def __init__(self, names=None, sep="_"):
         """
         Parameters
         ----------
@@ -2379,7 +2486,7 @@ class UniqueNames(object):
            Set of names.  New names will not clash with these.
         """
         self.sep = sep
-        self.extension_re = re.compile(r'(.*)%s(\d+)$' % re.escape(sep))
+        self.extension_re = re.compile(r"(.*)%s(\d+)$" % re.escape(sep))
         self.names = set(names)
 
         # This is a dictionary of numbers associated with each base such that
@@ -2506,10 +2613,13 @@ class UniqueNames(object):
 
 class ReplacementError(Exception):
     r"""Replacements not consistent with parse tree."""
+
     def __init__(self, old, new, expected, actual):
-        Exception.__init__(self,
-                           "Replacement %s->%s: Expected %i, replaced %i" % (
-                               old, new, expected, actual))
+        Exception.__init__(
+            self,
+            "Replacement %s->%s: Expected %i, replaced %i"
+            % (old, new, expected, actual),
+        )
 
 
 def _replace_rep(rep, replacements, check=False, robust=True):
@@ -2564,27 +2674,28 @@ def _replace_rep(rep, replacements, check=False, robust=True):
         replacement_str = "%(" + old + ")s"
         l = len(old)
         i = rep.find(old)
-        i_rep = []                  # Indices to replace
+        i_rep = []  # Indices to replace
         while 0 <= i:
-            prev = rep[i-1:i]
-            next = rep[i+l:i+l+1]
-            if ((not next or next not in identifier_tokens)
-                    and (not prev or prev not in identifier_tokens)):
+            prev = rep[i - 1 : i]
+            next = rep[i + l : i + l + 1]
+            if (not next or next not in identifier_tokens) and (
+                not prev or prev not in identifier_tokens
+            ):
 
                 # Now get previous and next non-whitespace characters
                 c = i + l
                 while c < len(rep) and rep[c] in string.whitespace:
                     c = c + 1
-                next = rep[c:c+1]
+                next = rep[c : c + 1]
 
                 c = i - 1
                 while 0 <= c and rep[c] in string.whitespace:
                     c = c - 1
-                prev = rep[c:c+1]
-                if (not next or next not in "="):
+                prev = rep[c : c + 1]
+                if not next or next not in "=":
                     # Test for keyword arguments
                     i_rep.append(i)
-            i = rep.find(old, i+1)
+            i = rep.find(old, i + 1)
 
         n_rep = len(i_rep)
 
@@ -2648,9 +2759,11 @@ def _replace_rep_robust(rep, replacements):
     """
     if not replacements:
         return rep
-    names = [_n for _n in ast.walk(ast.parse(rep))
-             if _n.__class__ is ast.Name
-             and _n.ctx.__class__ is not ast.Store]
+    names = [
+        _n
+        for _n in ast.walk(ast.parse(rep))
+        if _n.__class__ is ast.Name and _n.ctx.__class__ is not ast.Store
+    ]
     if not names:
         return rep
 
@@ -2658,8 +2771,7 @@ def _replace_rep_robust(rep, replacements):
     for _line in rep.splitlines():
         offset = line_offsets[-1] + len(_line) + 1  # include \n
         line_offsets.append(offset)
-    splits = sorted((_n.lineno - 1, _n.col_offset, len(_n.id), _n.id)
-                    for _n in names)
+    splits = sorted((_n.lineno - 1, _n.col_offset, len(_n.id), _n.id) for _n in names)
     ind = 0
     results = []
     for _line, _col, _len, _id in splits:
@@ -2676,30 +2788,33 @@ def _replace_rep_robust(rep, replacements):
 
 class AST(object):
     r"""Class to represent and explore the AST of expressions."""
+
     def __init__(self, expr):
-        self.__dict__['expr'] = expr
-        self.__dict__['ast'] = ast.parse(expr)
-        self.__dict__['names'] = self._get_names()
+        self.__dict__["expr"] = expr
+        self.__dict__["ast"] = ast.parse(expr)
+        self.__dict__["names"] = self._get_names()
 
     @property
     def expr(self):
         r"""Expression"""
-        return self.__dict__['expr']
+        return self.__dict__["expr"]
 
     @property
     def ast(self):
         r"""AST for expression"""
-        return self.__dict__['ast']
+        return self.__dict__["ast"]
 
     @property
     def names(self):
         r"""Symbols references in expression."""
-        return self.__dict__['names']
+        return self.__dict__["names"]
 
     def _get_names(self):
-        return [_n.id for _n in ast.walk(ast.parse(self.expr))
-                if _n.__class__ is ast.Name
-                and _n.ctx.__class__ is not ast.Store]
+        return [
+            _n.id
+            for _n in ast.walk(ast.parse(self.expr))
+            if _n.__class__ is ast.Name and _n.ctx.__class__ is not ast.Store
+        ]
 
 
 class DataSet(object):
@@ -2881,15 +2996,20 @@ class DataSet(object):
     """
     _lock_file_name = "_locked"
 
-    def __init__(self, module_name, mode='r', path=".",
-                 synchronize=True,
-                 _reload=False,
-                 array_threshold=100,
-                 data_format='npy',
-                 backup_data=False,
-                 name_prefix='x_',
-                 timeout=60,
-                 scoped=True):
+    def __init__(
+        self,
+        module_name,
+        mode="r",
+        path=".",
+        synchronize=True,
+        _reload=False,
+        array_threshold=100,
+        data_format="npy",
+        backup_data=False,
+        name_prefix="x_",
+        timeout=60,
+        scoped=True,
+    ):
         r"""Constructor.  Note that all of the parameters are stored
         as attributes with a leading underscore appended to the name.
 
@@ -2958,23 +3078,31 @@ class DataSet(object):
         self._scoped = scoped
 
         mod_dir = os.path.join(path, module_name)
-        key_file = os.path.join(mod_dir, '_this_dir_is_a_DataSet')
+        key_file = os.path.join(mod_dir, "_this_dir_is_a_DataSet")
 
         if os.path.exists(mod_dir):
             if not os.path.exists(key_file):
                 raise ValueError(
-                    ("Directory %s exists and is not a DataSet repository. " +
-                     "Please choose a unique location. ") % (mod_dir,))
+                    (
+                        "Directory %s exists and is not a DataSet repository. "
+                        + "Please choose a unique location. "
+                    )
+                    % (mod_dir,)
+                )
 
-        elif mode == 'r':
+        elif mode == "r":
             raise ValueError(
-                ("Default mode is read-only but directory %s does "
-                 "not exist. Please choose an existing DataSet or "
-                 "specify write mode with mode='w'.") % (mod_dir,))
-        elif mode == 'w':
+                (
+                    "Default mode is read-only but directory %s does "
+                    "not exist. Please choose an existing DataSet or "
+                    "specify write mode with mode='w'."
+                )
+                % (mod_dir,)
+            )
+        elif mode == "w":
             logging.info("Making directory %s for output." % (mod_dir,))
             os.makedirs(mod_dir)
-            open(key_file, 'w').close()
+            open(key_file, "w").close()
         else:
             raise NotImplementedError("mode=%s not supported" % (mode,))
 
@@ -2987,7 +3115,7 @@ class DataSet(object):
         if sys.version_info < (2, 6):  # pragma: no cover
             self.__members__ = sorted(self._info_dict)
 
-    def _import(self, name='__init__'):
+    def _import(self, name="__init__"):
         """Return the attribute `name` from the dataset.
 
         Arguments
@@ -2996,9 +3124,9 @@ class DataSet(object):
            Name of attribute.  The default value `__init__` will load the
            `_info_dict`.
         """
-        archive_file = os.path.join(self._path,
-                                    self._module_name,
-                                    "{:s}.py".format(name))
+        archive_file = os.path.join(
+            self._path, self._module_name, "{:s}.py".format(name)
+        )
         if os.path.exists(archive_file):
             _mod = UniqueNames(sys.modules).unique(name)
 
@@ -3014,10 +3142,11 @@ class DataSet(object):
                     res = imp.load_source(_mod, archive_file)
                 else:
                     import importlib.util
+
                     spec = importlib.util.spec_from_file_location(_mod, archive_file)
                     res = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(res)
-                if name == '__init__':
+                if name == "__init__":
                     res = res._info_dict
                 else:
                     res = sys.modules[_mod]
@@ -3025,12 +3154,12 @@ class DataSet(object):
             finally:
                 sys.dont_write_bytecode = _dont_write_bytecode
         else:
-            if name == '__init__':
+            if name == "__init__":
                 res = {}
             else:
                 res = None
         return res
-        
+
     def _load(self):
         r"""Create the data set from an existing repository."""
         self._info_dict = self._import()
@@ -3043,8 +3172,7 @@ class DataSet(object):
         if self._closed:
             raise IOError("DataSet has been closed")
 
-        lock_file = os.path.join(self._path, self._module_name,
-                                 self._lock_file_name)
+        lock_file = os.path.join(self._path, self._module_name, self._lock_file_name)
 
         if os.path.exists(lock_file):
             tic = time.time()
@@ -3052,16 +3180,16 @@ class DataSet(object):
             while time.time() - tic < self._timeout:
                 if not os.path.exists(lock_file):
                     # Lock release, so make lock-file
-                    open(lock_file, 'w').close()
+                    open(lock_file, "w").close()
                     self._lock_file = lock_file
                     return
                 time.sleep(0.5)
             # Timeout
             raise IOError(
-                "DataSet locked.  Please close or remove lock '%s'" %
-                (lock_file,))
+                "DataSet locked.  Please close or remove lock '%s'" % (lock_file,)
+            )
         else:
-            open(lock_file, 'w').close()
+            open(lock_file, "w").close()
             self._lock_file = lock_file
 
     def _unlock(self):
@@ -3071,8 +3199,7 @@ class DataSet(object):
                 os.remove(self._lock_file)
                 self._lock_file = ""
             else:
-                warnings.warn("Lock file %s lost or missing!" %
-                              (self._lock_file,))
+                warnings.warn("Lock file %s lost or missing!" % (self._lock_file,))
 
     @contextmanager
     def _ds_lock(self):
@@ -3081,14 +3208,13 @@ class DataSet(object):
             if self._synchronize:
                 if self._lock_file:
                     raise NotImplementedError(
-                        "Lock already established! " +
-                        "(Reentry not supported)")
+                        "Lock already established! " + "(Reentry not supported)"
+                    )
                 else:
                     self._lock()
             else:
                 # Lock should have been established upon construction
-                if (not self._lock_file
-                        or not os.path.exists(self._lock_file)):
+                if not self._lock_file or not os.path.exists(self._lock_file):
                     raise IOError("Lost lock on %s!" % self._lock_file)
             yield
         finally:
@@ -3105,38 +3231,42 @@ class DataSet(object):
 
     def __getattr__(self, name):
         r"""Load the specified attribute from disk."""
-        if name.startswith('_') or name not in self:
+        if name.startswith("_") or name not in self:
             if name == "close":
                 # Special case to allow access to _close without polluting the
                 # namespace
                 return self._close
             raise AttributeError(
-                "'%s' object has no attribute '%s'" %
-                (self.__class__.__name__, name))
+                "'%s' object has no attribute '%s'" % (self.__class__.__name__, name)
+            )
 
         return self._import(name)
 
     def __setattr__(self, name, value):
         r"""Store the specified attribute to disk."""
-        if name.startswith('_'):
+        if name.startswith("_"):
             # Provide access to state variables.
             return object.__setattr__(self, name, value)
 
-        if self._mode == 'r':
+        if self._mode == "r":
             raise ValueError("DataSet opened in read-only mode.")
 
-        with self._ds_lock():              # Establish lock
-            arch = Archive(array_threshold=self._array_threshold,
-                           single_item_mode=True,
-                           scoped=self._scoped,
-                           backup_data=self._backup_data)
+        with self._ds_lock():  # Establish lock
+            arch = Archive(
+                array_threshold=self._array_threshold,
+                single_item_mode=True,
+                scoped=self._scoped,
+                backup_data=self._backup_data,
+            )
             arch.insert(**{name: value})
-            arch.save(dirname=os.path.join(self._path, self._module_name),
-                      name=name,
-                      package=False,
-                      data_format=self._data_format,
-                      force=True,
-                      arrays_name='_data')
+            arch.save(
+                dirname=os.path.join(self._path, self._module_name),
+                name=name,
+                package=False,
+                data_format=self._data_format,
+                force=True,
+                arrays_name="_data",
+            )
 
         # Needed for pre 2.6 python version to support tab completion
         if sys.version_info < (2, 6):
@@ -3162,7 +3292,7 @@ class DataSet(object):
         r"""Set the info associate with `name` and write the module
         `__init__.py` file using an Archive.
         """
-        if self._mode == 'r':
+        if self._mode == "r":
             raise ValueError("DataSet opened in read-only mode.")
 
         with self._ds_lock():
@@ -3172,30 +3302,42 @@ class DataSet(object):
             self._info_dict[name] = info
 
             if self._module_name:
-                arch = Archive(allowed_names=['_info_dict'],
-                               scoped=self._scoped,
-                               backup_data=self._backup_data)
+                arch = Archive(
+                    allowed_names=["_info_dict"],
+                    scoped=self._scoped,
+                    backup_data=self._backup_data,
+                )
                 arch.insert(_info_dict=self._info_dict)
-                arch.save(dirname=self._path,
-                          name=self._module_name,
-                          package=True,
-                          data_format=self._data_format,
-                          force=True)
-            
+                arch.save(
+                    dirname=self._path,
+                    name=self._module_name,
+                    package=True,
+                    data_format=self._data_format,
+                    force=True,
+                )
+
     def __str__(self):
         if self._synchronize:
             self._load()
-        return ("DataSet %r containing %s" % (
+        return "DataSet %r containing %s" % (
             os.path.join(self._path, self._module_name),
-            str(sorted(self._info_dict))))
+            str(sorted(self._info_dict)),
+        )
 
     def __repr__(self):
-        return ("DataSet(%s)" %
-                ", ".join(["%s=%s" % (k, repr(getattr(self, '_' + k)))
-                           for k in ['module_name', 'path',
-                                     'synchronize',
-                                     'array_threshold', 'backup_data',
-                                     'name_prefix', ]]))
+        return "DataSet(%s)" % ", ".join(
+            [
+                "%s=%s" % (k, repr(getattr(self, "_" + k)))
+                for k in [
+                    "module_name",
+                    "path",
+                    "synchronize",
+                    "array_threshold",
+                    "backup_data",
+                    "name_prefix",
+                ]
+            ]
+        )
 
     def _keys(self):
         return sorted(self._info_dict)
@@ -3212,10 +3354,10 @@ class DataSet(object):
         restored until `info_dict[name].load()` is called.
         """
         names = set()
-        if self._mode == 'r':
+        if self._mode == "r":
             raise ValueError("DataSet opened in read-only mode.")
-        if 'info' in kw:
-            info = kw.pop('info')
+        if "info" in kw:
+            info = kw.pop("info")
         else:
             info = None
 

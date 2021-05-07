@@ -1,15 +1,17 @@
 r"""Various Interfaces."""
-__all__ = ['IArchivable', 'Interface', 'implements']
+__all__ = ["IArchivable", "Interface", "implementer"]
 
 import warnings
 
 try:
-    from zope.interface import Interface, implements, classImplements
-except ImportError:             # pragma: no cover
-    warnings.warn("Could not import zope.interface... using a dummy version."
-                  + " Interfaces may not work correctly.")
+    from zope.interface import Interface, implementer, classImplements
+except ImportError:  # pragma: no cover
+    warnings.warn(
+        "Could not import zope.interface... using a dummy version."
+        + " Interfaces may not work correctly."
+    )
 
-    class Interface(object):        # pragma: no cover
+    class Interface(object):  # pragma: no cover
         @classmethod
         def providedBy(cls, obj):
             return False
@@ -17,12 +19,17 @@ except ImportError:             # pragma: no cover
     def implements(*interfaces):
         """Dummy"""
 
+    def implementer(cls, *interfaces):
+        """Dummy"""
+        return cls
+
     def classImplements(cls, *interfaces):
         """Dummy"""
 
 
-class IArchivable(Interface):   # pragma: no cover
+class IArchivable(Interface):  # pragma: no cover
     """Interface for objects that support archiving."""
+
     def get_persistent_rep(env=None):
         """Return `(rep, args, imports)`.
 

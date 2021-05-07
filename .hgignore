@@ -1,7 +1,8 @@
 syntax: glob
 _coverage
 .coverage
-.tox
+.nox
+.pytest_cache
 .eggs
 persist.egg-info
 *.egg
