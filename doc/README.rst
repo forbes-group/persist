@@ -1,6 +1,9 @@
 Persistent Archival of Python Objects
 =====================================
 
+|Documentation Status| |Language grade: Python| |Tests| |Pypi|
+|pyversions|\ |black_img| |Code style: black|
+
 Persistent archival of python objects in an importable format.
 
 This package provides a method for archiving python objects to disk for
@@ -24,19 +27,40 @@ original goal was to overcomes several disadvatages of pickles:
 
 **Documentation:** http://persist.readthedocs.org
 
-**Source:** https://bitbucket.org/mforbes/persist
+**Source:** https://alum.mit.edu/www/mforbes/hg/forbes-group/persist
 
-**Issues:** https://bitbucket.org/mforbes/persist/issues
+**Issues:** https://alum.mit.edu/www/mforbes/hg/forbes-group/issues
+
+.. |Documentation Status| image:: https://readthedocs.org/projects/persist/badge/?version=latest
+   :target: https://persist.readthedocs.io/en/latest/?badge=latest
+.. |Language grade: Python| image:: https://img.shields.io/lgtm/grade/python/g/forbes-group/persist.svg
+   :target: https://lgtm.com/projects/g/forbes-group/persist/context:python
+.. |Tests| image:: https://github.com/forbes-group/persist/actions/workflows/tests.yml/badge.svg
+   :target: https://github.com/forbes-group/persist/actions/workflows/tests.yml
+.. |Pypi| image:: https://img.shields.io/pypi/v/persist.svg
+   :target: https://pypi.python.org/pypi/persist
+.. |pyversions| image:: https://img.shields.io/pypi/pyversions/persist.svg
+   :target: https://pypi.python.org/pypi/persist
+.. |black_img| image:: https://img.shields.io/badge/code%20style-black-000000.svg
+   :target: https://github.com/psf/black
+.. |Code style: black| image:: https://img.shields.io/badge/code%20style-black-000000.svg
+   :target: https://github.com/psf/black
 
 Installing
 ----------
 
-This package can be installed from `from the bitbucket
-project <https://bitbucket.org/mforbes/persist>`__:
+This package can be installed from
+`PyPI <https://pypi.org/project/persist/>`__:
 
 .. code:: bash
 
-   pip install hg+https://bitbucket.org/mforbes/persist
+   python3 -m pip install persist
+
+or from source:
+
+.. code:: bash
+
+   python3 -m pip install hg+https://alum.mit.edu/www/mforbes/hg/forbes-group/persist
 
 DataSet Format
 ==============
