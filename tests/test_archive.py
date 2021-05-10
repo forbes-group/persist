@@ -992,7 +992,7 @@ def coverage_doctests():
     '1'
 
     >>> type(archive.AST('[1,2,3]').ast)
-    <class '_ast.Module'>
+    <class '...ast.Module'>
     """
 
 
