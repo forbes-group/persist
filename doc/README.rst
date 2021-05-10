@@ -1,6 +1,8 @@
-
 Persistent Archival of Python Objects
 =====================================
+
+|Documentation Status| |Language grade: Python| |Tests| |Pypi|
+|pyversions|\ |black_img| |Code style: black|
 
 Persistent archival of python objects in an importable format.
 
@@ -17,7 +19,7 @@ original goal was to overcomes several disadvatages of pickles:
    to read an archive if the API does not change.
 2. In the presence of API changes, the archives can be edited by hand to
    fix them since they are simply python code. (Note: for reliability,
-   the generated code is highly structured and not so "pretty", but can
+   the generated code is highly structured and not so “pretty”, but can
    still be edited or debugged in the case of errors due to API
    changes.)
 3. Efficient storage of large arrays.
@@ -25,19 +27,40 @@ original goal was to overcomes several disadvatages of pickles:
 
 **Documentation:** http://persist.readthedocs.org
 
-**Source:** https://bitbucket.org/mforbes/persist
+**Source:** https://alum.mit.edu/www/mforbes/hg/forbes-group/persist
 
-**Issues:** https://bitbucket.org/mforbes/persist/issues
+**Issues:** https://alum.mit.edu/www/mforbes/hg/forbes-group/issues
+
+.. |Documentation Status| image:: https://readthedocs.org/projects/persist/badge/?version=latest
+   :target: https://persist.readthedocs.io/en/latest/?badge=latest
+.. |Language grade: Python| image:: https://img.shields.io/lgtm/grade/python/g/forbes-group/persist.svg
+   :target: https://lgtm.com/projects/g/forbes-group/persist/context:python
+.. |Tests| image:: https://github.com/forbes-group/persist/actions/workflows/tests.yml/badge.svg
+   :target: https://github.com/forbes-group/persist/actions/workflows/tests.yml
+.. |Pypi| image:: https://img.shields.io/pypi/v/persist.svg
+   :target: https://pypi.python.org/pypi/persist
+.. |pyversions| image:: https://img.shields.io/pypi/pyversions/persist.svg
+   :target: https://pypi.python.org/pypi/persist
+.. |black_img| image:: https://img.shields.io/badge/code%20style-black-000000.svg
+   :target: https://github.com/psf/black
+.. |Code style: black| image:: https://img.shields.io/badge/code%20style-black-000000.svg
+   :target: https://github.com/psf/black
 
 Installing
 ----------
 
-This package can be installed from `from the bitbucket
-project <https://bitbucket.org/mforbes/persist>`__:
+This package can be installed from
+`PyPI <https://pypi.org/project/persist/>`__:
 
 .. code:: bash
 
-    pip install hg+https://bitbucket.org/mforbes/persist
+   python3 -m pip install persist
+
+or from source:
+
+.. code:: bash
+
+   python3 -m pip install hg+https://alum.mit.edu/www/mforbes/hg/forbes-group/persist
 
 DataSet Format
 ==============
@@ -63,6 +86,94 @@ Developer Notes
 
    notebooks/Pickle
    notebooks/Dev Notes
+
+Release Notes
+=============
+
+As of version 3.1, we release only to PyPI using
+```poetry`` <https://python-poetry.org/>`__. Here is the typical
+development/release cycle.
+
+-  First make sure you have a development environment with Mercurial,
+   the evolve extension, topics enabled, [Black], [Nox], and
+   [nbconvert].
+
+-  Start a development branch, i.e.:
+
+   .. code:: bash
+
+      hg branch 3.2
+
+-  Change version to ``'3.2.dev0'`` in ``pyproject.toml`` and commit
+   this changes:
+
+   .. code:: bash
+
+      hg com -m "BRN: Start working on branch 3.2"
+      hg push --new-branch -r . 
+
+-  Complete your changes making sure code is well tested etc. While
+   working on specific features, you should always use topics:
+
+   .. code:: bash
+
+      hg topic new-feature
+
+   When you push to Heptapod, the commits in these topics will remain in
+   the draft phase, allowing you to rebase, etc. as needed to clean the
+   history. We have setup automatic pushes to
+   `GitHub <https://github.com/forbes-group/persist>`__ and you can see
+   the status of the tests with the badge: |Tests|.
+
+   To run the tests locally, you should be able to just run:
+
+   .. code:: bash
+
+      nox
+
+-  Once everything is working and tested, push it to Heptapod and create
+   Merge Requests:
+
+   -  First merge all open topics to the development branch.
+
+-  Then change the revision in ``pyproject.toml`` to ``'3.2'``, dropping
+   the ``'.dev'``. Push this to Heptapod and create a merge request to
+   merge this to the default branch. Review the changes, and complete
+   the Merge. Unlike previously, **do not close the branch.** Just leave
+   it.
+
+-  Start work on next branch::
+
+   .. code:: bash
+
+      hg up 3.2
+      hg branch 3.3
+
+PyPI
+----
+
+To release on PyPI:
+
+\```bash poetry build poetry
+
+::
+
+   hg up 3.0
+   python setup.py sdist bdist_wheel
+   twine upload dist/persist-3.0*
+
+Anaconda Cloud
+--------------
+
+To release on Anaconda Cloud (replace the filename as appropriate):
+
+::
+
+   conda build meta.yaml
+   anaconda upload --all /data/apps/conda/conda-bld/osx-64/persist-3.0-py37_0.tar.bz2
+
+.. |Tests| image:: https://github.com/forbes-group/persist/actions/workflows/tests.yml/badge.svg
+   :target: https://github.com/forbes-group/persist/actions/workflows/tests.yml
 
 Indices and Tables
 ==================

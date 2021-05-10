@@ -18,44 +18,46 @@ if sys.version_info >= (3, 0):
 
 # This is needed until a later release of py.test.  See Issue #2430
 # https://github.com/pytest-dev/pytest/issues/2430
-warnings.simplefilter('always', UserWarning)
+warnings.simplefilter("always", UserWarning)
 
 
 class A(object):
     """Example of a class with an archive function."""
-    def __init__(self, d, l):
+
+    def __init__(self, d, xs):
         self.d = d
-        self.l = l
+        self.xs = xs
 
     def get_persistent_rep(self, env=None):
         """Example of an archive function."""
         imports = archive.get_imports(self)
-        args = dict(d=self.d, l=self.l)
-        rep = imports[0][-1] + '(d=d, l=l)'
+        args = dict(d=self.d, xs=self.xs)
+        rep = imports[0][-1] + "(d=d, xs=xs)"
         return (rep, args, imports)
 
 
 class B(object):
     """Example of a class without an archive function but with a repr
     function."""
-    def __init__(self, d, l):
+
+    def __init__(self, d, xs):
         self.d = d
-        self.l = l
+        self.xs = xs
 
     def __repr__(self):
-        return "B(d=%r, l=%r)" % (self.d, self.l)
+        return "B(d=%r, xs=%r)" % (self.d, self.xs)
 
 
 class C(objects.Archivable):
     """Example of a class inheriting from Archivable."""
-    def __init__(self, d, l):
+
+    def __init__(self, d, xs):
         self.d = d
-        self.l = l
+        self.xs = xs
 
     def items(self):
         """This must be overloaded."""
-        args = [('d', self.d),
-                ('l', self.l)]
+        args = [("d", self.d), ("xs", self.xs)]
         return args
 
 
@@ -63,16 +65,22 @@ class Functions(object):
     """Example of a class with methods that are archivable.   This
     gives one way to use "archivable functions with associated
     data"."""
+
     def __init__(self, a):
         self.a = 2
 
     def __repr__(self):
         """Use repr to make `self` archivable."""
-        return "Functions(a=%r)" % (self.a, )
+        return "Functions(a=%r)" % (self.a,)
 
     def f(self, x):
         """A function that depends on a."""
-        return self.a*x
+        return self.a * x
+
+    @classmethod
+    def f_cls(cls, x):
+        """A class method."""
+        return x ** 2
 
 
 class NestedClasses(object):
@@ -99,11 +107,11 @@ class MyTuple(tuple):
 class NoStrNoRepr(objects.Archivable):
     r"""This class provides its own get_persistent_rep function, so __str__ and
     __repr__ should never be called."""
+
     def get_persistent_rep(self, env):
-        rep = 'NoStrNoRepr()'
+        rep = "NoStrNoRepr()"
         args = {}
-        imports = [
-            (archive.get_module(self).__name__, 'NoStrNoRepr', 'NoStrNoRepr')]
+        imports = [(archive.get_module(self).__name__, "NoStrNoRepr", "NoStrNoRepr")]
         return (rep, args, imports)
 
     def __str__(self):
@@ -122,12 +130,13 @@ class Pickleable(object):
         return dict(x=self.x)
 
     def __setstate__(self, state):
-        self.x = state['x']
+        self.x = state["x"]
         self.pickled = True
 
 
 class ToolsMixin(object):
     """Some testing tools"""
+
     def _test_archiving(self, obj):
         """Fail if obj does not acrhive properly."""
         arch = archive.Archive()
@@ -136,47 +145,48 @@ class ToolsMixin(object):
         ld = {}
         exec(s, ld)
         assert 1 == len(ld)
-        assert obj == ld['x']
+        assert obj == ld["x"]
 
 
 class TestSuite(ToolsMixin):
     """Test the functionality of the archive module."""
+
     def test_1(self):
         """Test archiving of instance A()"""
-        l = [1, 2, 3]
-        d = {'a': 1.0, 'b': 2.0, 'l': l}
-        a = A(d=d, l=l)
+        xs = [1, 2, 3]
+        d = {"a": 1.0, "b": 2.0, "xs": xs}
+        a = A(d=d, xs=xs)
         arch = archive.Archive()
         arch.insert(a=a)
         s = str(arch)
         ld = {}
         exec(s, ld)
-        assert (ld['a'].l == a.l and id(ld['a'].l) != id(a.l))
-        assert (ld['a'].d == a.d and id(ld['a'].d) != id(a.d))
+        assert ld["a"].xs == a.xs and id(ld["a"].xs) != id(a.xs)
+        assert ld["a"].d == a.d and id(ld["a"].d) != id(a.d)
 
     def test_2(self):
         """Test archiving of instance B()"""
-        l = [1, 2, 3]
-        d = {'a': 1.0, 'b': 2.0, 'l': l}
-        a = B(d=d, l=l)
+        xs = [1, 2, 3]
+        d = {"a": 1.0, "b": 2.0, "xs": xs}
+        a = B(d=d, xs=xs)
         arch = archive.Archive()
         arch.insert(a=a)
         s = str(arch)
         ld = {}
         exec(s, ld)
-        assert (ld['a'].l == a.l and id(ld['a'].l) != id(a.l))
-        assert (ld['a'].d == a.d and id(ld['a'].d) != id(a.d))
+        assert ld["a"].xs == a.xs and id(ld["a"].xs) != id(a.xs)
+        assert ld["a"].d == a.d and id(ld["a"].d) != id(a.d)
 
     def test_3(self):
         """Test archiving of instance C()"""
-        l = [1, 2, 3]
-        d = {'a': 1.0, 'b': 2.0, 'l': l}
-        a = C(d=d, l=l)
-        s = a.archive('a')
+        xs = [1, 2, 3]
+        d = {"a": 1.0, "b": 2.0, "xs": xs}
+        a = C(d=d, xs=xs)
+        s = a.archive("a")
         ld = {}
         exec(s, ld)
-        assert (ld['a'].l == a.l and id(ld['a'].l) != id(a.l))
-        assert (ld['a'].d == a.d and id(ld['a'].d) != id(a.d))
+        assert ld["a"].xs == a.xs and id(ld["a"].xs) != id(a.xs)
+        assert ld["a"].d == a.d and id(ld["a"].d) != id(a.d)
 
     def test_4(self):
         """Test archiving of class C"""
@@ -186,17 +196,17 @@ class TestSuite(ToolsMixin):
         s = str(arch)
         ld = {}
         exec(s, ld)
-        assert (ld['a'] is C)
+        assert ld["a"] is C
 
     def test_simple_types(self):
         """Test archiving of various simple types."""
         self._test_archiving(1)
         self._test_archiving(1.0)
-        self._test_archiving(1.0+2j)
+        self._test_archiving(1.0 + 2j)
         self._test_archiving(True)
         self._test_archiving(False)
         self._test_archiving("asd")
-        self._test_archiving((1, ))
+        self._test_archiving((1,))
         self._test_archiving((1, 2))
         self._test_archiving([1])
         self._test_archiving([1, 2])
@@ -209,18 +219,18 @@ class TestSuite(ToolsMixin):
         """Test archiving of simple derived types..."""
         arch = archive.Archive()
         d = MyDict(a=1, b=2)
-        l = MyList([1, 2])
+        ls = MyList([1, 2])
         t = MyTuple((1, 2))
-        arch.insert(d=d, l=l, t=t)
+        arch.insert(d=d, ls=ls, t=t)
         s = str(arch)
         ld = {}
         exec(s, ld)
-        assert (ld['d']['a'] == d['a'])
-        assert isinstance(ld['d'], MyDict)
-        assert (ld['l'] == l)
-        assert isinstance(ld['l'], MyList)
-        assert (ld['t'] == t)
-        assert isinstance(ld['t'], MyTuple)
+        assert ld["d"]["a"] == d["a"]
+        assert isinstance(ld["d"], MyDict)
+        assert ld["ls"] == ls
+        assert isinstance(ld["ls"], MyList)
+        assert ld["t"] == t
+        assert isinstance(ld["t"], MyTuple)
 
     def test_mutual_deps(self):
         """Test non-reduction of non-simple mutual dependence."""
@@ -232,7 +242,7 @@ class TestSuite(ToolsMixin):
         s = str(arch)
         ld = {}
         exec(s, ld)
-        assert ld['z'][0] is ld['z'][2]
+        assert ld["z"][0] is ld["z"][2]
 
     def test_insert_1(self):
         """Check for _name exception."""
@@ -242,9 +252,11 @@ class TestSuite(ToolsMixin):
 
     def test_check_on_insert(self):
         """Make sure check_on_insert works."""
-        class A():
+
+        class A:
             def get_persistent_rep(self, env=None):
                 raise TException()
+
         arch = archive.Archive()
         arch.check_on_insert = True
         with pytest.raises(TException):
@@ -263,12 +275,14 @@ class TestSuite(ToolsMixin):
         """Test the archiving of bound class members."""
         F = Functions(a=2)
         arch = archive.Archive()
-        arch.insert(f=F.f, g=Functions.f)
+        arch.insert(f=F.f, g=Functions.f, f_cls=F.f_cls, g_cls=Functions.f_cls)
         s = str(arch)
         ld = {}
         exec(s, ld)
-        assert F.f(2) == ld['f'](2)
-        assert F.f(2), ld['g'](F == 2)
+        assert F.f(2) == ld["f"](2)
+        assert F.f(2) == ld["g"](F, 2)
+        assert F.f_cls(2) == ld["f_cls"](2)
+        assert F.f_cls(2) == ld["g_cls"](2)
 
     @pytest.mark.skip(reason="Known Failure")
     def test_nested_classes(self):  # pragma: nocover
@@ -279,8 +293,8 @@ class TestSuite(ToolsMixin):
         s = str(arch)
         ld = {}
         exec(s, ld)
-        assert F.f(2) == ld['f'](2)
-        assert F.f(2), ld['g'](F == 2)
+        assert F.f(2) == ld["f"](2)
+        assert F.f(2), ld["g"](F == 2)
 
     def test_builtins(self):
         arch = archive.Archive()
@@ -288,8 +302,8 @@ class TestSuite(ToolsMixin):
         s = str(arch)
         ld = {}
         exec(s, ld)
-        assert ld['m'] is math.sin
-        assert ld['p'] is print
+        assert ld["m"] is math.sin
+        assert ld["p"] is print
 
     def test_pickle(self):
         r"""Test archiving of picklable objects as a last resort."""
@@ -299,7 +313,7 @@ class TestSuite(ToolsMixin):
         s = str(arch)
         ld = {}
         exec(s, ld)
-        p1 = ld['p']
+        p1 = ld["p"]
         assert not p.pickled
         assert p1.pickled
         assert p.x == p1.x
@@ -323,14 +337,17 @@ class TestSuite(ToolsMixin):
 
     def test__replace_rep_regression_issue_11a(self):
         r"""Regression test of bad replacement in numpy array rep."""
-        rep = ("dict(Q=_Q, a=_numpy.fromstring("
-               + "'`\\xbf=_Q-\\xf2?', dtype='<f8'))")
-        replacements = {'_Q': '1.0'}
+        rep = "dict(Q=_Q, a=_numpy.fromstring(" + "'`\\xbf=_Q-\\xf2?', dtype='<f8'))"
+        replacements = {"_Q": "1.0"}
         rep = archive._replace_rep(rep, replacements)
-        assert (rep ==
-                "dict(Q=1.0, a=_numpy.fromstring("
-                + "'`\\xbf=_Q-\\xf2?', dtype='<f8'))")
+        assert (
+            rep
+            == "dict(Q=1.0, a=_numpy.fromstring(" + "'`\\xbf=_Q-\\xf2?', dtype='<f8'))"
+        )
 
+    @pytest.mark.skipif(
+        sys.version_info < (3, 7), reason="Only python ^3.7 allows > 255 arguments"
+    )
     def test_scoped_too_many_args_issue_12(self):
         r"""Regression test for scoped representations with too many
         arguments."""
@@ -339,42 +356,45 @@ class TestSuite(ToolsMixin):
         arch.insert(ls=ls)
         d = {}
         exec(str(arch), d)
-        assert len(d['ls']) == 500
+        assert len(d["ls"]) == 500
 
 
 class TestNumpy(ToolsMixin):
     """Run numpy specific tests"""
+
     def test_numpy_types(self, np):
         """Test archiving of numpy types"""
         self._test_archiving(np.sin)
 
-        obj = dict(inf=np.inf,
-                   neg_inf=-np.inf,
-                   nan=np.nan,
-                   array=np.array([1, np.inf, np.nan]),
-                   ndarray=np.array([[1, 2], [3, 4]]),
-                   matrix=np.matrix([[1, 2], [3, 4]]))
+        obj = dict(
+            inf=np.inf,
+            neg_inf=-np.inf,
+            nan=np.nan,
+            array=np.array([1, np.inf, np.nan]),
+            ndarray=np.array([[1, 2], [3, 4]]),
+            matrix=np.matrix([[1, 2], [3, 4]]),
+        )
 
         arch = archive.Archive()
         arch.insert(x=obj)
         s = str(arch)
         ld = {}
         exec(s, ld)
-        ld.pop('__warningregistry__', None)
+        ld.pop("__warningregistry__", None)
         assert 1 == len(ld)
-        assert np.isnan(ld['x']['nan'])
-        assert np.inf == (ld['x']['inf'])
-        assert -np.inf == (ld['x']['neg_inf'])
+        assert np.isnan(ld["x"]["nan"])
+        assert np.inf == (ld["x"]["inf"])
+        assert -np.inf == (ld["x"]["neg_inf"])
 
-        a0 = obj['array']
-        a1 = ld['x']['array']
+        a0 = obj["array"]
+        a1 = ld["x"]["array"]
 
         assert a0[0] == a1[0]
         assert a0[1] == a1[1]
         assert np.isnan(a1[2])
 
-        a0 = obj['ndarray']
-        a1 = ld['x']['ndarray']
+        a0 = obj["ndarray"]
+        a1 = ld["x"]["ndarray"]
 
         assert (a0 == a1).all()
         assert a0.shape == a1.shape
@@ -382,10 +402,12 @@ class TestNumpy(ToolsMixin):
     @pytest.mark.skip(reason="Known Failure")
     def test_numpy_types2(self, np):  # pragma: nocover
         """Test archiving of complex numpy types"""
-        obj = dict(inf=1+1j*np.inf,
-                   neg_inf=1-1j*np.inf,
-                   nan=1-1j*np.nan,
-                   array=np.array([1, 1+1j*np.inf, 1+1j*np.nan]))
+        obj = dict(
+            inf=1 + 1j * np.inf,
+            neg_inf=1 - 1j * np.inf,
+            nan=1 - 1j * np.nan,
+            array=np.array([1, 1 + 1j * np.inf, 1 + 1j * np.nan]),
+        )
 
         arch = archive.Archive()
         arch.insert(x=obj)
@@ -393,12 +415,12 @@ class TestNumpy(ToolsMixin):
         ld = {}
         exec(s, ld)
         assert 1 == len(ld)
-        assert np.isnan(ld['x']['nan'])
-        assert np.inf == (ld['x']['inf'])
-        assert -np.inf == (ld['x']['neg_inf'])
+        assert np.isnan(ld["x"]["nan"])
+        assert np.inf == (ld["x"]["inf"])
+        assert -np.inf == (ld["x"]["neg_inf"])
 
-        a0 = obj['array']
-        a1 = ld['x']['array']
+        a0 = obj["array"]
+        a1 = ld["x"]["array"]
 
         assert a0[0] == a1[0]
         assert a0[1] == a1[1]
@@ -415,7 +437,7 @@ class TestNumpy(ToolsMixin):
         arch.insert(c=c)
         d = {}
         exec(str(arch), d)
-        assert d['c'].alpha == c.alpha
+        assert d["c"].alpha == c.alpha
 
     def test_data_duplicate_regression(self, np):
         """Regression against a bug where multiple calls to make_persistent()
@@ -424,22 +446,24 @@ class TestNumpy(ToolsMixin):
         a = archive.Archive(array_threshold=2)
         M = np.random.rand(10)
         a.insert(M=M)
-        s = str(a)
+        str(a)
         with pytest.warns(UserWarning) as record:
             rep, files = a.save_data()
         assert len(record) == 1
         assert record[0].message.args[0] == (
             "Data arrays ['array_0'] exist but no datafile specified. "
-            + "Save data manually and populate in _arrays dict.")
+            + "Save data manually and populate in _arrays dict."
+        )
 
         assert len(a.data) == 1
-        s = str(a)
+        str(a)
         with pytest.warns(UserWarning) as record:
             rep, files = a.save_data()
         assert len(record) == 1
         assert record[0].message.args[0] == (
             "Data arrays ['array_0'] exist but no datafile specified. "
-            + "Save data manually and populate in _arrays dict.")
+            + "Save data manually and populate in _arrays dict."
+        )
 
         assert len(a.data) == 1
 
@@ -458,12 +482,13 @@ class TestNumpy(ToolsMixin):
         assert len(record) == 1
         assert record[0].message.args[0] == (
             "Data arrays ['array_0'] exist but no datafile specified. "
-            + "Save data manually and populate in _arrays dict.")
+            + "Save data manually and populate in _arrays dict."
+        )
 
         # Data must be provided when evaluated
         d = dict(_arrays=dict(array_0=M.copy()))
         exec(s, d)
-        assert np.allclose(d['M'], M)
+        assert np.allclose(d["M"], M)
 
     def test_external_data(self, np, data_format, datafile):
         """Test saving external data."""
@@ -476,38 +501,41 @@ class TestNumpy(ToolsMixin):
 
         d = {a.data_name: archive.ArrayManager.load_arrays(rep)}
         exec(s, d)
-        assert np.allclose(d['M'], M)
+        assert np.allclose(d["M"], M)
         map(os.remove, files)
 
 
 class TestScipy(ToolsMixin):
     """Run scipy specific tests"""
+
     def test_spmatrix_types(self, np, sp):
         """Test archiving of scipy.sparse.spmatrix types"""
         A = np.random.random((2, 2))
 
-        obj = dict(csr=sp.sparse.csr_matrix(A),
-                   csc=sp.sparse.csc_matrix(A),
-                   bsr=sp.sparse.bsr_matrix(A),
-                   dia=sp.sparse.dia_matrix(A))
+        obj = dict(
+            csr=sp.sparse.csr_matrix(A),
+            csc=sp.sparse.csc_matrix(A),
+            bsr=sp.sparse.bsr_matrix(A),
+            dia=sp.sparse.dia_matrix(A),
+        )
 
         arch = archive.Archive()
         arch.insert(x=obj)
         s = str(arch)
         ld = {}
         exec(s, ld)
-        ld.pop('__warningregistry__', None)
+        ld.pop("__warningregistry__", None)
         assert 1 == len(ld)
-        x = ld['x']
-        assert sp.sparse.isspmatrix_csr(x['csr'])
-        assert sp.sparse.isspmatrix_csc(x['csc'])
-        assert sp.sparse.isspmatrix_bsr(x['bsr'])
-        assert sp.sparse.isspmatrix_dia(x['dia'])
+        x = ld["x"]
+        assert sp.sparse.isspmatrix_csr(x["csr"])
+        assert sp.sparse.isspmatrix_csc(x["csc"])
+        assert sp.sparse.isspmatrix_bsr(x["bsr"])
+        assert sp.sparse.isspmatrix_dia(x["dia"])
 
-        assert (A - x['csr'] == 0).all()
-        assert (A - x['csc'] == 0).all()
-        assert (A - x['bsr'] == 0).all()
-        assert (A - x['dia'] == 0).all()
+        assert (A - x["csr"] == 0).all()
+        assert (A - x["csc"] == 0).all()
+        assert (A - x["bsr"] == 0).all()
+        assert (A - x["dia"] == 0).all()
 
     @pytest.mark.skip(reason="Known Failure")
     def test_spmatrix_types2(self, np, sp):  # pragma: nocover
@@ -515,9 +543,11 @@ class TestScipy(ToolsMixin):
         types."""
         A = np.random.random((10, 10))
 
-        obj = dict(lil=sp.sparse.lil_matrix(A),
-                   dok=sp.sparse.dok_matrix(A),
-                   coo=sp.sparse.coo_matrix(A))
+        obj = dict(
+            lil=sp.sparse.lil_matrix(A),
+            dok=sp.sparse.dok_matrix(A),
+            coo=sp.sparse.coo_matrix(A),
+        )
 
         arch = archive.Archive()
         arch.insert(x=obj)
@@ -525,31 +555,30 @@ class TestScipy(ToolsMixin):
         ld = {}
         exec(s, ld)
         assert 1 == len(ld)
-        x = ld['x']
-        assert sp.sparse.isspmatrix_lil(x['lil'])
-        assert sp.sparse.isspmatrix_dok(x['dok'])
-        assert sp.sparse.isspmatrix_coo(x['coo'])
+        x = ld["x"]
+        assert sp.sparse.isspmatrix_lil(x["lil"])
+        assert sp.sparse.isspmatrix_dok(x["dok"])
+        assert sp.sparse.isspmatrix_coo(x["coo"])
 
-        assert (A - x['lil'] == 0).all()
-        assert (A - x['dok'] == 0).all()
-        assert (A - x['coo'] == 0).all()
+        assert (A - x["lil"] == 0).all()
+        assert (A - x["dok"] == 0).all()
+        assert (A - x["coo"] == 0).all()
 
 
 class TestDatafile(object):
     def test_datafile(self, hdf5_datafile, np, h5py):
         """Test saving large arrays to disk."""
-        a = archive.Archive(array_threshold=2,
-                            backup_data=False)
+        a = archive.Archive(array_threshold=2, backup_data=False)
         M = np.random.rand(10)
         a.insert(M=M)
         a.make_persistent()
-        rep, files = a.save_data(datafile=hdf5_datafile, data_format='hdf5')
+        rep, files = a.save_data(datafile=hdf5_datafile, data_format="hdf5")
         assert len(files) == 1
         assert files[0] == hdf5_datafile
-        
+
         assert len(a.data) == 1
         array_name = list(a.data)[0]
-        with h5py.File(hdf5_datafile) as f:
+        with h5py.File(hdf5_datafile, "r") as f:
             assert np.allclose(f[array_name], M)
 
         s = str(a)
@@ -557,42 +586,46 @@ class TestDatafile(object):
 
         ld = {a.data_name: {array_name: M}}
         exec(s, ld)
-        assert np.allclose(ld['M'], M)
+        assert np.allclose(ld["M"], M)
 
 
 class TestImportableArchive(object):
     """Tests for the importable archive format provided in version 1.0"""
 
-    def run_test(self, datadir, np, package, data_format,
-                 force=False, **kw):
+    def run_test(self, datadir, np, package, data_format, force=False, **kw):
         a = archive.Archive(array_threshold=2, **kw)
         M = np.random.rand(10)
         N = np.random.rand(10)
         x = [M, N]
         a.insert(M=M, N=N, x=x)
-        
-        a.save(dirname=datadir, name='my_archive', package=package,
-               data_format=data_format, force=force)
+
+        a.save(
+            dirname=datadir,
+            name="my_archive",
+            package=package,
+            data_format=data_format,
+            force=force,
+        )
         sys.path.append(datadir)
         import my_archive
+
         reload(my_archive)  # Might have been imported before
         sys.path.pop()
         if package:
-            package_file = os.path.join(datadir, 'my_archive', '__init__.py')
+            package_file = os.path.join(datadir, "my_archive", "__init__.py")
         else:
-            package_file = os.path.join(datadir, 'my_archive.py')
+            package_file = os.path.join(datadir, "my_archive.py")
 
         assert os.path.isfile(package_file)
         assert np.allclose(my_archive.M, M)
         assert np.allclose(my_archive.N, N)
         assert my_archive.x[0] is my_archive.M
         assert my_archive.x[1] is my_archive.N
-        
+
     def test_save(self, data_format, datadir, np, package):
         """Test saving to an importable package"""
-        args = dict(data_format=data_format, datadir=datadir, np=np,
-                    package=package)
-        
+        args = dict(data_format=data_format, datadir=datadir, np=np, package=package)
+
         # Test case where datadir exists
         self.run_test(**args)
 
@@ -600,85 +633,90 @@ class TestImportableArchive(object):
         shutil.rmtree(datadir)
         self.run_test(**args)
 
-    def test_save_force(self, data_format, datadir, np, package, backup_data,
-                        arrays_name='_arrays'):
+    def test_save_force(
+        self, data_format, datadir, np, package, backup_data, arrays_name="_arrays"
+    ):
         """Test forced saving to an importable package."""
-        args = dict(datadir=datadir, np=np, 
-                    package=package, backup_data=backup_data,
-                    data_format=data_format, force=True)
+        args = dict(
+            datadir=datadir,
+            np=np,
+            package=package,
+            backup_data=backup_data,
+            data_format=data_format,
+            force=True,
+        )
 
-        name = 'my_archive'
+        name = "my_archive"
         arrays_file = arrays_name + archive._EXTS[data_format]
         if package:
-            init_file = os.path.join(datadir, name, '__init__.py')
+            init_file = os.path.join(datadir, name, "__init__.py")
             arrays_file = os.path.join(datadir, name, arrays_file)
             package_dir = os.path.join(datadir, name)
         else:
-            init_file = os.path.join(datadir, name + '.py')
+            init_file = os.path.join(datadir, name + ".py")
             arrays_file = os.path.join(datadir, name + arrays_file)
             package_dir = datadir
-            
+
         # Test case where datadir exists
         self.run_test(**args)
-        assert not os.path.exists(init_file + '.bak')
-        if data_format == 'npy':
-            assert not glob.glob(os.path.join(arrays_file, '*.bak'))
+        assert not os.path.exists(init_file + ".bak")
+        if data_format == "npy":
+            assert not glob.glob(os.path.join(arrays_file, "*.bak"))
         else:
-            assert not os.path.exists(arrays_file + '.bak')
-            
+            assert not os.path.exists(arrays_file + ".bak")
+
         self.run_test(**args)
         if backup_data:
-            assert os.path.exists(init_file + '.bak')
-            if data_format == 'npy':
-                assert os.path.exists(os.path.join(arrays_file, 'array_0.npy.bak'))
-                assert os.path.exists(os.path.join(arrays_file, 'array_1.npy.bak'))
+            assert os.path.exists(init_file + ".bak")
+            if data_format == "npy":
+                assert os.path.exists(os.path.join(arrays_file, "array_0.npy.bak"))
+                assert os.path.exists(os.path.join(arrays_file, "array_1.npy.bak"))
             else:
-                assert os.path.exists(arrays_file + '.bak')
+                assert os.path.exists(arrays_file + ".bak")
         else:
-            if data_format == 'npy':
-                assert not glob.glob(os.path.join(arrays_file, '*.bak'))
+            if data_format == "npy":
+                assert not glob.glob(os.path.join(arrays_file, "*.bak"))
             else:
-                assert not os.path.exists(arrays_file + '.bak')
+                assert not os.path.exists(arrays_file + ".bak")
 
         # Case where package_dir is a file
         if package:
             shutil.rmtree(package_dir)
-            with open(package_dir, 'w') as f:
+            with open(package_dir, "w") as f:
                 f.write("noop")
             self.run_test(**args)
 
             # This backup is always made...
-            assert os.path.exists(package_dir + '.bak')
-        
+            assert os.path.exists(package_dir + ".bak")
+
     def test_save_errors(self, data_format, datadir, np, package):
         """Test error handling with saving"""
-        args = dict(data_format=data_format, datadir=datadir, np=np,
-                    package=package)
+        args = dict(data_format=data_format, datadir=datadir, np=np, package=package)
         # Test case where datadir exists
         self.run_test(**args)
 
         # Test case where datadir/my_archive is a file
         if package:
-            _file = os.path.join(datadir, 'my_archive')
+            _file = os.path.join(datadir, "my_archive")
             shutil.rmtree(_file)
-            with open(_file, 'w') as f:
+            with open(_file, "w") as f:
                 f.write("noop")
             with pytest.raises(ValueError) as e:
                 self.run_test(**args)
             msg = e.value.args[0]
-            assert msg.startswith('File dirname/name=')
-            assert msg.endswith(' exists and is not a directory.')
+            assert msg.startswith("File dirname/name=")
+            assert msg.endswith(" exists and is not a directory.")
 
         # Test case where datadir is a file
         shutil.rmtree(datadir)
         for force in [True, False]:
-            with open(datadir, 'w') as f:
+            with open(datadir, "w") as f:
                 f.write("noop")
             with pytest.raises(ValueError) as e:
                 self.run_test(force=force, **args)
             msg = e.value.args[0]
-            assert msg.startswith('File dirname=')
-            assert msg.endswith(' exists and is not a directory.')
+            assert msg.startswith("File dirname=")
+            assert msg.endswith(" exists and is not a directory.")
             os.remove(datadir)
 
         # Test case where datadir and files exist
@@ -686,22 +724,22 @@ class TestImportableArchive(object):
         with pytest.raises(ValueError) as e:
             self.run_test(**args)
         msg = e.value.args[0]
-        assert msg.startswith('File ')
+        assert msg.startswith("File ")
         if package:
-            assert msg.endswith('/my_archive/__init__.py exists and force=False.')
+            assert msg.endswith("/my_archive/__init__.py exists and force=False.")
         else:
-            assert msg.endswith('/my_archive.py exists and force=False.')
-        
+            assert msg.endswith("/my_archive.py exists and force=False.")
+
         # Test case where datadir and only arrays_file exist
         if package:
-            os.remove(os.path.join(datadir, 'my_archive', '__init__.py'))
+            os.remove(os.path.join(datadir, "my_archive", "__init__.py"))
         else:
-            os.remove(os.path.join(datadir, 'my_archive.py'))
+            os.remove(os.path.join(datadir, "my_archive.py"))
         with pytest.raises(ValueError) as e:
             self.run_test(**args)
         msg = e.value.args[0]
-        assert msg.startswith('File ')
-        assert msg.endswith(' exists and force=False.')
+        assert msg.startswith("File ")
+        assert msg.endswith(" exists and force=False.")
         if package:
             assert "/my_archive/_arrays" in msg
         else:
@@ -714,27 +752,29 @@ class TestImportableArchive(object):
         with pytest.raises(ValueError) as e:
             a.save(dirname=datadir, name=None)
         msg = e.value.args[0]
-        assert msg == 'Must provide name unless single_item_mode=True'
-        
-            
+        assert msg == "Must provide name unless single_item_mode=True"
+
+
 class TestArchiveSingleItemMode(object):
     """Tests single_item_mode."""
+
     def test_1(self, data_format, datadir, np, package):
         a = archive.Archive(single_item_mode=True)
         y = [1, 2, 3]
         x = [y, y]
         a.insert(my_x=x)
-        
+
         a.save(dirname=datadir, name=None, package=package)
         sys.path.append(datadir)
-        if 'my_x' in sys.modules:
-            del sys.modules['my_x']
+        if "my_x" in sys.modules:
+            del sys.modules["my_x"]
         import my_x
+
         sys.path.pop()
         if package:
-            package_file = os.path.join(datadir, 'my_x', '__init__.py')
+            package_file = os.path.join(datadir, "my_x", "__init__.py")
         else:
-            package_file = os.path.join(datadir, 'my_x.py')
+            package_file = os.path.join(datadir, "my_x.py")
 
         assert os.path.isfile(package_file)
         assert my_x == x
@@ -753,29 +793,32 @@ class TestArchiveSingleItemMode(object):
             a.insert(y=2)
         msg = e.value.args[0]
         assert msg == "Can't insert 'y' into single_item_mode=True archive with 'x'."
-        
+
 
 class TestDeprecationWarning(object):
     def test_deprecation_warning(self):
         """Test archive_1 deprecation warning"""
-        class A():
+
+        class A:
             def archive_1(self, env=None):
-                return ('A', {}, [])
+                return ("A", {}, [])
+
         arch = archive.Archive()
         arch.insert(a=A())
         with pytest.deprecated_call():
             str(arch)
 
 
-class A_archive_1():
+class A_archive_1:
     """Class with deprecated and erroneous form of archive_1."""
-    def archive_1(self):        # pragma: nocover
-        return ('A', {}, [])
+
+    def archive_1(self):  # pragma: nocover
+        return ("A", {}, [])
 
 
-class A_get_persistent_rep():
+class A_get_persistent_rep:
     def get_persistent_rep(self):  # pragma: nocover
-        return ('A', {}, [])
+        return ("A", {}, [])
 
 
 class TestWarnings(object):
@@ -786,12 +829,15 @@ class TestWarnings(object):
         with pytest.deprecated_call() as w:
             str(arch)
         assert len(w) == 2
-        assert str(w[0].message) == (
-            'archive_1 is deprecated: use get_persistent_rep')
+        assert str(w[0].message) == ("archive_1 is deprecated: use get_persistent_rep")
         assert str(w[1].message) == (
-            '\n'.join(['Found archive_1() but got TypeError:',
-                       'archive_1() takes 1 positional '
-                       + 'argument but 2 were given']))
+            "\n".join(
+                [
+                    "Found archive_1() but got TypeError:",
+                    "archive_1() takes 1 positional " + "argument but 2 were given",
+                ]
+            )
+        )
 
     def test_get_persistent_rep_warning(self):
         """Test get_persistent_rep warning"""
@@ -801,15 +847,22 @@ class TestWarnings(object):
             str(arch)
         assert len(w) == 1
         assert str(w[0].message) == (
-            '\n'.join(['Found get_persistent_rep() but got TypeError:',
-                       'get_persistent_rep() takes 1 positional '
-                       + 'argument but 2 were given']))
+            "\n".join(
+                [
+                    "Found get_persistent_rep() but got TypeError:",
+                    "get_persistent_rep() takes 1 positional "
+                    + "argument but 2 were given",
+                ]
+            )
+        )
 
     def test_nested_class(self):
         """Can't pickle nested classes."""
-        class A():
+
+        class A:
             def archive_1(self):  # pragma: nocover
-                return ('A', {}, [])
+                return ("A", {}, [])
+
         arch = archive.Archive()
         arch.insert(a=A())
         with pytest.warns(UserWarning) as w:
@@ -817,15 +870,17 @@ class TestWarnings(object):
                 str(arch)
 
         assert len(w) == 2
-        assert str(w[0].message) == (
-            'archive_1 is deprecated: use get_persistent_rep')
+        assert str(w[0].message) == ("archive_1 is deprecated: use get_persistent_rep")
         assert str(w[1].message) == (
-            '\n'.join(['Found archive_1() but got TypeError:',
-                       'archive_1() takes 1 positional '
-                       + 'argument but 2 were given']))
-        assert str(e.value).startswith(
-            'Could not archive object <')
-        assert str(e.value).endswith('>.  Even tried pickling!')
+            "\n".join(
+                [
+                    "Found archive_1() but got TypeError:",
+                    "archive_1() takes 1 positional " + "argument but 2 were given",
+                ]
+            )
+        )
+        assert str(e.value).startswith("Could not archive object <")
+        assert str(e.value).endswith(">.  Even tried pickling!")
 
 
 class DocTests(object):
@@ -852,9 +907,10 @@ class TestRegression(object):
         `id()`.
         """
         import builtins
+
         builtins._ = np.array([1, 2])
         rep = archive.get_persistent_rep_type(type(None), {})
-        assert rep == ('type(None)', {}, [])
+        assert rep == ("type(None)", {}, [])
 
     def test_regression_11a(self, scoped):
         "Regression test for issue 11: duplicated data in non-scoped archive."
@@ -865,24 +921,29 @@ class TestRegression(object):
         s = str(a)
         d = {}
         exec(s, d)
-        y_ = d['y']
+        y_ = d["y"]
         assert y[0] is y[1]
         assert y_[0] is y_[1]
 
 
 class TestPerformance(object):
     """Tests that could illustrate bad performance."""
+
     def test_1(self):
-        args = dict(replacements={'infty': '_inf',
-                                  'Infinity': '_inf',
-                                  'NaN': '_nan',
-                                  'nan': '_nan',
-                                  'inf': '_inf',
-                                  'numpy': '_numpy',
-                                  'Inf': '_inf',
-                                  'NAN': '_nan'},
-                    rep="numpy.array([" + " ".join(("0., ", )*1000000) + "0])",
-                    robust=False)
+        args = dict(
+            replacements={
+                "infty": "_inf",
+                "Infinity": "_inf",
+                "NaN": "_nan",
+                "nan": "_nan",
+                "inf": "_inf",
+                "numpy": "_numpy",
+                "Inf": "_inf",
+                "NAN": "_nan",
+            },
+            rep="numpy.array([" + " ".join(("0., ",) * 1000000) + "0])",
+            robust=False,
+        )
         archive._replace_rep(**args)
 
     def test_no_str_no_repr(self):
@@ -892,19 +953,19 @@ class TestPerformance(object):
         s = str(arch)
         ld = {}
         exec(s, ld)
-        assert isinstance(ld['a'], NoStrNoRepr)
+        assert isinstance(ld["a"], NoStrNoRepr)
         with pytest.raises(NotImplementedError):
-            str(ld['a'])
+            str(ld["a"])
         with pytest.raises(NotImplementedError):
-            repr(ld['a'])
+            repr(ld["a"])
         del s
 
     def _test_large_array(self):
         r"""Test archiving a large list.  This was giving some performance
         issues."""
-        #c = objects.Container(x=[1 for _l in range(820*6)])
-        #ds = archive.DataSet(self.ds_name, 'w')
-        #ds.c = c
+        # c = objects.Container(x=[1 for _l in range(820*6)])
+        # ds = archive.DataSet(self.ds_name, 'w')
+        # ds.c = c
 
 
 def coverage_doctests():
@@ -934,7 +995,7 @@ def coverage_doctests():
     '1'
 
     >>> type(archive.AST('[1,2,3]').ast)
-    <class '_ast.Module'>
+    <class '...ast.Module'>
     """
 
 
@@ -945,7 +1006,7 @@ class TestCoverage(object):
 
     def test_expr(self):
         """Cover AST.expr"""
-        s = '[1, 2]'
+        s = "[1, 2]"
         assert s == archive.AST(s).expr
 
     def test_array_name_clash(self, np):
@@ -953,16 +1014,21 @@ class TestCoverage(object):
         with pytest.raises(ValueError) as e:
             a.insert(np.zeros(2))
         assert str(e.value) == (
-            'Insert objects with a key: insert(x=3), not insert([0. 0.])')
+            "Insert objects with a key: insert(x=3), not insert([0. 0.])"
+        )
 
     def test_array_name_clash2(self, np, hdf5_datafile):
         a = archive.Archive(array_threshold=2)
-        a.data['array_0'] = np.zeros(2)
+        a.data["array_0"] = np.zeros(2)
         a.insert(x=np.zeros(5), env={})
         s = str(a)
-        assert s == "\n".join(["x = _arrays['array_1']",
-                               "try: del __builtins__, _arrays",
-                               "except NameError: pass"])
+        assert s == "\n".join(
+            [
+                "x = _arrays['array_1']",
+                "try: del __builtins__, _arrays",
+                "except NameError: pass",
+            ]
+        )
 
     def test_datafile_nohdf5_1(self, np, datadir):
         """Test saving large arrays to disk without hdf5."""
@@ -973,7 +1039,7 @@ class TestCoverage(object):
         rep, files = a.save_data(datafile=datadir)
         ld = dict(_arrays=archive.ArrayManager.load_arrays(rep))
         exec(s, ld)
-        assert np.allclose(ld['M'], M)
+        assert np.allclose(ld["M"], M)
 
     def test_datafile_nohdf5_2(self, np, datadir):
         """Test saving large arrays to disk without hdf5."""
@@ -984,33 +1050,33 @@ class TestCoverage(object):
         rep, files = a.save_data(datafile=datadir)
         ld = dict(_arrays=archive.ArrayManager.load_arrays(rep))
         exec(s, ld)
-        assert np.allclose(ld['M'], M)
+        assert np.allclose(ld["M"], M)
 
     def test_get_persistent_rep_repr(self):
         rep = archive.get_persistent_rep_repr(1, {}, rep=None)
-        assert rep == ('1', {}, [])
+        assert rep == ("1", {}, [])
 
     def test_gname(self):
         a = archive.Archive()
-        g0 = a.gname_prefix + '0'
+        g0 = a.gname_prefix + "0"
         a.allowed_names.append(g0)
         a.insert(**{g0: 1})
-        a.insert(a={'a': 1})
+        a.insert(a={"a": 1})
         s = str(a)
         ld = {}
         exec(s, ld)
-        assert ld['a'] == {'a': 1}
+        assert ld["a"] == {"a": 1}
         assert ld[g0] == 1
 
 
 class TestArrayManager(object):
     """Test the ArrayManager class"""
+
     def test_save_no_filename(self, datafile):
         arrays = dict(x=range(10))
-        
+
         with pytest.raises(ValueError) as e:
-            archive.ArrayManager.save_arrays(
-                arrays, filename=None, data_format='npz')
+            archive.ArrayManager.save_arrays(arrays, filename=None, data_format="npz")
         msg = e.value.args[0]
         assert msg == "Must specify filename for data_format='npz'"
 
@@ -1019,11 +1085,12 @@ class TestArrayManager(object):
         M = np.random.rand(10)
         arrays = dict(M=M)
         rep, files = archive.ArrayManager.save_arrays(
-            arrays=arrays, dirname=datadir, filename='M', data_format=data_format)
+            arrays=arrays, dirname=datadir, filename="M", data_format=data_format
+        )
 
     def test_unknown_format(self, datafile):
         with pytest.raises(NotImplementedError) as e:
-            archive.ArrayManager.save_arrays({}, data_format='???')
+            archive.ArrayManager.save_arrays({}, data_format="???")
         msg = e.value.args[0]
         assert msg == "Expected data_format in ['hdf5', 'npz', 'npy'], got '???'"
 
@@ -1031,7 +1098,7 @@ class TestArrayManager(object):
 class TestGraph(object):
     def test_graph(self):
         """Example graph from docs."""
-        objs = 'A,B,C,D,E,F,G'.split(',')
+        objs = "A,B,C,D,E,F,G".split(",")
         A, B, C, D, E, F, G = objs
 
         deps = dict(A=[B, C], B=[F], C=[F, D, E], D=[G], E=[G], F=[], G=[])
@@ -1042,18 +1109,73 @@ class TestGraph(object):
 
         ids = dict((id(_obj), _obj) for _obj in objs)
 
-        graph = archive.Graph([('A', A, {})], get_persistent_rep)
+        graph = archive.Graph([("A", A, {})], get_persistent_rep)
         paths = graph.paths()
 
         # Convert to simple strings
-        paths = set([''.join(map(ids.__getitem__, _p)) for _p in paths])
-        _paths = set(['ABF', 'ACF', 'ACDG', 'ACEG'])
+        paths = set(["".join(map(ids.__getitem__, _p)) for _p in paths])
+        _paths = set(["ABF", "ACF", "ACDG", "ACEG"])
         assert _paths == paths
 
-        graph = archive._Graph([('A', A, {})], get_persistent_rep)
+        graph = archive._Graph([("A", A, {})], get_persistent_rep)
         paths = graph.paths()
 
         # Convert to simple strings
-        paths = set([''.join(map(ids.__getitem__, _p)) for _p in paths])
-        _paths = set(['ABF', 'ACF', 'ACDG', 'ACEG'])
+        paths = set(["".join(map(ids.__getitem__, _p)) for _p in paths])
+        _paths = set(["ABF", "ACF", "ACDG", "ACEG"])
         assert _paths == paths
+
+
+def test_backup(datadir):
+    file1 = os.path.join(datadir, "data1.txt")
+
+    # If file does not exist, then backup yields None
+    with archive.backup(file1) as file1_bak:
+        assert file1_bak is None
+
+    # Now make the file
+    with open(file1, "w") as _f:
+        _f.write("1")
+
+    # Backup should now move it to a backup, allowing us to write a new file.
+    with archive.backup(file1) as file1_bak:
+        assert file1_bak == os.path.join(datadir, "data1.txt.bak")
+        assert not os.path.exists(file1)
+        with open(file1_bak, "r") as _f:
+            assert _f.read() == "1"
+
+        with open(file1, "w") as _f:
+            _f.write("2")
+
+    # Default keep=True, so backup file should still exist.
+    assert os.path.exists(file1_bak)
+
+    # Backup again, but since we kept the old one, there should be a clash.
+    with archive.backup(file1, keep=False) as file2_bak:
+        assert file2_bak == os.path.join(datadir, "data1.txt_1.bak")
+        assert not os.path.exists(file1)
+        with open(file2_bak, "r") as _f:
+            assert _f.read() == "2"
+
+        with open(file1, "w") as _f:
+            _f.write("3")
+
+    # Now the backup should be removed since keep was False.
+    assert not os.path.exists(file2_bak)
+
+    # Now try with an exception... even though keep=False, the backup should remain.
+    with pytest.raises(NotImplementedError):
+        # Now try raising an exception
+        with archive.backup(file1, keep=False) as file3_bak:
+            assert file3_bak == os.path.join(datadir, "data1.txt_1.bak")
+            assert not os.path.exists(file1)
+            with open(file3_bak, "r") as _f:
+                assert _f.read() == "3"
+
+            # Simulate error...
+            raise NotImplementedError("Failure")
+
+    # Now backup should NOT be removed.
+    assert os.path.exists(file3_bak)
+    with open(file3_bak) as f:
+        assert f.read() == "3"

@@ -5,14 +5,14 @@ import tempfile
 import pytest
 
 
-@pytest.fixture(params=['npy', 'npz', 'hdf5'])
+@pytest.fixture(params=["npy", "npz", "hdf5"])
 def data_format(request):
     yield request.param
 
 
 @pytest.fixture
 def ds_name():
-    ds_name = tempfile.mkdtemp(dir='.')[2:]
+    ds_name = tempfile.mkdtemp(dir=".")[2:]
     os.rmdir(ds_name)
     yield ds_name
     if os.path.exists(ds_name):
@@ -34,13 +34,13 @@ def datafile():
 
 @pytest.fixture
 def hdf5_datafile():
-    with tempfile.NamedTemporaryFile(suffix='.hd5', delete=True) as f:
+    with tempfile.NamedTemporaryFile(suffix=".hd5", delete=True) as f:
         yield f.name
 
 
 @pytest.fixture
 def npz_datafile():
-    with tempfile.NamedTemporaryFile(suffix='.npz', delete=True) as f:
+    with tempfile.NamedTemporaryFile(suffix=".npz", delete=True) as f:
         yield f.name
 
 
@@ -62,9 +62,10 @@ def npy_datafile():
 def np():
     try:
         import numpy
+
         numpy.random.seed(3)
         return numpy
-    except ImportError:         # pragma: no cover
+    except ImportError:  # pragma: no cover
         pytest.skip("Skipping test that depends on numpy")
 
 
@@ -72,8 +73,9 @@ def np():
 def sp():
     try:
         import scipy
+
         return scipy
-    except ImportError:         # pragma: no cover
+    except ImportError:  # pragma: no cover
         pytest.skip("Skipping test that depends on scipy")
 
 
@@ -81,8 +83,9 @@ def sp():
 def h5py():
     try:
         import h5py
+
         return h5py
-    except ImportError:         # pragma: no cover
+    except ImportError:  # pragma: no cover
         pytest.skip("Skipping test that depends on h5py")
 
 
@@ -94,6 +97,7 @@ def scoped(request):
 @pytest.fixture(params=[True, False])
 def package(request):
     yield request.param
+
 
 @pytest.fixture(params=[True, False])
 def backup_data(request):

@@ -1,3 +1,38 @@
+# Explained above
+tweakdefaults = true
+# Merge conflict markers in files (they look like "<<<<<<<") are more verbose
+mergemarkers = detailed
+
+[paths]
+default = ssh://git@hg.iscimath.org:11022/forbes-group/persist
+
+# Default to the current revision (`.`) when pushing to `default`. 
+default:pushrev = .
+
+[alias]
+qcom = commit
+
 [hooks]
-pre-commit = jupyter nbconvert --to=rst --output=README.rst doc/README.ipynb
-#pre-commit.runtests = python setup.py test
+pre-commit.readme = jupyter nbconvert --to=rst --output=README.rst doc/README.ipynb
+pre-commit.black = hg status -ma | cut -c3- | grep ".py$" | while read f; do black "$f"; done
+#pre-commit.runtests = python -O setup.py test
+
+[commands]
+# Require the user to pass a revision (or revset) to "push" instead of pushing
+# all heads by default.
+push.require-revs = true
+
+[extensions]
+# These two are installed with `pip install hg-evolve`.
+# Additional commands and features on top of Mercurial's "Changeset Evolution"
+evolve =
+# Adds support for topics and new commands like `topic`, `stack`...
+topic =
+
+[experimental]
+# Force the user to specify the topic when committing.
+# Use `topic-mode = random` to generate a random topic name
+topic-mode = enforce
+# Force Mercurial to use Changeset Evolution for all commands even when evolve
+# is not found
+evolution = all
