@@ -345,6 +345,9 @@ class TestSuite(ToolsMixin):
             == "dict(Q=1.0, a=_numpy.fromstring(" + "'`\\xbf=_Q-\\xf2?', dtype='<f8'))"
         )
 
+    @pytest.mark.skipif(
+        sys.version_info < (3, 7), reason="Only python ^3.7 allows > 255 arguments"
+    )
     def test_scoped_too_many_args_issue_12(self):
         r"""Regression test for scoped representations with too many
         arguments."""
