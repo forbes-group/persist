@@ -12,10 +12,10 @@ os.environ["PY_IGNORE_IMPORTMISMATCH"] = "1"  # To avoid ImportMismatchError
 # By default, we only execute the conda tests because the others required various python
 # interpreters to be installed.  The other tests can be run, e.g., with `nox -s test` if
 # desired.
-nox.options.sessions = ["test_conda"]
+nox.options.sessions = ["test"]
 
 
-args = dict(python=["2.7", "3.6", "3.7", "3.8"], reuse_venv=True)
+args = dict(python=["2.7", "3.6", "3.7", "3.8", "3.9"], reuse_venv=True)
 
 
 @nox.session(**args)
