@@ -21,7 +21,7 @@ clean:
 	-find . -name "*.pyc" -delete
 	-find . -name "*.pyo" -delete
 	-find . -name "htmlcov" -type d -exec rm -r "{}" \;
-	-find . -name "__pycache__" -exec rm -r "{}" \;
+	-find . -name "__pycache__" -type d -exec rm -r "{}" \;
 	-rm -r build
 	-rm -r src/persist.egg-info
 	-rm -r doc/README_files/

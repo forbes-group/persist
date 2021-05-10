@@ -7,11 +7,12 @@ import nox
 # from pulling in the correct packages, thereby mucking up tests later on.
 # See https://stackoverflow.com/a/51640558/1088938
 os.environ["PYTHONNOUSERSITE"] = "1"
+os.environ["PY_IGNORE_IMPORTMISMATCH"] = "1"  # To avoid ImportMismatchError
 
 # By default, we only execute the conda tests because the others required various python
 # interpreters to be installed.  The other tests can be run, e.g., with `nox -s test` if
 # desired.
-nox.options.sessions = ["test"]
+nox.options.sessions = ["test_conda"]
 
 
 args = dict(python=["2.7", "3.6", "3.7", "3.8"], reuse_venv=True)
@@ -19,11 +20,17 @@ args = dict(python=["2.7", "3.6", "3.7", "3.8"], reuse_venv=True)
 
 @nox.session(**args)
 def test(session):
-    session.install(".[test]")
+    if session.python.startswith("2"):
+        session.install(".[test]")
+    else:
+        session.install(".[test]", "--use-feature=in-tree-build")
     session.run("pytest")
 
 
 @nox.session(venv_backend="conda", **args)
 def test_conda(session):
-    session.install(".[test]")
+    if session.python.startswith("2"):
+        session.install(".[test]")
+    else:
+        session.install(".[test]", "--use-feature=in-tree-build")
     session.run("pytest")
