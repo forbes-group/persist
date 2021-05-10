@@ -15,18 +15,18 @@ os.environ["PY_IGNORE_IMPORTMISMATCH"] = "1"  # To avoid ImportMismatchError
 nox.options.sessions = ["test"]
 
 
-args = dict(python=["3.6", "3.7", "3.8", "3.9"], reuse_venv=True)
+args = dict(python=["3.6", "3.7", "3.8", "3.9"], reuse_venv=False)
 
 
 @nox.session(**args)
 def test(session):
-    args = [] if session.python.startswith("2") else ["--use-feature=in-tree-build"]
-    session.install(".[test]", *args)
+    # args = [] if session.python.startswith("2") else ["--use-feature=in-tree-build"]
+    session.install(".[test]")
     session.run("pytest")
 
 
 @nox.session(venv_backend="conda", **args)
 def test_conda(session):
-    args = [] if session.python.startswith("2") else ["--use-feature=in-tree-build"]
-    session.install(".[test]", *args)
+    # args = [] if session.python.startswith("2") else ["--use-feature=in-tree-build"]
+    session.install(".[test]")
     session.run("pytest")

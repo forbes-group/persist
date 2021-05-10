@@ -72,6 +72,7 @@ doc = [
 "Git Mirror" = "https://github.com/forbes-group/persist"
 
 [tool.poetry.dev-dependencies]
+pip = "^21.1.0"
 # black = "^21.4b2"
 # mercurial = "^5.7.1"
 # hg-git = "^0.10.0"
