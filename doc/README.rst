@@ -90,72 +90,71 @@ Developer Notes
 Release Notes
 =============
 
-As of version 3.0, we now provide a conda ``meta.yaml`` file. Here are
-the instructions for releasing on PyPI and Anaconda Cloud:
+As of version 3.1, we release only to PyPI using
+```poetry`` <https://python-poetry.org/>`__. Here is the typical
+development/release cycle.
 
--  Start a development branch:
+-  First make sure you have a development environment with Mercurial,
+   the evolve extension, topics enabled, [Black], [Nox], and
+   [nbconvert].
 
-   .. code:: bash
-
-      hg branch 3.0
-
--  Change version to ``'3.0dev1'`` in ``setup.py``, ``meta.yaml``, and
-   ``persist/__init__.py`` and commit these changes:
+-  Start a development branch, i.e.:
 
    .. code:: bash
 
-      hg com -m "BRN: Start working on branch 3.0"
+      hg branch 3.2
 
--  Complete your changes making sure code is well tested etc.
-
--  Change version to ``'3.0'`` in ``setup.py``, ``meta.yaml``, and
-   ``persist/__init__.py`` and commit these changes:
+-  Change version to ``'3.2.dev0'`` in ``pyproject.toml`` and commit
+   this changes:
 
    .. code:: bash
 
-      hg com -m "REL: 3.0"
-
--  Push your work to bitbucket:
-
-   .. code:: bash
-
+      hg com -m "BRN: Start working on branch 3.2"
       hg push --new-branch -r . 
 
--  (Optional) Create a PR and merge::
+-  Complete your changes making sure code is well tested etc. While
+   working on specific features, you should always use topics:
 
    .. code:: bash
 
-      open https://bitbucket.org/mforbes/persist/pull-requests/new?source=3.0&t=1
+      hg topic new-feature
 
--  (Optional) Manually close branch and merge into default (this is what
-   accepting the the PR above would do)::
+   When you push to Heptapod, the commits in these topics will remain in
+   the draft phase, allowing you to rebase, etc. as needed to clean the
+   history. We have setup automatic pushes to
+   `GitHub <https://github.com/forbes-group/persist>`__ and you can see
+   the status of the tests with the badge: |Tests|.
+
+   To run the tests locally, you should be able to just run:
 
    .. code:: bash
 
-      hg up 3.0
-      hg com --close-branch -m "Close branch 3.0"
-      hg up default
-      hg merge 3.0
-      hg com -m "Merge in 3.0"
+      nox
+
+-  Once everything is working and tested, push it to Heptapod and create
+   Merge Requests:
+
+   -  First merge all open topics to the development branch.
+
+-  Then change the revision in ``pyproject.toml`` to ``'3.2'``, dropping
+   the ``'.dev'``. Push this to Heptapod and create a merge request to
+   merge this to the default branch. Review the changes, and complete
+   the Merge. Unlike previously, **do not close the branch.** Just leave
+   it.
 
 -  Start work on next branch::
 
    .. code:: bash
 
-      hg up 3.0
-      hg branch 3.1
-
--  Change version to ``'3.1dev1'`` in ``setup.py``, ``meta.yaml``, and
-   ``persist/__init__.py`` and commit these changes:
-
-   .. code:: bash
-
-      hg com -m "BRN: Start working on branch 3.1"
+      hg up 3.2
+      hg branch 3.3
 
 PyPI
 ----
 
 To release on PyPI:
+
+\```bash poetry build poetry
 
 ::
 
@@ -172,6 +171,9 @@ To release on Anaconda Cloud (replace the filename as appropriate):
 
    conda build meta.yaml
    anaconda upload --all /data/apps/conda/conda-bld/osx-64/persist-3.0-py37_0.tar.bz2
+
+.. |Tests| image:: https://github.com/forbes-group/persist/actions/workflows/tests.yml/badge.svg
+   :target: https://github.com/forbes-group/persist/actions/workflows/tests.yml
 
 Indices and Tables
 ==================
