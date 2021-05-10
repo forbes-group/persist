@@ -1,5 +1,7 @@
 import os
 import sys
+import threading
+import time
 
 import pytest
 
@@ -49,7 +51,7 @@ class TestDataSet(object):
         a = A()
         try:
             ds["a"] = a
-        except:
+        except Exception:
             pass
 
         # Archive should still be in an okay state
@@ -167,11 +169,73 @@ class TestDataSet(object):
             ds = archive.DataSet(ds_name, "w", synchronize=False, timeout=0)
         del ds
 
+    def test_timeout3(self, ds_name):
+        """Test lock timeout, but with lockfile released during timeout."""
+        ds = archive.DataSet(ds_name, "w")
+        ds.close()
+
+        # Touch the lock-file
+        lockfile = os.path.join(ds_name, ds._lock_file_name)
+        open(lockfile, "w").close()
+
+        def release(lockfile=lockfile, wait=0.1):
+            time.sleep(wait)
+            os.remove(lockfile)
+
+        threading.Thread(target=release).start()
+
+        # The lockfile should be released before the timeout, allowing the dataset to
+        # be accessed.
+        ds = archive.DataSet(ds_name, "w", timeout=2)
+        ds.x = 1
+        del ds
+
 
 class TestCoverage(object):
+    """
+    >>> ds = archive.DataSet(getfixture('ds_name'), "w")
+    >>> ds._insert(a=1.0, info={"a": "A lovely variable"})
+    ['a']
+    >>> ds._insert(x_0=1.0)
+    ['x_0']
+    >>> ds._insert({})
+    ['x_1']
+    >>> list(ds)
+    ['a', 'x_0', 'x_1']
+    >>> ds
+    DataSet(module_name='...', path='.', synchronize=True, array_threshold=100,
+    backup_data=False, name_prefix='x_')
+    """
+
     def test_bad_mode(self, ds_name):
         with pytest.raises(NotImplementedError):
             archive.DataSet(ds_name, mode="oops")
+
+    def test__insert(self, ds_name):
+        ds = archive.DataSet(ds_name, "w")
+        ds._insert({})
+        ds.close()
+        with pytest.raises(IOError):
+            ds._lock()
+
+        ds = archive.DataSet(ds_name, "r")
+        with pytest.raises(ValueError):
+            ds._insert(c=3.0)
+        ds.close()
+
+    def test__keys(self, ds_name):
+        ds = archive.DataSet(ds_name, "w")
+        ds._insert(a=1.0, info={"a": "A lovely variable"})
+        assert ds._keys() == ["a"]
+
+    def test_read_only(self, ds_name):
+        ds = archive.DataSet(ds_name, "w")
+        ds._insert(a=1.0)
+        ds.close()
+
+        ds = archive.DataSet(ds_name, "r")
+        with pytest.raises(ValueError):
+            ds["a"] = "A lovely variable"
 
 
 def test_issue_10(ds_name, np):

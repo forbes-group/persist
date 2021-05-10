@@ -1,3 +1,5 @@
+[flake8]
+# E203 Whitespace before ":"  (Black does this)
 # E221 Spaces before operators (x = 4  + 4)
 # E225 Requires space arround *all* operators (I like compact x**2 for example.)
 # E226 Requires whitespace around arithmetic operators
@@ -5,9 +7,8 @@
 # W293 Blank line containes whitespace
 # W503 line break before binary operator
 # W602 Deprecated form of raising exception
-ignore = E225,E226,W293,W503
-max-line-length = 90
-exclude = persist/_contrib/*
+ignore = E203,E225,E226,W293,W503
+exclude = .nox/*,src/persist/_contrib/*
 
 # This is the limit at which I can get 3 full emacs windows open.
 max-line-length = 90

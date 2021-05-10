@@ -24,15 +24,15 @@ warnings.simplefilter("always", UserWarning)
 class A(object):
     """Example of a class with an archive function."""
 
-    def __init__(self, d, l):
+    def __init__(self, d, xs):
         self.d = d
-        self.l = l
+        self.xs = xs
 
     def get_persistent_rep(self, env=None):
         """Example of an archive function."""
         imports = archive.get_imports(self)
-        args = dict(d=self.d, l=self.l)
-        rep = imports[0][-1] + "(d=d, l=l)"
+        args = dict(d=self.d, xs=self.xs)
+        rep = imports[0][-1] + "(d=d, xs=xs)"
         return (rep, args, imports)
 
 
@@ -40,24 +40,24 @@ class B(object):
     """Example of a class without an archive function but with a repr
     function."""
 
-    def __init__(self, d, l):
+    def __init__(self, d, xs):
         self.d = d
-        self.l = l
+        self.xs = xs
 
     def __repr__(self):
-        return "B(d=%r, l=%r)" % (self.d, self.l)
+        return "B(d=%r, xs=%r)" % (self.d, self.xs)
 
 
 class C(objects.Archivable):
     """Example of a class inheriting from Archivable."""
 
-    def __init__(self, d, l):
+    def __init__(self, d, xs):
         self.d = d
-        self.l = l
+        self.xs = xs
 
     def items(self):
         """This must be overloaded."""
-        args = [("d", self.d), ("l", self.l)]
+        args = [("d", self.d), ("xs", self.xs)]
         return args
 
 
@@ -76,6 +76,11 @@ class Functions(object):
     def f(self, x):
         """A function that depends on a."""
         return self.a * x
+
+    @classmethod
+    def f_cls(cls, x):
+        """A class method."""
+        return x ** 2
 
 
 class NestedClasses(object):
@@ -148,39 +153,39 @@ class TestSuite(ToolsMixin):
 
     def test_1(self):
         """Test archiving of instance A()"""
-        l = [1, 2, 3]
-        d = {"a": 1.0, "b": 2.0, "l": l}
-        a = A(d=d, l=l)
+        xs = [1, 2, 3]
+        d = {"a": 1.0, "b": 2.0, "xs": xs}
+        a = A(d=d, xs=xs)
         arch = archive.Archive()
         arch.insert(a=a)
         s = str(arch)
         ld = {}
         exec(s, ld)
-        assert ld["a"].l == a.l and id(ld["a"].l) != id(a.l)
+        assert ld["a"].xs == a.xs and id(ld["a"].xs) != id(a.xs)
         assert ld["a"].d == a.d and id(ld["a"].d) != id(a.d)
 
     def test_2(self):
         """Test archiving of instance B()"""
-        l = [1, 2, 3]
-        d = {"a": 1.0, "b": 2.0, "l": l}
-        a = B(d=d, l=l)
+        xs = [1, 2, 3]
+        d = {"a": 1.0, "b": 2.0, "xs": xs}
+        a = B(d=d, xs=xs)
         arch = archive.Archive()
         arch.insert(a=a)
         s = str(arch)
         ld = {}
         exec(s, ld)
-        assert ld["a"].l == a.l and id(ld["a"].l) != id(a.l)
+        assert ld["a"].xs == a.xs and id(ld["a"].xs) != id(a.xs)
         assert ld["a"].d == a.d and id(ld["a"].d) != id(a.d)
 
     def test_3(self):
         """Test archiving of instance C()"""
-        l = [1, 2, 3]
-        d = {"a": 1.0, "b": 2.0, "l": l}
-        a = C(d=d, l=l)
+        xs = [1, 2, 3]
+        d = {"a": 1.0, "b": 2.0, "xs": xs}
+        a = C(d=d, xs=xs)
         s = a.archive("a")
         ld = {}
         exec(s, ld)
-        assert ld["a"].l == a.l and id(ld["a"].l) != id(a.l)
+        assert ld["a"].xs == a.xs and id(ld["a"].xs) != id(a.xs)
         assert ld["a"].d == a.d and id(ld["a"].d) != id(a.d)
 
     def test_4(self):
@@ -214,16 +219,16 @@ class TestSuite(ToolsMixin):
         """Test archiving of simple derived types..."""
         arch = archive.Archive()
         d = MyDict(a=1, b=2)
-        l = MyList([1, 2])
+        ls = MyList([1, 2])
         t = MyTuple((1, 2))
-        arch.insert(d=d, l=l, t=t)
+        arch.insert(d=d, ls=ls, t=t)
         s = str(arch)
         ld = {}
         exec(s, ld)
         assert ld["d"]["a"] == d["a"]
         assert isinstance(ld["d"], MyDict)
-        assert ld["l"] == l
-        assert isinstance(ld["l"], MyList)
+        assert ld["ls"] == ls
+        assert isinstance(ld["ls"], MyList)
         assert ld["t"] == t
         assert isinstance(ld["t"], MyTuple)
 
@@ -270,12 +275,14 @@ class TestSuite(ToolsMixin):
         """Test the archiving of bound class members."""
         F = Functions(a=2)
         arch = archive.Archive()
-        arch.insert(f=F.f, g=Functions.f)
+        arch.insert(f=F.f, g=Functions.f, f_cls=F.f_cls, g_cls=Functions.f_cls)
         s = str(arch)
         ld = {}
         exec(s, ld)
         assert F.f(2) == ld["f"](2)
-        assert F.f(2), ld["g"](F == 2)
+        assert F.f(2) == ld["g"](F, 2)
+        assert F.f_cls(2) == ld["f_cls"](2)
+        assert F.f_cls(2) == ld["g_cls"](2)
 
     @pytest.mark.skip(reason="Known Failure")
     def test_nested_classes(self):  # pragma: nocover
@@ -436,7 +443,7 @@ class TestNumpy(ToolsMixin):
         a = archive.Archive(array_threshold=2)
         M = np.random.rand(10)
         a.insert(M=M)
-        s = str(a)
+        str(a)
         with pytest.warns(UserWarning) as record:
             rep, files = a.save_data()
         assert len(record) == 1
@@ -446,7 +453,7 @@ class TestNumpy(ToolsMixin):
         )
 
         assert len(a.data) == 1
-        s = str(a)
+        str(a)
         with pytest.warns(UserWarning) as record:
             rep, files = a.save_data()
         assert len(record) == 1
@@ -568,7 +575,7 @@ class TestDatafile(object):
 
         assert len(a.data) == 1
         array_name = list(a.data)[0]
-        with h5py.File(hdf5_datafile) as f:
+        with h5py.File(hdf5_datafile, "r") as f:
             assert np.allclose(f[array_name], M)
 
         s = str(a)
@@ -1114,3 +1121,58 @@ class TestGraph(object):
         paths = set(["".join(map(ids.__getitem__, _p)) for _p in paths])
         _paths = set(["ABF", "ACF", "ACDG", "ACEG"])
         assert _paths == paths
+
+
+def test_backup(datadir):
+    file1 = os.path.join(datadir, "data1.txt")
+
+    # If file does not exist, then backup yields None
+    with archive.backup(file1) as file1_bak:
+        assert file1_bak is None
+
+    # Now make the file
+    with open(file1, "w") as _f:
+        _f.write("1")
+
+    # Backup should now move it to a backup, allowing us to write a new file.
+    with archive.backup(file1) as file1_bak:
+        assert file1_bak == os.path.join(datadir, "data1.txt.bak")
+        assert not os.path.exists(file1)
+        with open(file1_bak, "r") as _f:
+            assert _f.read() == "1"
+
+        with open(file1, "w") as _f:
+            _f.write("2")
+
+    # Default keep=True, so backup file should still exist.
+    assert os.path.exists(file1_bak)
+
+    # Backup again, but since we kept the old one, there should be a clash.
+    with archive.backup(file1, keep=False) as file2_bak:
+        assert file2_bak == os.path.join(datadir, "data1.txt_1.bak")
+        assert not os.path.exists(file1)
+        with open(file2_bak, "r") as _f:
+            assert _f.read() == "2"
+
+        with open(file1, "w") as _f:
+            _f.write("3")
+
+    # Now the backup should be removed since keep was False.
+    assert not os.path.exists(file2_bak)
+
+    # Now try with an exception... even though keep=False, the backup should remain.
+    with pytest.raises(NotImplementedError):
+        # Now try raising an exception
+        with archive.backup(file1, keep=False) as file3_bak:
+            assert file3_bak == os.path.join(datadir, "data1.txt_1.bak")
+            assert not os.path.exists(file1)
+            with open(file3_bak, "r") as _f:
+                assert _f.read() == "3"
+
+            # Simulate error...
+            raise NotImplementedError("Failure")
+
+    # Now backup should NOT be removed.
+    assert os.path.exists(file3_bak)
+    with open(file3_bak) as f:
+        assert f.read() == "3"

@@ -85,7 +85,7 @@ build-backend = "poetry.core.masonry.api"
 ######################################################################
 # PyTest
 [tool.pytest.ini_options]
-testpaths = [ "src/persist" ]
+testpaths = [ "tests", "src/persist" ]
 markers = [
     # mark test as a benchmark.  (Might be slow, or platform dependent)
     "bench",

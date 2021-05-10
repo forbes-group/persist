@@ -220,7 +220,6 @@ except ImportError:  # pragma: no cover
     import __builtin__ as builtins
 import ast
 import copy
-import imp
 import inspect
 import logging
 import os
@@ -292,15 +291,15 @@ class DuplicateError(ArchiveError):
         ArchiveError.__init__(self, msg)
 
 
-def unique_list(l, preserve_order=True):
+def unique_list(xs, preserve_order=True):
     """Make list contain only unique elements but preserve order.
 
-    >>> l = [1,2,4,3,2,3,1,0]
-    >>> unique_list(l)
+    >>> xs = [1,2,4,3,2,3,1,0]
+    >>> unique_list(xs)
     [1, 2, 4, 3, 0]
-    >>> l
+    >>> xs
     [1, 2, 4, 3, 2, 3, 1, 0]
-    >>> unique_list(l, preserve_order=False)
+    >>> unique_list(xs, preserve_order=False)
     [0, 1, 2, 3, 4]
     >>> unique_list([[1],[2],[2],[1],[3]])
     [[1], [2], [3]]
@@ -312,12 +311,12 @@ def unique_list(l, preserve_order=True):
     try:
         if preserve_order:
             s = set()
-            return [x for x in l if x not in s and not s.add(x)]
+            return [x for x in xs if x not in s and not s.add(x)]
         else:
-            return list(set(l))
+            return list(set(xs))
     except TypeError:  # Special case for non-hashable types
         res = []
-        for x in l:
+        for x in xs:
             if x not in res:
                 res.append(x)
         return res
@@ -490,7 +489,7 @@ class ArrayManager(object):
             with backup(_filename, keep=keep):
                 if data_format == "hdf5":
                     res = cls.hdf5_code
-                    with h5py.File(_filename) as f:
+                    with h5py.File(_filename, "w") as f:
                         for name in arrays:
                             f[name] = arrays[name]
                 else:  # data_format == 'npz'
@@ -1330,7 +1329,7 @@ class Archive(object):
         dels = "\n".join(del_lines)
 
         res = ("\n" + self._section_sep).join(
-            [l for l in [imports, lines, dels] if 0 < len(l)]
+            [xs for xs in [imports, lines, dels] if 0 < len(xs)]
         )
         return res
 
@@ -1822,14 +1821,14 @@ def _get_rep(obj, arg_rep):
     return (rep, (module, cname, cname))
 
 
-def get_persistent_rep_list(l, env):
+def get_persistent_rep_list(xs, env):
     args = {}
     imports = []
     name = "_l_0"
     names = set(env)
     reps = []
     unames = UniqueNames(names).unique_names(name)
-    for o in l:
+    for o in xs:
         name = next(unames)
         args[name] = o
         names.add(name)
@@ -1837,8 +1836,8 @@ def get_persistent_rep_list(l, env):
 
     rep = "[{}]".format(", ".join(reps))
 
-    if l.__class__ is not list:
-        rep, imp = _get_rep(l, rep)
+    if xs.__class__ is not list:
+        rep, imp = _get_rep(xs, rep)
         imports.append(imp)
 
     return (rep, args, imports)
@@ -2672,18 +2671,18 @@ def _replace_rep(rep, replacements, check=False, robust=True):
 
     for old in replacements:
         replacement_str = "%(" + old + ")s"
-        l = len(old)
+        len_old = len(old)
         i = rep.find(old)
         i_rep = []  # Indices to replace
         while 0 <= i:
             prev = rep[i - 1 : i]
-            next = rep[i + l : i + l + 1]
+            next = rep[i + len_old : i + len_old + 1]
             if (not next or next not in identifier_tokens) and (
                 not prev or prev not in identifier_tokens
             ):
 
                 # Now get previous and next non-whitespace characters
-                c = i + l
+                c = i + len_old
                 while c < len(rep) and rep[c] in string.whitespace:
                     c = c + 1
                 next = rep[c : c + 1]
@@ -2703,7 +2702,7 @@ def _replace_rep(rep, replacements, check=False, robust=True):
         i0 = 0
         for i in i_rep:
             parts.append(rep[i0:i])
-            i0 = i + l
+            i0 = i + len_old
         parts.append(rep[i0:])
 
         rep = replacement_str.join(parts)
@@ -3139,6 +3138,8 @@ class DataSet(object):
             sys.dont_write_bytecode = True
             try:
                 if sys.version_info < (3, 0):
+                    import imp
+
                     res = imp.load_source(_mod, archive_file)
                 else:
                     import importlib.util
