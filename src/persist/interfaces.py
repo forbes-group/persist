@@ -1,5 +1,5 @@
 r"""Various Interfaces."""
-__all__ = ["IArchivable", "Interface", "implementer"]
+__all__ = ["IArchivable", "Interface", "implementer", "classImplements"]
 
 import warnings
 

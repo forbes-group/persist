@@ -928,7 +928,7 @@ class Archive(object):
         type: _archive_type,
     }
 
-    if hasattr(types, "ClassType"):
+    if hasattr(types, "ClassType"):  # pragma: no cover
         # Old-style classes in python 2.
         _dispatch[types.ClassType] = _archive_type
 
@@ -1103,6 +1103,7 @@ class Archive(object):
             else:
                 if self.check_on_insert:
                     (rep, args, imports) = self.get_persistent_rep(obj, env)
+                    del rep, args, imports
 
                 self.arch.append((uname, obj, env))
                 ind = len(self.arch) - 1
@@ -1782,7 +1783,7 @@ def get_persistent_rep_obj(obj, env):
 
 def get_persistent_rep_method(obj, env):
     r"""Archive methods."""
-    if sys.version_info < (3, 0):
+    if sys.version_info < (3, 0):  # pragma: no cover
         instance = obj.im_self
     else:
         instance = obj.__self__
@@ -1881,7 +1882,7 @@ def is_simple(obj):
     if hasattr(obj, "__class__"):
         class_ = obj.__class__
         classes = [bool, int, str, None.__class__]
-        if sys.version_info < (3, 0):
+        if sys.version_info < (3, 0):  # pragma: no cover
             classes.extend([long, unicode])
         result = (
             class_ in classes
@@ -1985,7 +1986,108 @@ class Node(object):
         return reducible
 
 
-class Graph(object):
+class GraphMixin(object):
+    """Common routines for both graph classes."""
+
+    def gname(self, obj):
+        r"""Return a unique global name for the specified object.
+
+        This name is `self.gname_prefix` followed by the object's id.
+        """
+        return self.gname_prefix + str(self.get_id(obj))
+
+    def _DFS(self, node, env):
+        r"""Visit all nodes in the directed subgraph specified by
+        node, and insert them into nodes."""
+        for _name in node.args:
+            obj = node.args[_name]
+            id_ = self.get_id(obj)
+            if id_ not in self.nodes:
+                new_node = self._new_node(obj, env, self.gname(obj))
+                self.nodes[id_] = new_node
+                self._DFS(new_node, env)
+
+    def _process_imports(self, rep, args, imports):
+        r"""Process imports and add them to self.imports,
+        changing names as needed so there are no conflicts
+        between `args = {name: obj}` and `self.names`.
+        """
+        arg_names = sorted(args)
+
+        # Check for duplicate imports
+        replacements = {}
+        for (module_, iname_, uiname_) in imports:
+            mod_inames = list(zip(*_unzip(self.imports)[:2]))
+            if (module_, iname_) in mod_inames:
+                # Import already specified.  Just refer to it
+                ind = mod_inames.index((module_, iname_))
+                module, iname, uiname = self.imports[ind]
+            else:
+                # Get new name.  All import names are local
+                uiname = uiname_
+                if not uiname.startswith("_"):
+                    uiname = "_" + uiname
+                uiname = self.names.unique(uiname, arg_names)
+                self.imports.append((module_, iname_, uiname))
+
+            if not uiname == uiname_:
+                replacements[uiname_] = uiname
+
+        # Update names of rep in archive
+        rep = _replace_rep(rep, replacements, robust=self.robust_replace)
+        return rep
+
+    def edges(self):
+        r"""Return a list of edges `(id1, id2)` where object `id1` depends
+        on object `id2`."""
+        return [
+            (id_, self.get_id(obj))
+            for id_ in self.nodes
+            for (name, obj) in self.nodes[id_].args.items()
+        ]
+
+    def _topological_order(self):
+        r"""Return a list of the ids for all nodes in the graph in a
+        topological order."""
+        order = topsort.topsort(self.edges())
+        order.reverse()
+        # Insert roots (they may be disconnected)
+        order.extend([id for id in self.roots if id not in order])
+        return order
+
+    def check(self):
+        r"""Check integrity of graph."""
+        for id in self.nodes:
+            node = self.nodes[id]
+            children = node.children
+            for child in children:
+                cnode = self.nodes[child]
+                assert id in cnode.parents
+
+    def paths(self, id=None):
+        """Return a list of all paths through the graph starting from `id`."""
+        paths = []
+        if id is None:
+            for r in self.roots:
+                paths.extend(self.paths(r))
+        else:
+            children = self.nodes[id].children
+            if not children:
+                paths.append([id])
+            else:
+                for c in children:
+                    paths.extend([[id] + p for p in self.paths(c)])
+
+        return paths
+
+    def _reduce(self, id):  # pragma: no cover
+        raise NotImplementedError
+
+    def reduce(self):  # pragma: no cover
+        raise NotImplementedError
+
+
+class Graph(GraphMixin):
     r"""Dependency graph.  Also manages imports.
 
     This is a graph of objects in memory: these are identified by
@@ -2079,13 +2181,6 @@ class Graph(object):
 
             node.rep = _replace_rep(node.rep, replacements, robust=self.robust_replace)
 
-    def gname(self, obj):
-        r"""Return a unique global name for the specified object.
-
-        This name is `self.gname_prefix` followed by the object's id.
-        """
-        return self.gname_prefix + str(self.get_id(obj))
-
     def _new_node(self, obj, env, name):
         r"""Return a new node associated with `obj` and using the
         specified `name`.  Also process the imports of the node."""
@@ -2094,65 +2189,6 @@ class Graph(object):
         return Node(
             obj=obj, rep=rep, args=args, name=name, imports=imports, get_id=self.get_id
         )
-
-    def _DFS(self, node, env):
-        r"""Visit all nodes in the directed subgraph specified by
-        node, and insert them into nodes."""
-        for _name in node.args:
-            obj = node.args[_name]
-            id_ = self.get_id(obj)
-            if id_ not in self.nodes:
-                new_node = self._new_node(obj, env, self.gname(obj))
-                self.nodes[id_] = new_node
-                self._DFS(new_node, env)
-
-    def _process_imports(self, rep, args, imports):
-        r"""Process imports and add them to self.imports,
-        changing names as needed so there are no conflicts
-        between `args = {name: obj}` and `self.names`.
-        """
-        arg_names = sorted(args)
-
-        # Check for duplicate imports
-        replacements = {}
-        for (module_, iname_, uiname_) in imports:
-            mod_inames = list(zip(*_unzip(self.imports)[:2]))
-            if (module_, iname_) in mod_inames:
-                # Import already specified.  Just refer to it
-                ind = mod_inames.index((module_, iname_))
-                module, iname, uiname = self.imports[ind]
-            else:
-                # Get new name.  All import names are local
-                uiname = uiname_
-                if not uiname.startswith("_"):
-                    uiname = "_" + uiname
-                uiname = self.names.unique(uiname, arg_names)
-                self.imports.append((module_, iname_, uiname))
-
-            if not uiname == uiname_:
-                replacements[uiname_] = uiname
-
-        # Update names of rep in archive
-        rep = _replace_rep(rep, replacements, robust=self.robust_replace)
-        return rep
-
-    def edges(self):
-        r"""Return a list of edges `(id1, id2)` where object `id1` depends
-        on object `id2`."""
-        return [
-            (id_, self.get_id(obj))
-            for id_ in self.nodes
-            for (name, obj) in self.nodes[id_].args.items()
-        ]
-
-    def _topological_order(self):
-        r"""Return a list of the ids for all nodes in the graph in a
-        topological order."""
-        order = topsort.topsort(self.edges())
-        order.reverse()
-        # Insert roots (they may be disconnected)
-        order.extend([id for id in self.roots if id not in order])
-        return order
 
     def _reduce(self, id):
         r"""Reduce the node."""
@@ -2174,31 +2210,6 @@ class Graph(object):
             cnode.parents.remove(id)
             cnode.parents.extend(node.parents)
         del self.nodes[id]
-
-    def check(self):
-        r"""Check integrity of graph."""
-        for id in self.nodes:
-            node = self.nodes[id]
-            children = node.children
-            for child in children:
-                cnode = self.nodes[child]
-                assert id in cnode.parents
-
-    def paths(self, id=None):
-        """Return a list of all paths through the graph starting from `id`."""
-        paths = []
-        if id is None:
-            for r in self.roots:
-                paths.extend(self.paths(r))
-        else:
-            children = self.nodes[id].children
-            if not children:
-                paths.append([id])
-            else:
-                for c in children:
-                    paths.extend([[id] + p for p in self.paths(c)])
-
-        return paths
 
     def reduce(self):
         r"""Reduce the graph once by combining representations for nodes
@@ -2354,7 +2365,7 @@ class Graph(object):
         self.order = self._topological_order()
 
 
-class _Graph(Graph):
+class _Graph(GraphMixin):
     r"""Simplified dependency graph for use with scoped files.
 
     This is a graph of objects in memory: these are identified by
@@ -2443,12 +2454,6 @@ class _Graph(Graph):
     # _topological_order = Graph._topological_order
     # check = Graph.check
     # paths = Graph.paths
-
-    def _reduce(self, id):  # pragma: no cover
-        raise NotImplementedError
-
-    def reduce(self):  # pragma: no cover
-        raise NotImplementedError
 
 
 def _unzip(q, n=3):
@@ -2714,21 +2719,20 @@ def _replace_rep(rep, replacements, check=False, robust=True):
     if replacements:
         rep = rep % replacements
 
+    # re_ = r'''(?P<a>        # Refer to the group by name <a>
+    #            [^\w\.]      # Either NOT a valid identifier
+    #            | ^)         # OR the start of the string
+    #           (%s)          # The literal to be matched
+    #           (?P<b>[^\w=]  # Either NOT a valid identifer
+    #            | $)'''      # OR the end.
+    # regexp = re.compile(re_%(re.escape(old)), re.VERBOSE)
+    # n_rep = 0
+    # while True:
+    #     (rep, m) = regexp.subn(r"\g<a>%s\g<b>"%(replacements[old]),rep)
+    #     if m == 0: break
+    #     n_rep += m
+
     return rep
-    r"""
-            re_ = r'''(?P<a>        # Refer to the group by name <a>
-                       [^\w\.]      # Either NOT a valid identifier
-                       | ^)         # OR the start of the string
-                      (%s)          # The literal to be matched
-                      (?P<b>[^\w=]  # Either NOT a valid identifer
-                       | $)'''      # OR the end.
-            regexp = re.compile(re_%(re.escape(old)), re.VERBOSE)
-            n_rep = 0
-            while True:
-                (rep, m) = regexp.subn(r"\g<a>%s\g<b>"%(replacements[old]),rep)
-                if m == 0: break
-                n_rep += m
-    """
 
 
 def _replace_rep_robust(rep, replacements):
@@ -3137,7 +3141,7 @@ class DataSet(object):
             _dont_write_bytecode = sys.dont_write_bytecode
             sys.dont_write_bytecode = True
             try:
-                if sys.version_info < (3, 0):
+                if sys.version_info < (3, 0):  # pragma: no cover
                     import imp
 
                     res = imp.load_source(_mod, archive_file)
@@ -3270,7 +3274,7 @@ class DataSet(object):
             )
 
         # Needed for pre 2.6 python version to support tab completion
-        if sys.version_info < (2, 6):
+        if sys.version_info < (2, 6):  # pragma: no cover
             self.__members__.append(name)
 
         if name not in self._info_dict:
