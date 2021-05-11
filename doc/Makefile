@@ -192,4 +192,4 @@ pseudoxml: README.rst
 	@echo "Build finished. The pseudo-XML files are in $(BUILDDIR)/pseudoxml."
 
 README.rst: README.ipynb
-	ipython nbconvert --to rst README.ipynb
+	jupyter nbconvert --to rst README.ipynb

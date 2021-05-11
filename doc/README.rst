@@ -2,7 +2,7 @@ Persistent Archival of Python Objects
 =====================================
 
 |Documentation Status| |Language grade: Python| |Tests| |Pypi|
-|pyversions|\ |black_img| |Code style: black|
+|pyversions|\ |Code style: black|
 
 Persistent archival of python objects in an importable format.
 
@@ -19,7 +19,7 @@ original goal was to overcomes several disadvatages of pickles:
    to read an archive if the API does not change.
 2. In the presence of API changes, the archives can be edited by hand to
    fix them since they are simply python code. (Note: for reliability,
-   the generated code is highly structured and not so “pretty”, but can
+   the generated code is highly structured and not so "pretty", but can
    still be edited or debugged in the case of errors due to API
    changes.)
 3. Efficient storage of large arrays.
@@ -41,8 +41,6 @@ original goal was to overcomes several disadvatages of pickles:
    :target: https://pypi.python.org/pypi/persist
 .. |pyversions| image:: https://img.shields.io/pypi/pyversions/persist.svg
    :target: https://pypi.python.org/pypi/persist
-.. |black_img| image:: https://img.shields.io/badge/code%20style-black-000000.svg
-   :target: https://github.com/psf/black
 .. |Code style: black| image:: https://img.shields.io/badge/code%20style-black-000000.svg
    :target: https://github.com/psf/black
 
@@ -54,13 +52,13 @@ This package can be installed from
 
 .. code:: bash
 
-   python3 -m pip install persist
+    python3 -m pip install persist
 
 or from source:
 
 .. code:: bash
 
-   python3 -m pip install hg+https://alum.mit.edu/www/mforbes/hg/forbes-group/persist
+    python3 -m pip install hg+https://alum.mit.edu/www/mforbes/hg/forbes-group/persist
 
 DataSet Format
 ==============
@@ -98,43 +96,47 @@ development/release cycle.
    the evolve extension, topics enabled, [Black], [Nox], and
    [nbconvert].
 
+-  Set your virtual environment and run a shell to work in:
+
+``bash    poetry env use python3.8    poetry shell    poetry install -E doc -E test``
+
 -  Start a development branch, i.e.:
 
    .. code:: bash
 
-      hg branch 3.2
+       hg branch 3.2
 
 -  Change version to ``'3.2.dev0'`` in ``pyproject.toml`` and commit
    this changes:
 
    .. code:: bash
 
-      hg com -m "BRN: Start working on branch 3.2"
-      hg push --new-branch -r . 
+       hg com -m "BRN: Start working on branch 3.2"
+       hg push --new-branch -r . 
 
 -  Complete your changes making sure code is well tested etc. While
    working on specific features, you should always use topics:
 
    .. code:: bash
 
-      hg topic new-feature
+       hg topic new-feature
 
    When you push to Heptapod, the commits in these topics will remain in
    the draft phase, allowing you to rebase, etc. as needed to clean the
    history. We have setup automatic pushes to
    `GitHub <https://github.com/forbes-group/persist>`__ and you can see
-   the status of the tests with the badge: |Tests|.
+   the status of the tests with the badge: |Github Tests|.
 
    To run the tests locally, you should be able to just run:
 
    .. code:: bash
 
-      nox
+       nox
 
 -  Once everything is working and tested, push it to Heptapod and create
    Merge Requests:
 
-   -  First merge all open topics to the development branch.
+-  First merge all open topics to the development branch.
 
 -  Then change the revision in ``pyproject.toml`` to ``'3.2'``, dropping
    the ``'.dev'``. Push this to Heptapod and create a merge request to
@@ -146,21 +148,23 @@ development/release cycle.
 
    .. code:: bash
 
-      hg up 3.2
-      hg branch 3.3
+       hg up 3.2
+       hg branch 3.3
 
 PyPI
 ----
 
 To release on PyPI:
 
-\```bash poetry build poetry
+\`\`\`bash poetry build poetry
 
 ::
 
-   hg up 3.0
-   python setup.py sdist bdist_wheel
-   twine upload dist/persist-3.0*
+    hg up 3.2
+    poetry build
+
+    python setup.py sdist bdist_wheel
+    twine upload dist/persist-3.2*
 
 Anaconda Cloud
 --------------
@@ -169,10 +173,10 @@ To release on Anaconda Cloud (replace the filename as appropriate):
 
 ::
 
-   conda build meta.yaml
-   anaconda upload --all /data/apps/conda/conda-bld/osx-64/persist-3.0-py37_0.tar.bz2
+    conda build meta.yaml
+    anaconda upload --all /data/apps/conda/conda-bld/osx-64/persist-3.0-py37_0.tar.bz2
 
-.. |Tests| image:: https://github.com/forbes-group/persist/actions/workflows/tests.yml/badge.svg
+.. |Github Tests| image:: https://github.com/forbes-group/persist/actions/workflows/tests.yml/badge.svg
    :target: https://github.com/forbes-group/persist/actions/workflows/tests.yml
 
 Indices and Tables
