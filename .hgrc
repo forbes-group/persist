@@ -4,7 +4,7 @@ tweakdefaults = true
 mergemarkers = detailed
 
 [paths]
-default = ssh://git@hg.iscimath.org:11022/forbes-group/persist
+default = ssh://heptapod/forbes-group/persist
 
 # Default to the current revision (`.`) when pushing to `default`. 
 default:pushrev = .
