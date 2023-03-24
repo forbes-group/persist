@@ -1,6 +1,0 @@
-# Requirements required for building the documentation.
-# Specify this as the requirements file on readthedocs.org
-Sphinx>=1.3.1
-sphinxcontrib-zopeext>=0.2.1
-nbsphinx>=0.2.13
-

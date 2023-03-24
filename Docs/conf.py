@@ -58,9 +58,9 @@ source_suffix = ".rst"
 master_doc = "README"
 
 # General information about the project.
-project = u"Persist"
-copyright = u"2015, Michael McNeil Forbes"
-author = u"Michael McNeil Forbes"
+project = "Persist"
+copyright = "2015, Michael McNeil Forbes"
+author = "Michael McNeil Forbes"
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -235,8 +235,8 @@ latex_documents = [
     (
         master_doc,
         "Persist.tex",
-        u"Persist Documentation",
-        u"Michael McNeil Forbes",
+        "Persist Documentation",
+        "Michael McNeil Forbes",
         "manual",
     ),
 ]
@@ -266,7 +266,7 @@ latex_documents = [
 
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
-man_pages = [(master_doc, "persist", u"Persist Documentation", [author], 1)]
+man_pages = [(master_doc, "persist", "Persist Documentation", [author], 1)]
 
 # If true, show URL addresses after external links.
 # man_show_urls = False
@@ -281,7 +281,7 @@ texinfo_documents = [
     (
         master_doc,
         "Persist",
-        u"Persist Documentation",
+        "Persist Documentation",
         author,
         "Persist",
         "One line description of project.",

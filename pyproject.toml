@@ -46,7 +46,7 @@ full = [
     'scipy >= 1.10.1; python_version >= "3.10"',
     # This version of numpy has universal wheels
     'numpy>=1.21.0; python_version >= "3.8"',
-    "h5py>=3.1.0; python_version < "3.7"',
+    'h5py>=3.1.0; python_version < "3.7"',
     'h5py >= 3.2.1; python_version >= "3.7"',
 ]
 all = [
