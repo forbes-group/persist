@@ -19,7 +19,7 @@ README.rst: doc/README.ipynb
 clean:
 	-$(RM) -r .pytest_cache build src/persist.egg-info
 	-$(RM) -r doc/README_files/
-	-$(RM) *.html
+	-$(RM) *.html *.xml .coverage*
 	-find . -type f -name "*.py[oc]" -delete
 	-find . -type d \( -name "htmlcov" -o \
 	                   -name "__pycache__" -o \

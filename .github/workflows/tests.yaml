@@ -1,0 +1,141 @@
+# .github/workflows/tests.yaml
+name: Tests
+
+on: [push]
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: 1
+  FORCE_COLOR: 1    # Get colored pytest output
+  DEV_PY: 3.9
+  
+jobs:
+  tests:
+    # Pin to 20.04 while we support python 3.6
+    # https://github.com/actions/setup-python/issues/544
+    #runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        python-version: ["3.6", "3.7", "3.8", "3.9", "3.10", "3.11"]
+      fail-fast: false
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v3
+        
+      - name: Set up Python ${{ env.DEV_PY }} for tools
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.DEV_PY }}
+          
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          
+      - name: Install and upgrade pip, pipx, and nox
+        run: |
+          "python$DEV_PY" -m pip install --upgrade pip pipx
+          pipx install nox
+      
+      - name: Run tests with Nox
+        run: |
+          nox -p ${{ matrix.python-version }}
+
+      # https://hynek.me/articles/ditch-codecov-python/
+      - name: Upload coverage data
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-data
+          path: ".coverage.*"
+          if-no-files-found: ignore
+
+  coverage:
+    name: Combine & check coverage.
+    runs-on: ubuntu-20.04
+    needs: tests
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python ${{ env.DEV_PY }} for tools
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.DEV_PY }}
+          
+      - name: Install and upgrade pip, pipx, and nox
+        run: |
+          "python$DEV_PY" -m pip install --upgrade pip pipx coverage[toml]
+          pipx install nox
+      
+      - name: Download coverage data.
+        uses: actions/download-artifact@v3
+        with:
+          name: coverage-data
+
+      - name: Combine coverage data and display human readable report
+        run: |
+          nox --session=coverage
+
+      - name: Create coverage report
+        run: |
+          nox --session=coverage -- xml
+          nox --session=coverage -- json
+
+      - name: Upload HTML report if check failed.
+        uses: actions/upload-artifact@v3
+        with:
+          name: html-report
+          path: |
+            build/_coverage/htmlcov
+            build/_coverage/coverage-badge.svg
+        if: ${{ failure() }}
+
+      - name: Upload coverage-badge.svg
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-badge
+          path: build/_coverage/coverage-badge.svg
+
+# Incomplete badge generation
+#      - name: Upload coverage data
+#        uses: actions/upload-artifact@v3
+#        with:
+#          name: coverage-json
+#          path: .coverage.json
+#
+#      - name: "Create badge"
+#        if: ${{ github.ref == 'refs/heads/master' }}
+#        # https://gist.github.com/mforbes/1d4a3f8061f79d2e8d8db504e2a096f0
+#        uses: schneegans/dynamic-badges-action@5d424ad4060f866e4d1dab8f8da0456e6b1c4f56
+#        with:
+#          auth: ${{ secrets.METACOV_GIST_SECRET }}
+#          gistID: 1d4a3f8061f79d2e8d8db504e2a096f0
+#          filename: coverage.json
+#          label: Coverage
+#          message: ${{ env.total }}%
+#          minColorRange: 60
+#          maxColorRange: 95
+#          valColorRange: ${{ env.total }}        
+#      - name: Coveralls Parallel
+#        uses: coverallsapp/github-action@v2
+#        with:
+#          parallel: true
+#          flag-name: run-${{ join(matrix.*, '-') }}
+#  finish:
+#    needs: test
+#    if: ${{ always() }}
+#    runs-on: ubuntu-20.04
+#    steps:
+#      - name: Upload coverage reports to Codecov
+#        uses: codecov/codecov-action@v3
+#  
+#  finish:
+#    needs: test
+#    if: ${{ always() }}
+#    runs-on: ubuntu-latest
+#    steps:
+#    - name: Coveralls Finished
+#      uses: coverallsapp/github-action@v2
+#      with:
+#        parallel-finished: true
+#        #carryforward: "run-3.7,run-3.8,run-3.9,run-3.10,run-3.11"

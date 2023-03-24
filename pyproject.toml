@@ -1,6 +1,6 @@
 [project]
 name = 'persist'
-version = '3.2.dev0'
+version = '3.2'
 description = 'Persistent archival of python objects in an importable format.'
 readme = 'README.md'
 authors = [
@@ -10,7 +10,17 @@ classifiers = [
     'Development Status :: 4 - Beta',
     'Intended Audience :: Developers',
     'Topic :: Software Development :: Libraries :: Python Modules',
-    'Topic :: Utilities'
+    'Topic :: Utilities',
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "License :: OSI Approved :: BSD License",
 ]
 license = {text = 'LGPL-2.1-or-later'}
 
@@ -27,7 +37,9 @@ dependencies = [
 [project.optional-dependencies]
 test = [
     "pytest>=7.0.1",
-    "pytest-cov>=4.0.0",
+    #"pytest-cov>=4.0.0",
+    'coverage[toml]; python_version < "3.7"', 
+    'coverage[toml]>=7.2.2; python_version >= "3.7"', 
     'persist[full]',
 ]
 docs = [
@@ -89,10 +101,7 @@ markers = [
 addopts = [
     "-m not bench",
     "--doctest-modules",
-    "--cov",
-    "--cov-report=html",
-    "--cov-fail-under=96",
-    "--no-cov-on-fail",
+    #"--cov=persist",
     #"-x",
     #"--pdb",
     #"--flake8",  # Disable until https://github.com/tholo/pytest-flake8/issues/8
@@ -103,6 +112,25 @@ doctest_optionflags = [
     "NORMALIZE_WHITESPACE",
     "IGNORE_EXCEPTION_DETAIL",
 ]
+
+######################################################################
+# Coverage
+[tool.coverage.run]
+# https://github.com/marketplace/actions/coveralls-python#coveragepy-configuration
+branch = true
+relative_files = true
+parallel = true
+#omit = ["src/persist/_contrib/*"]
+source = ["persist"]
+
+[tool.coverage.paths]
+source = ["src", "**/site-packages"]
+
+[tool.coverage.html]
+directory = "build/_coverage"
+
+[tool.coverage.report]
+fail_under = 96
 
 ######################################################################
 # Black
