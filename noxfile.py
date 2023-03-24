@@ -41,10 +41,10 @@ def test(session):
 def coverage(session):
     """Produce the coverage report."""
     args = session.posargs or ["report"]
-    session.install("coverage[toml]")
+    session.install("coverage[toml]>=7.2.2")
     session.install("genbadge[coverage]")
     if not session.posargs and any(Path().glob(".coverage.*")):
-        session.run("coverage", "combine", "--keep")
+        session.run("coverage", "combine", "--debug=pathmap")
 
     session.run("coverage", "xml", "-o", "build/_coverage/coverage.xml")
     session.run(

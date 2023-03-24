@@ -38,7 +38,7 @@ dependencies = [
 test = [
     "pytest>=7.0.1",
     #"pytest-cov>=4.0.0",
-    "coverage[toml]>=6.2", 
+    "coverage[toml]>=7.2.2", 
     'persist[full]',
 ]
 docs = [
@@ -100,6 +100,7 @@ markers = [
 addopts = [
     "-m not bench",
     "--doctest-modules",
+    #"--cov=persist",
     #"-x",
     #"--pdb",
     #"--flake8",  # Disable until https://github.com/tholo/pytest-flake8/issues/8
@@ -120,6 +121,9 @@ relative_files = true
 parallel = true
 #omit = ["src/persist/_contrib/*"]
 source = ["persist"]
+
+[tool.coverage.paths]
+source = ["src", "**/site-packages"]
 
 [tool.coverage.html]
 directory = "build/_coverage"
