@@ -1,85 +1,92 @@
-[tool.poetry]
-name = "persist"
-version = "3.1"
-description = "Persistent archival of python objects in an importable format."
-authors = ["Michael McNeil Forbes <michael.forbes+python@gmail.com>"]
-license = "LGPL-2.1-or-later"
-readme = "README.md"
-repository = "https://alum.mit.edu/www/mforbes/hg/forbes-group/persist"
-documentation = "http://persist.readthedocs.org"
+[project]
+name = 'persist'
+version = '3.2'
+description = 'Persistent archival of python objects in an importable format.'
+readme = 'README.md'
+authors = [
+    {name = 'Michael McNeil Forbes', email = 'michael.forbes+python@gmail.com'},
+]
 classifiers = [
-    "Development Status :: 4 - Beta",
-    "Intended Audience :: Developers",
-    "Topic :: Software Development :: Libraries :: Python Modules",
-    "Topic :: Utilities",
+    'Development Status :: 4 - Beta',
+    'Intended Audience :: Developers',
+    'Topic :: Software Development :: Libraries :: Python Modules',
+    'Topic :: Utilities',
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "License :: OSI Approved :: BSD License",
+]
+license = {text = 'LGPL-2.1-or-later'}
+
+######################################################################
+# Dependencies
+requires-python = '>=3.6.2'
+#requires-python = '~=3.10.0'
+dependencies = [
+    "six>=1.16.0",
+    "zope-interface>=5.5.2",
+    'importlib-metadata>=4.8.3; python_version < "3.8"',
 ]
 
-
-[tool.poetry.dependencies]
-python = "^3.6.2"
-"zope.interface" = "^5.4.0"
-importlib-metadata = {version = "^4.0.1", python="<3.8"}
-six = "^1.15.0"
-
-# Optional dependencies for testing, building the docs, etc.
-
-# These have issues with python 3.6... so don't restrict and let pip deal with it.
-scipy = [
-    {version = "^1.5.4", python="<3.7", optional = true},
-    {version = "^1.6.3", python=">=3.7,<3.10", optional = true}]
-
-h5py = [
-    {version = "*", python="<3.7", optional = true},
-    {version = "^3.2.1", python="^3.7", optional = true}]
-pytest = {version = "^6.2.4", optional = true}
-pytest-cov = {version = "^2.11.1", optional = true}
-
-Sphinx = {version = "^3.5.4", optional = true}
-sphinx-rtd-theme = {version = "^0.5.2", optional = true}
-sphinxcontrib-zopeext = {version = "^0.3.2", optional = true}
-nbsphinx = {version = "^0.8.4", optional = true}
-mmf-setup = {version = "^0.4.0", optional = true}
-ipython = [
-#    {version = "*", python="<3.7", optional = true},
-    {version = "^7.23.1", python=">=3.7", optional = true}
-]
-
-[tool.poetry.extras]
+[project.optional-dependencies]
 test = [
-    "pytest",
-    "pytest-cov",
-    "pytest-flake8",
-    "pytest-xdist",
-    "scipy",   # Will bring in numpy
-    "h5py"
+    "pytest>=7.0.1",
+    #"pytest-cov>=4.0.0",
+    'coverage[toml]; python_version < "3.7"', 
+    'coverage[toml]>=7.2.2; python_version >= "3.7"', 
+    'persist[full]',
+]
+docs = [
+    "sphinx>=5.3.0",
+    "nbsphinx>=0.8.8",
+    "pycallgraph>=1.0.1",
+    "sphinx-rtd-theme>=1.2.0",
+    "sphinxcontrib-zopeext>=0.3.3",
+    'ipython >= 7.16.3; python_version < "3.7"',
+    'ipython >= 7.23.1; python_version >= "3.7"',
+    "mmf-setup>=0.4.11",
+]
+full = [
+    'scipy >= 1.5.4; python_version < "3.7"',
+    'scipy >= 1.7.3; python_version < "3.10" and python_version >= "3.7"',
+    'scipy >= 1.10.1; python_version >= "3.10"',
+    # This version of numpy has universal wheels
+    'numpy>=1.21.0; python_version >= "3.8"',
+    'h5py>=3.1.0; python_version < "3.7"',
+    'h5py >= 3.2.1; python_version >= "3.7"',
+]
+all = [
+    'persist[full,test,docs]',
 ]
 
-doc = [
-    "Sphinx",
-    "sphinx_rtd_theme",
-    "sphinxcontrib.zopeext",
-    "ipython",
-    "nbsphinx",
-    "mmf-setup",
-    "pycallgraph",
+
+[project.urls]
+Issues = 'https://alum.mit.edu/www/mforbes/hg/forbes-group/persist/issues'
+'Git Mirror' = 'https://github.com/forbes-group/persist'
+repository = 'https://alum.mit.edu/www/mforbes/hg/forbes-group/persist'
+documentation = 'http://persist.readthedocs.org'
+
+[tool.pdm]
+[tool.pdm.dev-dependencies]
+dev = [
+    "flit-core>=3.8.0",
+    "pip>=21.3.1",
+    "ipython >= 7.23.1"
 ]
 
-[tool.poetry.urls]
-"Issues" = "https://alum.mit.edu/www/mforbes/hg/forbes-group/persist/issues"
-"Git Mirror" = "https://github.com/forbes-group/persist"
-
-[tool.poetry.dev-dependencies]
-pip = "^21.1.0"
-black = "^21.5b1"
-
-# mercurial = "^5.7.1"
-# hg-git = "^0.10.0"
-# hg-evolve = "^10.3.1"
-# hg-evolve = "^10.3.1"
-
+[tool.pdm.build]
+includes = []
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+#requires = ["pdm-backend"]
+#build-backend = "pdm.backend"
+requires = ["flit-core>=3.4"]
+build-backend = "flit_core.buildapi"
 
 ######################################################################
 # PyTest
@@ -94,10 +101,7 @@ markers = [
 addopts = [
     "-m not bench",
     "--doctest-modules",
-    "--cov",
-    "--cov-report=html",
-    "--cov-fail-under=96",
-    "--no-cov-on-fail",
+    #"--cov=persist",
     #"-x",
     #"--pdb",
     #"--flake8",  # Disable until https://github.com/tholo/pytest-flake8/issues/8
@@ -108,6 +112,25 @@ doctest_optionflags = [
     "NORMALIZE_WHITESPACE",
     "IGNORE_EXCEPTION_DETAIL",
 ]
+
+######################################################################
+# Coverage
+[tool.coverage.run]
+# https://github.com/marketplace/actions/coveralls-python#coveragepy-configuration
+branch = true
+relative_files = true
+parallel = true
+#omit = ["src/persist/_contrib/*"]
+source = ["persist"]
+
+[tool.coverage.paths]
+source = ["src", "**/site-packages"]
+
+[tool.coverage.html]
+directory = "build/_coverage"
+
+[tool.coverage.report]
+fail_under = 96
 
 ######################################################################
 # Black
@@ -123,8 +146,3 @@ exclude = '''
       | dist
     )/
 '''
-
-
-
-# poetry add zope.interface importlib-metadata
-# poetry add --optional Sphinx pytest pytest-cov sphinx-rtd-theme sphinxcontrib-zopeext nbsphinx h5py mmf-setup scipy

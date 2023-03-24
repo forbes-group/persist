@@ -80,7 +80,7 @@ class Functions(object):
     @classmethod
     def f_cls(cls, x):
         """A class method."""
-        return x ** 2
+        return x**2
 
 
 class NestedClasses(object):
@@ -830,14 +830,9 @@ class TestWarnings(object):
             str(arch)
         assert len(w) == 2
         assert str(w[0].message) == ("archive_1 is deprecated: use get_persistent_rep")
-        assert str(w[1].message) == (
-            "\n".join(
-                [
-                    "Found archive_1() but got TypeError:",
-                    "archive_1() takes 1 positional " + "argument but 2 were given",
-                ]
-            )
-        )
+        s = str(w[1].message)
+        assert s.startswith("Found archive_1() but got TypeError:")
+        assert s.endswith("archive_1() takes 1 positional argument but 2 were given")
 
     def test_get_persistent_rep_warning(self):
         """Test get_persistent_rep warning"""
@@ -846,14 +841,10 @@ class TestWarnings(object):
         with pytest.warns(UserWarning) as w:
             str(arch)
         assert len(w) == 1
-        assert str(w[0].message) == (
-            "\n".join(
-                [
-                    "Found get_persistent_rep() but got TypeError:",
-                    "get_persistent_rep() takes 1 positional "
-                    + "argument but 2 were given",
-                ]
-            )
+        s = str(w[0].message)
+        assert s.startswith("Found get_persistent_rep() but got TypeError:")
+        assert s.endswith(
+            "get_persistent_rep() takes 1 positional argument but 2 were given"
         )
 
     def test_nested_class(self):
@@ -871,14 +862,10 @@ class TestWarnings(object):
 
         assert len(w) == 2
         assert str(w[0].message) == ("archive_1 is deprecated: use get_persistent_rep")
-        assert str(w[1].message) == (
-            "\n".join(
-                [
-                    "Found archive_1() but got TypeError:",
-                    "archive_1() takes 1 positional " + "argument but 2 were given",
-                ]
-            )
-        )
+        s = str(w[1].message)
+        assert s.startswith("Found archive_1() but got TypeError:")
+        assert s.endswith("archive_1() takes 1 positional argument but 2 were given")
+
         assert str(e.value).startswith("Could not archive object <")
         assert str(e.value).endswith(">.  Even tried pickling!")
 

@@ -44,8 +44,8 @@ Tim Wegener -- doctesting, updating to current idioms, topsort_levels,
 # Make Python 2.3 sets look like Python 2.4 sets.
 try:
     set
-except NameError:
-    from sets import Set as set
+except NameError:  # pragma: no cover   lgtm [py/unreachable-statement]
+    from sets import Set as set  # lgtm [py/import-deprecated-module]
 
 # from .rad_util import is_rotated
 
@@ -260,7 +260,6 @@ def topsort_levels_core(num_parents, children):
         # decrement the parent count,
         # since we have accounted for its parent.
         for level_parent in level_parents:
-
             del num_parents[level_parent]
 
             if level_parent in children:
