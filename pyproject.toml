@@ -38,6 +38,7 @@ dependencies = [
 test = [
     "pytest>=7.0.1",
     "pytest-cov>=4.0.0",
+    "coverage[toml]>=6.2", 
     'persist[full]',
 ]
 docs = [
@@ -101,6 +102,7 @@ addopts = [
     "--doctest-modules",
     "--cov=persist",
     "--cov-report=html",
+    "--cov-append",   # Needed for CI https://pytest-cov.readthedocs.io/en/latest/tox.html
     #"--cov-report=xml",   # Cobertura for CI
     "--cov-fail-under=96",
     "--no-cov-on-fail",
@@ -119,15 +121,14 @@ doctest_optionflags = [
 # Coverage
 [tool.coverage.run]
 # https://github.com/marketplace/actions/coveralls-python#coveragepy-configuration
-branch True
+branch = true
 relative_files = true
 parallel = true
-data_file = .coverage
-omit = persist/_contrib/*, persist/tests/conftest.py
-source = persist
+omit = ["persist/_contrib/*", "persist/tests/conftest.py"]
+source = ["persist"]
 
 [tool.coverage.html]
-directory = build/_coverage
+directory = "build/_coverage"
 
 
 ######################################################################

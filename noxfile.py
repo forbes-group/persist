@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import sys
 import nox
 
@@ -19,7 +20,8 @@ os.environ["PY_IGNORE_IMPORTMISMATCH"] = "1"  # To avoid ImportMismatchError
 # desired.
 nox.options.sessions = ["test"]
 
-python_versions = ["3.6", "3.7", "3.8", "3.9", "3.10", "3.11"]
+DEV_PY = "3.10"
+python_versions = ["3.11", "3.10", "3.9", "3.8", "3.7", "3.6"]
 args = dict(python=python_versions, reuse_venv=True)
 
 
@@ -27,27 +29,25 @@ args = dict(python=python_versions, reuse_venv=True)
 def test(session):
     # args = [] if session.python.startswith("2") else ["--use-feature=in-tree-build"]
     session.install(".[test]")
-    session.run("pytest")
+    try:
+        session.run("coverage", "run", "--parallel", "-m", "pytest", *session.posargs)
+    finally:
+        if session.interactive:
+            session.notify("coverage", posargs=[])
 
 
-"""
-@nox.parametrize(
-    "python",
-    sum(
-        [
-            [
-                (python, sphinx)
-                for sphinx in get_versions("sphinx", "minor", python=python)
-            ]
-            for python in python_versions
-        ],
-        [],
-    ),
-)
-def test_full(session):
-    # args = [] if session.python.startswith("2") else ["--use-feature=in-tree-build"]
-    session.install(".[test]")
-    session.run("pytest")
+# https://github.com/cjolowicz/cookiecutter-hypermodern-python/blob/main/%7B%7Bcookiecutter.project_name%7D%7D/noxfile.py
+@nox.session(python=DEV_PY)
+def coverage(session):
+    """Produce the coverage report."""
+    args = session.posargs or ["report"]
+
+    session.install("coverage[toml]")
+
+    if not session.posargs and any(Path().glob(".coverage.*")):
+        session.run("coverage", "combine")
+
+    session.run("coverage", *args)
 
 
 @nox.session(venv_backend="conda", **args)
@@ -55,4 +55,3 @@ def test_conda(session):
     # args = [] if session.python.startswith("2") else ["--use-feature=in-tree-build"]
     session.install(".[test]")
     session.run("pytest")
-"""
