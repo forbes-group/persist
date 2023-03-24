@@ -119,8 +119,16 @@ doctest_optionflags = [
 # Coverage
 [tool.coverage.run]
 # https://github.com/marketplace/actions/coveralls-python#coveragepy-configuration
+branch True
 relative_files = true
 parallel = true
+data_file = .coverage
+omit = persist/_contrib/*, persist/tests/conftest.py
+source = persist
+
+[tool.coverage.html]
+directory = build/_coverage
+
 
 ######################################################################
 # Black
