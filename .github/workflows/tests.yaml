@@ -22,10 +22,10 @@ jobs:
       - name: Checkout the repository
         uses: actions/checkout@v3
         
-      - name: Set up Python $DEV_PY for tools
+      - name: Set up Python ${{ env.DEV_PY }} for tools
         uses: actions/setup-python@v4
         with:
-          python-version: $DEV_PY
+          python-version: ${{ env.DEV_PY }}
           
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
@@ -34,7 +34,7 @@ jobs:
           
       - name: Install and upgrade pip, pipx, and nox
         run: |
-          python$DEV_PY -m pip install --upgrade pip pipx
+          "python$DEV_PY" -m pip install --upgrade pip pipx
           pipx install nox
       
       - name: Run tests with Nox
@@ -57,14 +57,14 @@ jobs:
       - name: Checkout the repository
         uses: actions/checkout@v3
 
-      - name: Set up Python $DEV_PY for tools
+      - name: Set up Python ${{ env.DEV_PY }} for tools
         uses: actions/setup-python@v4
         with:
-          python-version: $DEV_PY
+          python-version: ${{ env.DEV_PY }}
           
       - name: Install and upgrade pip, pipx, and nox
         run: |
-          python$DEV_PY -m pip install --upgrade pip pipx coverage[toml]
+          "python$DEV_PY" -m pip install --upgrade pip pipx coverage[toml]
           pipx install nox
       
       - name: Download coverage data.
