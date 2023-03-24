@@ -1,8 +1,7 @@
 # Persistent Archival of Python Objects
 
 [![Documentation Status](https://readthedocs.org/projects/persist/badge/?version=latest)](https://persist.readthedocs.io/en/latest/?badge=latest)
-[![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/forbes-group/persist.svg)](https://lgtm.com/projects/g/forbes-group/persist/context:python)
-[![Tests](https://github.com/forbes-group/persist/actions/workflows/tests.yml/badge.svg)](https://github.com/forbes-group/persist/actions/workflows/tests.yml)
+[![Tests](https://github.com/forbes-group/persist/actions/workflows/tests.yaml/badge.svg)](https://github.com/forbes-group/persist/actions/workflows/tests.yaml)
 [![Pypi](https://img.shields.io/pypi/v/persist.svg)](https://pypi.python.org/pypi/persist)
 [![pyversions](https://img.shields.io/pypi/pyversions/persist.svg)](https://pypi.python.org/pypi/persist)[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
