@@ -116,7 +116,7 @@ doctest_optionflags = [
 [tool.coverage.run]
 # https://github.com/marketplace/actions/coveralls-python#coveragepy-configuration
 branch = true
-#relative_files = true
+relative_files = true
 parallel = true
 #omit = ["src/persist/_contrib/*"]
 source = ["persist"]
