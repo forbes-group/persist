@@ -1,6 +1,6 @@
 [project]
 name = 'persist'
-version = '3.2.dev0'
+version = '3.2'
 description = 'Persistent archival of python objects in an importable format.'
 readme = 'README.md'
 authors = [
@@ -10,7 +10,17 @@ classifiers = [
     'Development Status :: 4 - Beta',
     'Intended Audience :: Developers',
     'Topic :: Software Development :: Libraries :: Python Modules',
-    'Topic :: Utilities'
+    'Topic :: Utilities',
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "License :: OSI Approved :: BSD License",
 ]
 license = {text = 'LGPL-2.1-or-later'}
 
