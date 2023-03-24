@@ -32,7 +32,7 @@ def test(session):
     try:
         session.run("coverage", "run", "-m", "pytest", *session.posargs)
     finally:
-        if False and session.interactive:
+        if session.interactive:
             session.notify("coverage", posargs=[])
 
 
@@ -41,14 +41,20 @@ def test(session):
 def coverage(session):
     """Produce the coverage report."""
     args = session.posargs or ["report"]
-
-    ## Install the full package for HTML reports.
-    # session.install(".[test]")
     session.install("coverage[toml]")
-
+    session.install("genbadge[coverage]")
     if not session.posargs and any(Path().glob(".coverage.*")):
-        session.run("coverage", "combine")
+        session.run("coverage", "combine", "--keep")
 
+    session.run("coverage", "xml", "-o", "build/_coverage/coverage.xml")
+    session.run(
+        "genbadge",
+        "coverage",
+        "-i",
+        "build/_coverage/coverage.xml",
+        "-o",
+        "build/_coverage/coverage-badge.svg",
+    )
     session.run("coverage", *args)
 
 

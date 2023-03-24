@@ -79,14 +79,43 @@ jobs:
       - name: Create coverage report
         run: |
           nox --session=coverage -- xml
+          nox --session=coverage -- json
 
       - name: Upload HTML report if check failed.
         uses: actions/upload-artifact@v3
         with:
           name: html-report
-          path: build/_coverage/htmlcov  # Must match tool.coverage.html.directory
+          path: |
+            build/_coverage/htmlcov
+            build/_coverage/coverage-badge.svg
         if: ${{ failure() }}
-        
+
+      - name: Upload coverage-badge.svg
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-badge
+          path: build/_coverage/coverage-badge.svg
+
+# Incomplete badge generation
+#      - name: Upload coverage data
+#        uses: actions/upload-artifact@v3
+#        with:
+#          name: coverage-json
+#          path: .coverage.json
+#
+#      - name: "Create badge"
+#        if: ${{ github.ref == 'refs/heads/master' }}
+#        # https://gist.github.com/mforbes/1d4a3f8061f79d2e8d8db504e2a096f0
+#        uses: schneegans/dynamic-badges-action@5d424ad4060f866e4d1dab8f8da0456e6b1c4f56
+#        with:
+#          auth: ${{ secrets.METACOV_GIST_SECRET }}
+#          gistID: 1d4a3f8061f79d2e8d8db504e2a096f0
+#          filename: coverage.json
+#          label: Coverage
+#          message: ${{ env.total }}%
+#          minColorRange: 60
+#          maxColorRange: 95
+#          valColorRange: ${{ env.total }}        
 #      - name: Coveralls Parallel
 #        uses: coverallsapp/github-action@v2
 #        with:
