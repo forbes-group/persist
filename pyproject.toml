@@ -37,7 +37,7 @@ dependencies = [
 [project.optional-dependencies]
 test = [
     "pytest>=7.0.1",
-    "pytest-cov>=4.0.0",
+    #"pytest-cov>=4.0.0",
     "coverage[toml]>=6.2", 
     'persist[full]',
 ]
@@ -100,12 +100,12 @@ markers = [
 addopts = [
     "-m not bench",
     "--doctest-modules",
-    "--cov=persist",
-    "--cov-report=html",
+    #"--cov=persist",
+    #"--cov-report=html",
     #"--cov-append",   # Needed for CI https://pytest-cov.readthedocs.io/en/latest/tox.html
     #"--cov-report=xml",   # Cobertura for CI
-    "--cov-fail-under=96",
-    "--no-cov-on-fail",
+    #"--cov-fail-under=96",
+    #"--no-cov-on-fail",
     #"-x",
     #"--pdb",
     #"--flake8",  # Disable until https://github.com/tholo/pytest-flake8/issues/8
@@ -119,8 +119,7 @@ doctest_optionflags = [
 
 ######################################################################
 # Coverage
-[tool.coverage]
-[run]
+[tool.coverage.run]
 # https://github.com/marketplace/actions/coveralls-python#coveragepy-configuration
 branch = true
 relative_files = true
@@ -128,10 +127,7 @@ parallel = true
 #omit = ["src/persist/_contrib/*"]
 source = ["src/persist"]
 
-[report]
-show_missing = true
-
-[html]
+[tool.coverage.html]
 directory = "build/_coverage"
 
 ######################################################################

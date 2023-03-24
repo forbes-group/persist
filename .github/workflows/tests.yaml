@@ -84,7 +84,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: html-report
-          path: htmlcov
+          path: build/_coverage/htmlcov  # Must match tool.coverage.html.directory
         if: ${{ failure() }}
         
 #      - name: Coveralls Parallel

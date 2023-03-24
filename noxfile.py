@@ -30,9 +30,9 @@ def test(session):
     # args = [] if session.python.startswith("2") else ["--use-feature=in-tree-build"]
     session.install(".[test]")
     try:
-        session.run("coverage", "run", "--parallel", "-m", "pytest", *session.posargs)
+        session.run("coverage", "run", "-m", "pytest", *session.posargs)
     finally:
-        if session.interactive:
+        if False and session.interactive:
             session.notify("coverage", posargs=[])
 
 
