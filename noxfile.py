@@ -42,8 +42,9 @@ def coverage(session):
     """Produce the coverage report."""
     args = session.posargs or ["report"]
 
-    # Install the full package for HTML reports.
-    session.install(".[test]")
+    ## Install the full package for HTML reports.
+    # session.install(".[test]")
+    session.install("coverage[toml]")
 
     if not session.posargs and any(Path().glob(".coverage.*")):
         session.run("coverage", "combine")
