@@ -101,6 +101,7 @@ addopts = [
     "--doctest-modules",
     "--cov=persist",
     "--cov-report=html",
+    "--cov-report=xml",   # Cobertura for CI
     "--cov-fail-under=96",
     "--no-cov-on-fail",
     #"-x",
