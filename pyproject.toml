@@ -101,7 +101,7 @@ addopts = [
     "--doctest-modules",
     "--cov=persist",
     "--cov-report=html",
-    "--cov-report=xml",   # Cobertura for CI
+    #"--cov-report=xml",   # Cobertura for CI
     "--cov-fail-under=96",
     "--no-cov-on-fail",
     #"-x",
@@ -120,6 +120,7 @@ doctest_optionflags = [
 [tool.coverage.run]
 # https://github.com/marketplace/actions/coveralls-python#coveragepy-configuration
 relative_files = true
+parallel = true
 
 ######################################################################
 # Black
