@@ -99,7 +99,7 @@ markers = [
 addopts = [
     "-m not bench",
     "--doctest-modules",
-    "--cov",
+    "--cov=persist",
     "--cov-report=html",
     "--cov-fail-under=96",
     "--no-cov-on-fail",
@@ -113,6 +113,12 @@ doctest_optionflags = [
     "NORMALIZE_WHITESPACE",
     "IGNORE_EXCEPTION_DETAIL",
 ]
+
+######################################################################
+# Coverage
+[tool.coverage.run]
+# https://github.com/marketplace/actions/coveralls-python#coveragepy-configuration
+relative_files = true
 
 ######################################################################
 # Black
