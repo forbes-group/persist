@@ -1,6 +1,13 @@
 # .github/workflows/tests.yaml
 name: Tests
+
 on: [push]
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: 1
+  FORCE_COLOR: 1    # Get colored pytest output
+  DEV_PY: 3.9
+  
 jobs:
   tests:
     # Pin to 20.04 while we support python 3.6
@@ -15,10 +22,10 @@ jobs:
       - name: Checkout the repository
         uses: actions/checkout@v3
         
-      - name: Set up Python 3.9 for tools
+      - name: Set up Python $DEV_PY for tools
         uses: actions/setup-python@v4
         with:
-          python-version: 3.9
+          python-version: $DEV_PY
           
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
@@ -27,7 +34,7 @@ jobs:
           
       - name: Install and upgrade pip, pipx, and nox
         run: |
-          python3.9 -m pip install --upgrade pip pipx
+          python$DEV_PY -m pip install --upgrade pip pipx
           pipx install nox
       
       - name: Run tests with Nox
@@ -50,14 +57,14 @@ jobs:
       - name: Checkout the repository
         uses: actions/checkout@v3
 
-      - name: Set up Python 3.9 for tools
+      - name: Set up Python $DEV_PY for tools
         uses: actions/setup-python@v4
         with:
-          python-version: 3.9
+          python-version: $DEV_PY
           
       - name: Install and upgrade pip, pipx, and nox
         run: |
-          python3.9 -m pip install --upgrade pip pipx coverage[toml]
+          python$DEV_PY -m pip install --upgrade pip pipx coverage[toml]
           pipx install nox
       
       - name: Download coverage data.
@@ -67,11 +74,11 @@ jobs:
 
       - name: Combine coverage data and display human readable report
         run: |
-          nox -p 3.9 --session=coverage
+          nox --session=coverage
 
       - name: Create coverage report
         run: |
-          nox -p 3.9 --session=coverage -- xml
+          nox --session=coverage -- xml
 
       - name: Upload HTML report if check failed.
         uses: actions/upload-artifact@v3
