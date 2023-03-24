@@ -19,8 +19,8 @@ os.environ["PY_IGNORE_IMPORTMISMATCH"] = "1"  # To avoid ImportMismatchError
 # desired.
 nox.options.sessions = ["test"]
 
-python_versions = ["3.6", "3.7", "3.8", "3.9", "3.10"]
-args = dict(python=python_versions, reuse_venv=False)
+python_versions = ["3.6", "3.7", "3.8", "3.9", "3.10", "3.11"]
+args = dict(python=python_versions, reuse_venv=True)
 
 
 @nox.session(**args)

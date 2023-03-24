@@ -17,16 +17,17 @@ README.rst: doc/README.ipynb
 
 
 clean:
-	-rm -rf .nox .pytest_cache
-	-rm -r build
-	-rm -r src/persist.egg-info
-	-rm -r doc/README_files/
-	-rm *.html
-	find . -type f -name "*.pyc" -delete
-	find . -type f -name "*.pyo" -delete
-	find . -type d -name "htmlcov" -exec rm -r "{}" +
-	find . -type d -name "__pycache__" -exec rm -r "{}" +
-	find . -type d -name "_build" -exec rm -rf "{}" +
-	find . -type d -name ".ipynb_checkpoints" -exec rm -rf "{}" +
+	-$(RM) -r .pytest_cache build src/persist.egg-info
+	-$(RM) -r doc/README_files/
+	-$(RM) *.html
+	-find . -type f -name "*.py[oc]" -delete
+	-find . -type d \( -name "htmlcov" -o \
+	                   -name "__pycache__" -o \
+	                   -name "_build" -o \
+	                   -name ".ipynb_checkpoints" \) \
+        -exec $(RM) -r "{}" +
 
-.PHONY: test clean auto
+realclean: clean
+	-$(RM) -r .nox
+
+.PHONY: test clean realclean auto

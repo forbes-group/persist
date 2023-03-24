@@ -1,17 +1,11 @@
 [project]
 name = 'persist'
-authors = [
-    {name = 'Michael McNeil Forbes', email = 'michael.forbes+python@gmail.com'},
-]
-requires-python = '>=3.6.2'
-dependencies = [
-    'zope-interface >= 5.4.0',
-    'importlib-metadata >= 4.0.1; python_version < "3.8"',
-    'six >= 1.15.0',
-]
 version = '3.2.dev0'
 description = 'Persistent archival of python objects in an importable format.'
 readme = 'README.md'
+authors = [
+    {name = 'Michael McNeil Forbes', email = 'michael.forbes+python@gmail.com'},
+]
 classifiers = [
     'Development Status :: 4 - Beta',
     'Intended Audience :: Developers',
@@ -20,30 +14,48 @@ classifiers = [
 ]
 license = {text = 'LGPL-2.1-or-later'}
 
+######################################################################
+# Dependencies
+requires-python = '>=3.6.2'
+#requires-python = '~=3.10.0'
+dependencies = [
+    #'zope-interface >= 5.5.2; python_version < "3.7"',
+    #'importlib-metadata >= 4.8.3; python_version < "3.8"',
+    "six>=1.16.0",
+    "zope-interface>=5.5.2",
+    'importlib-metadata>=4.8.3; python_version < "3.8"',
+]
+
 [project.optional-dependencies]
 test = [
-    'pytest >= 6.2.4',
-    'pytest-cov >= 2.11.1',
-    'pytest-xdist',
+    "pytest>=7.0.1",
+    "pytest-cov>=4.0.0",
     'persist[full]',
 ]
 docs = [
-    'Sphinx >= 3.5.4',
-    'nbsphinx >= 0.8.4',
-    'pycallgraph',
-    'mmf-setup >=0.4.0',
-    'sphinx-rtd-theme >= 0.5.2',
-    'sphinxcontrib-zopeext >= 0.2.4',
-    'ipython >= 7.23.1; python_version >= "3.7"',
+    #    'ipython >= 7.23.1; python_version >= "3.7"',
+    "sphinx>=5.3.0",
+    "nbsphinx>=0.8.8",
+    "pycallgraph>=1.0.1",
+    "sphinx-rtd-theme>=1.2.0",
+    "sphinxcontrib-zopeext>=0.3.3",
+    "ipython>=7.16.3",
+    "mmf-setup>=0.4.11",
 ]
 full = [
+    #"scipy>=1.5.4",
     'scipy >= 1.5.4; python_version < "3.7"',
-    'scipy >= 1.6.3; python_version < "3.10" and python_version >= "3.7"',
-    'h5py; python_version < "3.7"',
-    'h5py >= 3.2.1; python_version >= "3.7"',
+    'scipy >= 1.7.3; python_version < "3.10" and python_version >= "3.7"',
+    'scipy >= 1.10.1; python_version >= "3.10"',
+    # This version of numpy has universal wheels
+    'numpy>=1.21.0; python_version >= "3.8"',
+    "h5py>=3.1.0",
+    #'h5py; python_version < "3.7"',
+    #'h5py >= 3.2.1; python_version >= "3.7"',
+    #"scipy>=1.10.1",
 ]
 all = [
-    'persist[full,test,docs]',
+    #'persist[full,test,docs]',
 ]
 
 
@@ -56,15 +68,20 @@ documentation = 'http://persist.readthedocs.org'
 [tool.pdm]
 [tool.pdm.dev-dependencies]
 dev = [
-    'pip >= 21.1.0',
-    'black >= 21.5b1',
+    #'pip >= 21.1.0',
+    #'black >= 21.5b1',
+    "flit-core>=3.8.0",
+    "pip>=21.3.1",
+    'ipython >= 7.23.1; python_version >= "3.7"',
 ]
 
 [tool.pdm.build]
 includes = []
 [build-system]
-requires = ["pdm-backend"]
-build-backend = "pdm.backend"
+#requires = ["pdm-backend"]
+#build-backend = "pdm.backend"
+requires = ["flit-core>=3.4"]
+build-backend = "flit_core.buildapi"
 
 ######################################################################
 # PyTest
