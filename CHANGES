@@ -1,0 +1,8 @@
+.. -*- restructuredtext -*-
+
+This file describes user-visible changes between the extension versions.
+
+Version 3.2 (2023-03-24)
+========================
+* Use PDM and relax upper bound versions.
+* Resolves issue #12.
