@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "persist"
-version = "3.1"
+version = "3.2.dev0"
 description = "Persistent archival of python objects in an importable format."
 authors = ["Michael McNeil Forbes <michael.forbes+python@gmail.com>"]
 license = "LGPL-2.1-or-later"
